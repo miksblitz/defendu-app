@@ -1,44 +1,46 @@
 import React, { useState } from 'react';
-import { Image } from 'react-native';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch } from 'react-native';
+import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(false);
+  const router = useRouter();
 
   return (
     <View style={styles.container}>
-      {/* Placeholder for Logo */}
-      <View style={styles.logoPlaceholder}>
-        <Text style={styles.logoText}>LOGO</Text>
-      </View>
+      <Image
+        source={require('../../assets/images/defendulogo.png')}
+        style={styles.logoImage}
+      />
 
       <Text style={styles.title}>Welcome Back!</Text>
       <Text style={styles.subtitle}>Your skills are waiting. Let's continue your training.</Text>
 
       {/* Email Input */}
-    <View style={styles.inputWrapper}>
-      <View style={styles.iconPlaceholder}>
-        <Text style={styles.iconText}>📧</Text>
+      <View style={styles.inputWrapper}>
+        <Image
+          source={require('../../assets/images/emailicon.png')}
+          style={styles.iconImage}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your email"
+          placeholderTextColor="white"
+          value={email}
+          keyboardType="email-address"
+          onChangeText={setEmail}
+          autoCapitalize="none"
+        />
       </View>
-      <TextInput
-        style={styles.input}
-        placeholder="Enter your email"
-        placeholderTextColor="white"
-        value={email}
-        keyboardType="email-address"
-        onChangeText={setEmail}
-        autoCapitalize="none"
-      />
-    </View>
 
       {/* Password Input */}
       <View style={styles.inputWrapper}>
-        <View style={styles.iconPlaceholder}>
-          <Text style={styles.iconText}>🔒</Text>
-        </View>
+        <Image
+          source={require('../../assets/images/passwordicon.png')}
+          style={styles.iconImage}
+        />
         <TextInput
           style={styles.input}
           placeholder="Enter your password"
@@ -52,22 +54,16 @@ export default function LoginScreen() {
           style={styles.eyeButton}
           activeOpacity={0.7}
         >
-          <Text style={styles.iconText}>{showPassword ? '👁️' : '🚫'}</Text>
+          <Image
+            source={require('../../assets/images/showpasswordicon.png')}
+            style={styles.eyeIcon}
+          />
         </TouchableOpacity>
       </View>
 
-      {/* Remember me & Forgot Password */}
-      <View style={styles.rowBetween}>
-        <View style={styles.rememberRow}>
-          <Switch
-            value={remember}
-            onValueChange={setRemember}
-            thumbColor="#00AABB"
-            trackColor={{ true: '#007f91', false: '#444' }}
-          />
-          <Text style={styles.rememberText}>Remember me</Text>
-        </View>
-        <TouchableOpacity>
+      {/* Forgot Password */}
+      <View style={styles.forgotPasswordContainer}>
+        <TouchableOpacity onPress={() => router.push('/forgotpassword')}>
           <Text style={styles.forgotText}>Forgot Password?</Text>
         </TouchableOpacity>
       </View>
@@ -78,7 +74,7 @@ export default function LoginScreen() {
 
       <View style={styles.bottomRow}>
         <Text style={styles.bottomText}>Don't Have an Account? </Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push('/register')}>
           <Text style={styles.linkText}>Create an Account</Text>
         </TouchableOpacity>
       </View>
@@ -93,19 +89,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     justifyContent: 'center',
   },
-  logoPlaceholder: {
-    width: 80,
-    height: 100,
+  logoImage: {
+    width: 160,
+    height: 180,
     alignSelf: 'center',
     marginBottom: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoText: {
-    color: '#00AABB',
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 4,
+    resizeMode: 'contain',
   },
   title: {
     fontSize: 24,
@@ -116,7 +105,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 14,
-    color: '#888',
+    color: '#FFF',  // Changed to white
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -128,46 +117,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     marginBottom: 16,
     height: 56,
-    width: 500,          // narrower width (adjust as needed)
+    width: 500,
     alignSelf: 'center',
   },
-  iconPlaceholder: {
+  iconImage: {
     width: 20,
-    alignItems: 'center',
+    height: 20,
     marginRight: 10,
-  },
-  iconText: {
-    color: '#555',
-    fontSize: 16,
+    tintColor: '#FFF',  // Changed to white
+    resizeMode: 'contain',
   },
   input: {
     flex: 1,
-    fontSize: 20,                 // increased font size for text height
-    lineHeight: 24,               // increased lineHeight for vertical spacing
-    height: 56,                  // match inputWrapper height
+    fontSize: 20,
+    lineHeight: 24,
+    height: 56,
     color: '#FFF',
-    paddingVertical: 0,           // no padding vertically for better centering
-    textAlignVertical: 'center', // vertical align text on Android
+    paddingVertical: 0,
+    textAlignVertical: 'center',
   },
   eyeButton: {
     marginLeft: 12,
   },
- rowBetween: {
-  flexDirection: 'row',
-  justifyContent: 'center',  // center horizontally
-  alignItems: 'center',
-  marginBottom: 24,
-  gap: 230,                   // space between remember me and forgot password
-},
-  rememberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,               // some spacing between remember and forgot
+  eyeIcon: {
+    width: 20,
+    height: 20,
+    tintColor: '#FFF',  // Changed to white
+    resizeMode: 'contain',
   },
-  rememberText: {
-    color: '#AAA',
-    marginLeft: 8,
-    fontSize: 14,
+  forgotPasswordContainer: {
+    alignItems: 'flex-end',
+    marginBottom: 24,
+    marginRight: 415,
   },
   forgotText: {
     color: '#00AABB',
@@ -193,7 +174,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bottomText: {
-    color: '#777',
+    color: '#FFF',  // Changed to white
     fontSize: 14,
   },
   linkText: {

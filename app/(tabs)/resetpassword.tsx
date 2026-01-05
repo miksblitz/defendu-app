@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 
 export default function ResetPasswordScreen() {
   const [password, setPassword] = useState('');
@@ -9,18 +9,20 @@ export default function ResetPasswordScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Placeholder for Logo */}
-      <View style={styles.logoPlaceholder}>
-        <Text style={styles.logoText}>LOGO</Text>
-      </View>
+      {/* Logo Image */}
+      <Image
+        source={require('../../assets/images/defendulogo.png')}
+        style={styles.logoImage}
+      />
 
       <Text style={styles.title}>Reset your Password</Text>
 
       {/* Password */}
       <View style={styles.inputWrapper}>
-        <View style={styles.iconPlaceholder}>
-          <Text style={styles.iconText}>🔒</Text>
-        </View>
+        <Image
+          source={require('../../assets/images/passwordicon.png')}
+          style={styles.iconImage}
+        />
         <TextInput
           style={styles.input}
           placeholder="Enter your password"
@@ -34,15 +36,19 @@ export default function ResetPasswordScreen() {
           style={styles.eyeButton}
           activeOpacity={0.7}
         >
-          <Text style={styles.iconText}>{showPass ? '👁️' : '🚫'}</Text>
+          <Image
+            source={require('../../assets/images/showpasswordicon.png')}
+            style={styles.eyeIcon}
+          />
         </TouchableOpacity>
       </View>
 
       {/* Confirm Password */}
       <View style={styles.inputWrapper}>
-        <View style={styles.iconPlaceholder}>
-          <Text style={styles.iconText}>🔒</Text>
-        </View>
+        <Image
+          source={require('../../assets/images/passwordicon.png')}
+          style={styles.iconImage}
+        />
         <TextInput
           style={styles.input}
           placeholder="Confirm your password"
@@ -56,7 +62,10 @@ export default function ResetPasswordScreen() {
           style={styles.eyeButton}
           activeOpacity={0.7}
         >
-          <Text style={styles.iconText}>{showConfirmPass ? '👁️' : '🚫'}</Text>
+          <Image
+            source={require('../../assets/images/showpasswordicon.png')}
+            style={styles.eyeIcon}
+          />
         </TouchableOpacity>
       </View>
 
@@ -74,19 +83,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     justifyContent: 'center',
   },
-  logoPlaceholder: {
+  logoImage: {
     width: 80,
     height: 100,
     alignSelf: 'center',
     marginBottom: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoText: {
-    color: '#00AABB',
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 4,
+    resizeMode: 'contain',
   },
   title: {
     fontSize: 24,
@@ -103,21 +105,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     marginBottom: 16,
     height: 56,
-    width: 500,       // Matches Login/SignUp input width
+    width: 500,
     alignSelf: 'center',
   },
-  iconPlaceholder: {
+  iconImage: {
     width: 20,
-    alignItems: 'center',
+    height: 20,
     marginRight: 10,
-  },
-  iconText: {
-    color: '#555',
-    fontSize: 16,
+    tintColor: '#555',
+    resizeMode: 'contain',
   },
   input: {
     flex: 1,
-    fontSize: 20,         // Matches Login/SignUp input font size
+    fontSize: 20,
     lineHeight: 24,
     height: 56,
     color: '#FFF',
@@ -127,13 +127,19 @@ const styles = StyleSheet.create({
   eyeButton: {
     marginLeft: 12,
   },
+  eyeIcon: {
+    width: 20,
+    height: 20,
+    tintColor: '#555',
+    resizeMode: 'contain',
+  },
   button: {
     backgroundColor: '#00AABB',
     borderRadius: 30,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 20,
-    width: 300,          // Matches Login/SignUp button width
+    width: 300,
     alignSelf: 'center',
   },
   buttonText: {
