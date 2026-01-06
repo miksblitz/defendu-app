@@ -9,22 +9,23 @@ import {
   Platform,
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
+  Image,
 } from 'react-native';
 
 export default function VerificationCodeScreen() {
   const [code, setCode] = useState(['', '', '', '', '', '']);
 
-  // Typed ref array with nullable TextInput refs
-  const inputsRef = useRef<Array<TextInput | null>>([]);
+  // Typed ref array to store references for each TextInput
+  const inputsRef = useRef<(TextInput | null)[]>([]);
 
   // Handle digit input change
   const handleChange = (text: string, index: number) => {
-    if (text.length > 1) return; // Only one digit per input
+    if (text.length > 1) return; // limit to one char
     const newCode = [...code];
     newCode[index] = text;
     setCode(newCode);
 
-    // Auto-focus next input if any and text entered
+    // Focus next input if text entered and not last input
     if (text && index < inputsRef.current.length - 1) {
       inputsRef.current[index + 1]?.focus();
     }
@@ -45,9 +46,10 @@ export default function VerificationCodeScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.logoPlaceholder}>
-        <Text style={styles.logoText}>LOGO</Text>
-      </View>
+      <Image
+        source={require('../../assets/images/defendulogo.png')}
+        style={styles.logoImage}
+      />
 
       <Text style={styles.title}>Enter 6-digit verification code</Text>
       <Text style={styles.subtitle}>We sent a code to your email</Text>
@@ -60,14 +62,12 @@ export default function VerificationCodeScreen() {
             keyboardType="number-pad"
             maxLength={1}
             value={digit}
-            // Use callback ref assigning properly with TypeScript
-            ref={(ref) => {
-              inputsRef.current[index] = ref;
+            ref={(el: TextInput | null) => {
+              inputsRef.current[index] = el;
             }}
             onChangeText={(text) => handleChange(text, index)}
             onKeyPress={(e) => handleKeyPress(e, index)}
             textAlign="center"
-            placeholder=""
             placeholderTextColor="#555"
             autoFocus={index === 0}
             caretHidden={false}
@@ -97,18 +97,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
   },
-  logoPlaceholder: {
-    width: 120,
-    height: 120,
+  logoImage: {
+    width: 160,
+    height: 180,
+    alignSelf: 'center',
     marginBottom: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoText: {
-    color: '#00AABB',
-    fontWeight: '700',
-    fontSize: 32,
-    letterSpacing: 8,
+    resizeMode: 'contain',
   },
   title: {
     color: '#fff',
@@ -130,25 +124,23 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   codeInput: {
-  width: 40,
-  height: 40,
-  borderWidth: 1,
-  borderColor: '#888',
-  borderRadius: 30,
-  color: '#FFF',
-  fontSize: 20,
-  textAlign: 'center',          // center horizontally
-  textAlignVertical: 'center',  // center vertically (Android)
-  padding: 0,
-  margin: 0,
-  lineHeight: 40,               // match height
-  // Optionally add paddingTop if you need fine vertical alignment
-  // paddingTop: 2,
-},
+    width: 40,
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#888',
+    borderRadius: 30,
+    color: '#FFF',
+    fontSize: 20,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    padding: 0,
+    margin: 0,
+    lineHeight: 40,
+  },
   verifyButton: {
     backgroundColor: '#00AABB',
     borderRadius: 30,
-    width: '80%',
+    width: '30%',
     paddingVertical: 14,
     alignItems: 'center',
     marginBottom: 24,
