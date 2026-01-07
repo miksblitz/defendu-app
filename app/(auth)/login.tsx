@@ -1,12 +1,32 @@
+// app/(auth)/login.tsx
 import React, { useState } from 'react';
-import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import { AuthController } from '../controllers/AuthController';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await AuthController.login({ email, password });
+      router.replace('/(tabs)/dashboard');
+    } catch (error: any) {
+      Alert.alert('Login Failed', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -32,6 +52,7 @@ export default function LoginScreen() {
           keyboardType="email-address"
           onChangeText={setEmail}
           autoCapitalize="none"
+          editable={!loading}
         />
       </View>
 
@@ -48,11 +69,13 @@ export default function LoginScreen() {
           value={password}
           secureTextEntry={!showPassword}
           onChangeText={setPassword}
+          editable={!loading}
         />
         <TouchableOpacity
           onPress={() => setShowPassword(!showPassword)}
           style={styles.eyeButton}
           activeOpacity={0.7}
+          disabled={loading}
         >
           <Image
             source={require('../../assets/images/showpasswordicon.png')}
@@ -63,18 +86,27 @@ export default function LoginScreen() {
 
       {/* Forgot Password */}
       <View style={styles.forgotPasswordContainer}>
-        <TouchableOpacity onPress={() => router.push('/forgotpassword')}>
+        <TouchableOpacity onPress={() => router.push('/forgotpassword')} disabled={loading}>
           <Text style={styles.forgotText}>Forgot Password?</Text>
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.button} activeOpacity={0.8}>
-        <Text style={styles.buttonText}>Login</Text>
+      <TouchableOpacity 
+        style={[styles.button, loading && styles.buttonDisabled]} 
+        activeOpacity={0.8}
+        onPress={handleLogin}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#FFF" />
+        ) : (
+          <Text style={styles.buttonText}>Login</Text>
+        )}
       </TouchableOpacity>
 
       <View style={styles.bottomRow}>
         <Text style={styles.bottomText}>Don't Have an Account? </Text>
-        <TouchableOpacity onPress={() => router.push('/register')}>
+        <TouchableOpacity onPress={() => router.push('/register')} disabled={loading}>
           <Text style={styles.linkText}>Create an Account</Text>
         </TouchableOpacity>
       </View>
@@ -105,7 +137,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 14,
-    color: '#FFF',  // Changed to white
+    color: '#FFF',
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -124,7 +156,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     marginRight: 10,
-    tintColor: '#FFF',  // Changed to white
+    tintColor: '#FFF',
     resizeMode: 'contain',
   },
   input: {
@@ -142,7 +174,7 @@ const styles = StyleSheet.create({
   eyeIcon: {
     width: 20,
     height: 20,
-    tintColor: '#FFF',  // Changed to white
+    tintColor: '#FFF',
     resizeMode: 'contain',
   },
   forgotPasswordContainer: {
@@ -164,6 +196,9 @@ const styles = StyleSheet.create({
     width: 300,
     alignSelf: 'center',
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   buttonText: {
     color: '#FFF',
     fontWeight: '700',
@@ -174,7 +209,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bottomText: {
-    color: '#FFF',  // Changed to white
+    color: '#FFF',
     fontSize: 14,
   },
   linkText: {

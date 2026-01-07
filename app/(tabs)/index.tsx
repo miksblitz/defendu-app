@@ -14,7 +14,7 @@ export default function HomeScreen() {
       useNativeDriver: true,
     }).start(() => {
       // navigate after animation completes
-      router.push('/(tabs)');
+      router.push('/(auth)/login');
     });
   };
 

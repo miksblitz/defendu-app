@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import { AuthController } from '../controllers/AuthController';
 
 export default function SignUpScreen() {
   const [form, setForm] = useState({
@@ -22,6 +23,7 @@ export default function SignUpScreen() {
 
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   // Name validation function (no numbers allowed)
@@ -35,7 +37,6 @@ export default function SignUpScreen() {
     if (name.length > 50) {
       return `${fieldName} is too long (max 50 characters)`;
     }
-    // Check for numbers or special characters (allow letters, spaces, hyphens, apostrophes)
     const nameRegex = /^[a-zA-Z\s'-]+$/;
     if (!nameRegex.test(name)) {
       return `${fieldName} can only contain letters, spaces, hyphens, and apostrophes`;
@@ -45,7 +46,6 @@ export default function SignUpScreen() {
 
   // Email validation function
   const validateEmail = (email: string) => {
-    // Basic email regex: checks for @ symbol and domain
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     
     if (!email) {
@@ -127,8 +127,8 @@ export default function SignUpScreen() {
     setErrors(prev => ({ ...prev, confirmPassword: error }));
   };
 
-  // Handle form submission
-  const handleCreateAccount = () => {
+  // Handle form submission with Firebase
+  const handleCreateAccount = async () => {
     // Validate all fields
     const firstNameError = validateName(form.firstName, 'First name');
     const lastNameError = validateName(form.lastName, 'Last name');
@@ -156,9 +156,32 @@ export default function SignUpScreen() {
       return;
     }
 
-    // If validation passes, proceed with account creation
-    Alert.alert('Success', 'Account created successfully!');
-    // Add your account creation logic here
+    // Register user with Firebase
+    setLoading(true);
+    try {
+      await AuthController.register({
+        email: form.email,
+        password: form.password,
+        username: form.username,
+        firstName: form.firstName,
+        lastName: form.lastName,
+      });
+      
+      Alert.alert(
+        'Success', 
+        'Account created successfully!',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/(tabs)/dashboard'),
+          },
+        ]
+      );
+    } catch (error: any) {
+      Alert.alert('Registration Failed', error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -188,6 +211,7 @@ export default function SignUpScreen() {
           onChangeText={(text) => setForm((f) => ({ ...f, username: text }))}
           autoCapitalize="none"
           maxLength={50}
+          editable={!loading}
         />
       </View>
 
@@ -204,13 +228,13 @@ export default function SignUpScreen() {
           value={form.firstName}
           onChangeText={(text) => {
             setForm((f) => ({ ...f, firstName: text }));
-            // Clear error when user starts typing
             if (errors.firstName) {
               setErrors(prev => ({ ...prev, firstName: '' }));
             }
           }}
           onBlur={handleFirstNameBlur}
           maxLength={50}
+          editable={!loading}
         />
       </View>
       {errors.firstName ? <Text style={styles.errorText}>{errors.firstName}</Text> : null}
@@ -228,13 +252,13 @@ export default function SignUpScreen() {
           value={form.lastName}
           onChangeText={(text) => {
             setForm((f) => ({ ...f, lastName: text }));
-            // Clear error when user starts typing
             if (errors.lastName) {
               setErrors(prev => ({ ...prev, lastName: '' }));
             }
           }}
           onBlur={handleLastNameBlur}
           maxLength={50}
+          editable={!loading}
         />
       </View>
       {errors.lastName ? <Text style={styles.errorText}>{errors.lastName}</Text> : null}
@@ -252,7 +276,6 @@ export default function SignUpScreen() {
           value={form.email}
           onChangeText={(text) => {
             setForm((f) => ({ ...f, email: text }));
-            // Clear error when user starts typing
             if (errors.email) {
               setErrors(prev => ({ ...prev, email: '' }));
             }
@@ -261,6 +284,7 @@ export default function SignUpScreen() {
           keyboardType="email-address"
           autoCapitalize="none"
           maxLength={254}
+          editable={!loading}
         />
       </View>
       {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
@@ -279,18 +303,19 @@ export default function SignUpScreen() {
           secureTextEntry={!showPass}
           onChangeText={(text) => {
             setForm((f) => ({ ...f, password: text }));
-            // Clear error when user starts typing
             if (errors.password) {
               setErrors(prev => ({ ...prev, password: '' }));
             }
           }}
           onBlur={handlePasswordBlur}
           maxLength={128}
+          editable={!loading}
         />
         <TouchableOpacity
           onPress={() => setShowPass(!showPass)}
           style={styles.eyeButton}
           activeOpacity={0.7}
+          disabled={loading}
         >
           <Image
             source={require('../../assets/images/showpasswordicon.png')}
@@ -314,18 +339,19 @@ export default function SignUpScreen() {
           secureTextEntry={!showConfirmPass}
           onChangeText={(text) => {
             setForm((f) => ({ ...f, confirmPassword: text }));
-            // Clear error when user starts typing
             if (errors.confirmPassword) {
               setErrors(prev => ({ ...prev, confirmPassword: '' }));
             }
           }}
           onBlur={handleConfirmPasswordBlur}
           maxLength={128}
+          editable={!loading}
         />
         <TouchableOpacity
           onPress={() => setShowConfirmPass(!showConfirmPass)}
           style={styles.eyeButton}
           activeOpacity={0.7}
+          disabled={loading}
         >
           <Image
             source={require('../../assets/images/showpasswordicon.png')}
@@ -335,13 +361,22 @@ export default function SignUpScreen() {
       </View>
       {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
 
-      <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleCreateAccount}>
-        <Text style={styles.buttonText}>Create Account</Text>
+      <TouchableOpacity 
+        style={[styles.button, loading && styles.buttonDisabled]} 
+        activeOpacity={0.8} 
+        onPress={handleCreateAccount}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#FFF" />
+        ) : (
+          <Text style={styles.buttonText}>Create Account</Text>
+        )}
       </TouchableOpacity>
 
       <View style={styles.bottomRow}>
         <Text style={styles.bottomText}>Already have an Account? </Text>
-        <TouchableOpacity onPress={() => router.push('/login')}>
+        <TouchableOpacity onPress={() => router.push('/login')} disabled={loading}>
           <Text style={styles.linkText}>Log In</Text>
         </TouchableOpacity>
       </View>
@@ -426,6 +461,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 20,
     width: 300,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: '#FFF',
