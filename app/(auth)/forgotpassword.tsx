@@ -1,15 +1,17 @@
+// app/(auth)/forgotpassword.tsx
 import React, { useState } from 'react';
-import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import { AuthController } from '../controllers/AuthController';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   // Email validation function
   const validateEmail = (email: string) => {
-    // Basic email regex: checks for @ symbol and domain
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     
     if (!email) {
@@ -24,14 +26,14 @@ export default function ForgotPasswordScreen() {
     return '';
   };
 
-  // Handle email blur (when user leaves the field)
+  // Handle email blur
   const handleEmailBlur = () => {
     const validationError = validateEmail(email);
     setError(validationError);
   };
 
   // Handle send button press
-  const handleSend = () => {
+  const handleSend = async () => {
     const validationError = validateEmail(email);
     setError(validationError);
 
@@ -40,22 +42,35 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    // If validation passes, proceed with sending reset code
-    Alert.alert('Success', 'A password reset code has been sent to your email');
-    // Add your password reset logic here
-    // router.push('/verificationcode'); // Navigate to verification screen if needed
+    setLoading(true);
+    try {
+      const message = await AuthController.forgotPassword({ email });
+      Alert.alert(
+        'Success', 
+        'Password reset email sent! Please check your inbox.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.push('/login'),
+          },
+        ]
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
-      {/* Logo Image */}
       <Image
         source={require('../../assets/images/defendulogo.png')}
         style={styles.logoImage}
       />
 
-      <Text style={styles.title}>Forgot your password and Continue</Text>
-      <Text style={styles.subtitle}>We'll send a code to your email</Text>
+      <Text style={styles.title}>Forgot your password?</Text>
+      <Text style={styles.subtitle}>We'll send a reset link to your email</Text>
 
       {/* Email Input */}
       <View style={styles.inputWrapper}>
@@ -71,7 +86,6 @@ export default function ForgotPasswordScreen() {
           keyboardType="email-address"
           onChangeText={(text) => {
             setEmail(text);
-            // Clear error when user starts typing
             if (error) {
               setError('');
             }
@@ -79,15 +93,29 @@ export default function ForgotPasswordScreen() {
           onBlur={handleEmailBlur}
           autoCapitalize="none"
           maxLength={254}
+          editable={!loading}
         />
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleSend}>
-        <Text style={styles.buttonText}>Send</Text>
+      <TouchableOpacity 
+        style={[styles.button, loading && styles.buttonDisabled]} 
+        activeOpacity={0.8} 
+        onPress={handleSend}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#FFF" />
+        ) : (
+          <Text style={styles.buttonText}>Send Reset Link</Text>
+        )}
       </TouchableOpacity>
 
-      <TouchableOpacity style={{ marginTop: 24 }} onPress={() => router.push('/login')}>
+      <TouchableOpacity 
+        style={{ marginTop: 24 }} 
+        onPress={() => router.push('/login')}
+        disabled={loading}
+      >
         <Text style={styles.backText}>← Back to Login</Text>
       </TouchableOpacity>
     </View>
@@ -164,6 +192,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     width: 300,
     alignSelf: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: '#FFF',

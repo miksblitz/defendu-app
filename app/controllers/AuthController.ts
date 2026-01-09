@@ -3,9 +3,8 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { ref, set, get } from 'firebase/database';
 import { auth, db } from '../config/firebaseConfig';
 import { User, RegisterData, LoginData, ForgotPasswordData } from '../models/User';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,7 +15,7 @@ export class AuthController {
     try {
       console.log('🔵 Starting registration for:', data.email);
       console.log('🔵 Auth object:', !!auth);
-      console.log('🔵 Firestore object:', !!db);
+      console.log('🔵 Realtime Database object:', !!db);
 
       // Create user in Firebase Auth
       console.log('🔵 Creating user in Firebase Auth...');
@@ -29,7 +28,7 @@ export class AuthController {
       const firebaseUser = userCredential.user;
       console.log('✅ User created in Auth with UID:', firebaseUser.uid);
 
-      // Create user document in Firestore
+      // Create user document in Realtime Database
       const userData: User = {
         uid: firebaseUser.uid,
         email: data.email,
@@ -39,12 +38,18 @@ export class AuthController {
         createdAt: new Date(),
       };
 
-      console.log('🔵 Attempting to save to Firestore...');
+      console.log('🔵 Attempting to save to Realtime Database...');
       console.log('🔵 User data:', JSON.stringify(userData, null, 2));
       
-      await setDoc(doc(db, 'users', firebaseUser.uid), userData);
+      // Convert Date to timestamp for Realtime Database compatibility
+      const userDataForDB = {
+        ...userData,
+        createdAt: userData.createdAt.getTime(), // Store as timestamp
+      };
       
-      console.log('✅ Successfully saved to Firestore!');
+      await set(ref(db, `users/${firebaseUser.uid}`), userDataForDB);
+      
+      console.log('✅ Successfully saved to Realtime Database!');
 
       // Save user to local storage
       await AsyncStorage.setItem('user', JSON.stringify(userData));
@@ -73,16 +78,21 @@ export class AuthController {
       const firebaseUser = userCredential.user;
       console.log('✅ User logged in with UID:', firebaseUser.uid);
 
-      // Get user data from Firestore
-      console.log('🔵 Fetching user data from Firestore...');
-      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      // Get user data from Realtime Database
+      console.log('🔵 Fetching user data from Realtime Database...');
+      const userSnapshot = await get(ref(db, `users/${firebaseUser.uid}`));
 
-      if (!userDoc.exists()) {
-        console.error('❌ User document not found in Firestore');
+      if (!userSnapshot.exists()) {
+        console.error('❌ User data not found in Realtime Database');
         throw new Error('User data not found');
       }
 
-      const userData = userDoc.data() as User;
+      const userDataRaw = userSnapshot.val();
+      // Convert timestamp back to Date object
+      const userData: User = {
+        ...userDataRaw,
+        createdAt: userDataRaw.createdAt ? new Date(userDataRaw.createdAt) : new Date(),
+      };
       console.log('✅ User data retrieved:', userData);
 
       // Save user to local storage
@@ -107,13 +117,29 @@ export class AuthController {
     }
   }
 
-  // Forgot password
+  // Forgot password - Now uses backend API with Mailjet
   static async forgotPassword(data: ForgotPasswordData): Promise<string> {
     try {
-      await sendPasswordResetEmail(auth, data.email);
-      return 'Password reset email sent successfully';
+      const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
+      
+      const response = await fetch(`${apiBaseUrl}/api/password-reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: data.email }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send password reset email');
+      }
+
+      return result.message || 'Password reset email sent successfully';
     } catch (error: any) {
-      throw new Error(this.getErrorMessage(error.code));
+      console.error('❌ Forgot password error:', error);
+      throw new Error(error.message || 'Failed to send password reset email');
     }
   }
 

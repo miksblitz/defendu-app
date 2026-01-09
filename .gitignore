@@ -32,6 +32,8 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+.env.local
 
 # typescript
 *.tsbuildinfo
@@ -41,3 +43,9 @@ app-example
 # generated native folders
 /ios
 /android
+
+.vercel
+
+# Firebase service account keys (NEVER commit these!)
+*-firebase-adminsdk-*.json
+*firebase-adminsdk*.json
