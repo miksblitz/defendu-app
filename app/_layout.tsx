@@ -13,13 +13,27 @@ export default function RootLayout() {
       console.log('📱 Deep link received:', event.url);
       
       try {
-        const { hostname, path, queryParams } = Linking.parse(event.url);
+        const { scheme, hostname, path, queryParams } = Linking.parse(event.url);
         
         console.log('🔍 Parsed URL:', { 
+          scheme,
           hostname, 
           path, 
           queryParams 
         });
+
+        // Handle custom app scheme: defenduapp://resetpassword?oobCode=...
+        if (scheme === 'defenduapp' && path === 'resetpassword') {
+          const oobCode = queryParams?.oobCode as string;
+          console.log('✅ Custom app scheme - reset password with code:', oobCode);
+          
+          if (oobCode) {
+            setTimeout(() => {
+              router.push(`/resetpassword?oobCode=${oobCode}`);
+            }, 100);
+            return;
+          }
+        }
 
         // Check if it's a Firebase auth action
         if (path?.includes('auth/action') || path === '__/auth/action') {
