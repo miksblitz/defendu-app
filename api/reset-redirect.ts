@@ -5,9 +5,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { oobCode, expiresAt } = req.query;
+  const { token, expiresAt } = req.query;
 
-  if (!oobCode) {
+  if (!token) {
     return res.status(400).send(`
       <!DOCTYPE html>
       <html>
@@ -43,8 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Create deep link
-  const deepLink = `defenduapp://resetpassword?oobCode=${oobCode}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`;
+  // Create deep link with custom token (not OOB code)
+  const deepLink = `defenduapp://resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`;
   
   // HTML page that tries to open the app and shows fallback
   const html = `

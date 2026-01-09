@@ -25,12 +25,12 @@ export default function ResetPasswordScreen() {
   
   const router = useRouter();
   const params = useLocalSearchParams();
-  const oobCode = params.oobCode as string;
+  const token = params.token as string; // Changed from oobCode to token
 
   useEffect(() => {
-    // Only check for oobCode if params are loaded
+    // Only check for token if params are loaded
     if (params && Object.keys(params).length > 0) {
-      if (!oobCode) {
+      if (!token) {
         Alert.alert(
           'Invalid Link',
           'This password reset link is invalid or has expired. Please request a new one.',
@@ -44,10 +44,10 @@ export default function ResetPasswordScreen() {
       } else {
         setHasValidCode(true);
         // Validate token with backend webhook
-        validateToken(oobCode);
+        validateToken(token);
       }
     }
-  }, [params, oobCode]);
+  }, [params, token]);
 
   // Validate token with backend API
   const validateToken = async (token: string) => {
@@ -151,8 +151,8 @@ export default function ResetPasswordScreen() {
   };
 
   const handleChangePassword = async () => {
-    // Check if we have a valid code
-    if (!oobCode) {
+    // Check if we have a valid token
+    if (!token) {
       Alert.alert('Error', 'Invalid reset link. Please request a new password reset.');
       router.replace('/forgotpassword');
       return;
@@ -173,7 +173,7 @@ export default function ResetPasswordScreen() {
     }
 
     // Validate token before proceeding
-    if (!tokenValidated || !oobCode) {
+    if (!tokenValidated || !token) {
       Alert.alert('Error', 'Please wait for token validation to complete.');
       return;
     }
@@ -189,7 +189,7 @@ export default function ResetPasswordScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          token: oobCode,
+          token: token,
           newPassword: password,
         }),
       });

@@ -93,49 +93,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Generate password reset link
-    // Use Firebase hosting URL which is already allowlisted and configured in app.json
-    // The app is configured to handle links from defendu-e7970.firebaseapp.com
-    const actionCodeSettings = {
-      // Use Firebase hosting URL - already allowlisted and configured in app.json
-      // The app will handle this via deep linking (see app/_layout.tsx)
-      url: 'https://defendu-e7970.firebaseapp.com/resetpassword',
-      handleCodeInApp: true, // Set to true for mobile apps to open in app
-    };
-
-    console.log('🔵 Generating reset link with URL:', actionCodeSettings.url);
+    // Generate custom secure token (NOT using Firebase OOB codes)
+    // Create a cryptographically secure random token
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(32).toString('hex'); // 64 character hex string
     
-    const resetLink = await auth.generatePasswordResetLink(email, actionCodeSettings);
-    console.log('🔵 Reset link generated successfully');
-
     // Store token with expiry timestamp (5 minutes from now)
     const tokenExpiry = Date.now() + 5 * 60 * 1000; // 5 minutes in milliseconds
-    const tokenId = resetLink.split('oobCode=')[1]?.split('&')[0] || '';
-
+    
     // Store token metadata in Realtime Database for validation
     const db = adminApp.database();
-    await db.ref(`passwordResetTokens/${tokenId}`).set({
+    await db.ref(`passwordResetTokens/${token}`).set({
       email,
+      userId: userRecord.uid,
       createdAt: Date.now(),
       expiresAt: tokenExpiry,
       used: false,
     });
 
+    console.log('🔵 Custom token generated:', token.substring(0, 8) + '...');
+    console.log('🔵 Token expires at:', new Date(tokenExpiry).toISOString());
+
     // Create a web redirect URL that opens the app via deep link
     // Email clients don't support custom schemes (defenduapp://), so we use a web redirect
-    // The redirect page will try to open the app and show fallback instructions
     const apiBaseUrl = process.env.API_BASE_URL || 'https://defendu-app.vercel.app';
-    const redirectUrl = `${apiBaseUrl}/api/reset-redirect?oobCode=${tokenId}&expiresAt=${tokenExpiry}`;
+    const redirectUrl = `${apiBaseUrl}/api/reset-redirect?token=${token}&expiresAt=${tokenExpiry}`;
     
     // Also create direct deep link for manual use
-    const deepLinkUrl = `defenduapp://resetpassword?oobCode=${tokenId}&expiresAt=${tokenExpiry}`;
-    
-    // For web/fallback, also provide the Firebase link
-    const resetLinkWithExpiry = `${resetLink}&expiresAt=${tokenExpiry}`;
+    const deepLinkUrl = `defenduapp://resetpassword?token=${token}&expiresAt=${tokenExpiry}`;
     
     console.log('🔵 Redirect URL (for email):', redirectUrl);
     console.log('🔵 Deep link (manual):', deepLinkUrl);
-    console.log('🔵 Firebase link (fallback):', resetLinkWithExpiry);
 
     // Get Mailjet credentials from environment
     const mailjetApiKey = process.env.MAILJET_API_KEY;

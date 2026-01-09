@@ -22,42 +22,26 @@ export default function RootLayout() {
           queryParams 
         });
 
-        // Handle custom app scheme: defenduapp://resetpassword?oobCode=...
+        // Handle custom app scheme: defenduapp://resetpassword?token=...
         if (scheme === 'defenduapp' && path === 'resetpassword') {
-          const oobCode = queryParams?.oobCode as string;
-          console.log('✅ Custom app scheme - reset password with code:', oobCode);
+          const token = queryParams?.token as string;
+          console.log('✅ Custom app scheme - reset password with token:', token?.substring(0, 8) + '...');
           
-          if (oobCode) {
+          if (token) {
             setTimeout(() => {
-              router.push(`/resetpassword?oobCode=${oobCode}`);
+              router.push(`/resetpassword?token=${token}`);
             }, 100);
             return;
           }
         }
 
-        // Check if it's a Firebase auth action
-        if (path?.includes('auth/action') || path === '__/auth/action') {
-          const mode = queryParams?.mode as string;
-          const oobCode = queryParams?.oobCode as string;
-
-          console.log('🔐 Auth action detected:', { mode, oobCode });
-
-          if (mode === 'resetPassword' && oobCode) {
-            console.log('✅ Navigating to reset password with code:', oobCode);
-            
-            // Small delay to ensure router is ready
-            setTimeout(() => {
-              router.push(`/resetpassword?oobCode=${oobCode}`);
-            }, 100);
-          }
-        }
-        // Also handle direct resetpassword links
-        else if (path === 'resetpassword' && queryParams?.oobCode) {
-          const oobCode = queryParams.oobCode as string;
-          console.log('✅ Direct reset password link with code:', oobCode);
+        // Also handle direct resetpassword links with token
+        if (path === 'resetpassword' && queryParams?.token) {
+          const token = queryParams.token as string;
+          console.log('✅ Direct reset password link with token:', token?.substring(0, 8) + '...');
           
           setTimeout(() => {
-            router.push(`/resetpassword?oobCode=${oobCode}`);
+            router.push(`/resetpassword?token=${token}`);
           }, 100);
         }
       } catch (error) {
