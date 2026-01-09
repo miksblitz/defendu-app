@@ -121,16 +121,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       used: false,
     });
 
-    // Create a deep link that opens the app instead of Firebase hosting
-    // Use the app's custom scheme (defenduapp://) to open directly in the app
-    // This will use the resetpassword.tsx UI instead of Firebase's web page
+    // Create a web redirect URL that opens the app via deep link
+    // Email clients don't support custom schemes (defenduapp://), so we use a web redirect
+    // The redirect page will try to open the app and show fallback instructions
+    const apiBaseUrl = process.env.API_BASE_URL || 'https://defendu-app.vercel.app';
+    const redirectUrl = `${apiBaseUrl}/api/reset-redirect?oobCode=${tokenId}&expiresAt=${tokenExpiry}`;
+    
+    // Also create direct deep link for manual use
     const deepLinkUrl = `defenduapp://resetpassword?oobCode=${tokenId}&expiresAt=${tokenExpiry}`;
     
     // For web/fallback, also provide the Firebase link
-    // But prioritize the deep link for mobile apps
     const resetLinkWithExpiry = `${resetLink}&expiresAt=${tokenExpiry}`;
     
-    console.log('🔵 Deep link created:', deepLinkUrl);
+    console.log('🔵 Redirect URL (for email):', redirectUrl);
+    console.log('🔵 Deep link (manual):', deepLinkUrl);
     console.log('🔵 Firebase link (fallback):', resetLinkWithExpiry);
 
     // Get Mailjet credentials from environment
@@ -167,7 +171,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
           ],
           Subject: 'Reset Your Password - Defendu',
-          TextPart: `You requested a password reset. Click the link below to reset your password. This link will expire in 5 minutes.\n\nFor mobile app: ${deepLinkUrl}\n\nFor web browser: ${resetLinkWithExpiry}\n\nIf you didn't request this, please ignore this email.`,
+          TextPart: `You requested a password reset. Click the link below to reset your password. This link will expire in 5 minutes.\n\n${redirectUrl}\n\nIf you didn't request this, please ignore this email.`,
           HTMLPart: `
             <!DOCTYPE html>
             <html>
@@ -183,14 +187,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   <h2 style="color: #041527;">Password Reset Request</h2>
                   <p>You requested to reset your password. Click the button below to create a new password. This link will expire in <strong>5 minutes</strong>.</p>
                   <div style="text-align: center; margin: 30px 0;">
-                    <a href="${deepLinkUrl}" 
+                    <a href="${redirectUrl}" 
                        style="background-color: #00AABB; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; display: inline-block; font-weight: bold;">
-                      Reset Password (Open in App)
+                      Reset Password
                     </a>
                   </div>
-                  <p style="font-size: 12px; color: #666; margin-top: 20px;">If the app doesn't open, use this web link:</p>
+                  <p style="font-size: 12px; color: #666; margin-top: 20px;">Or copy and paste this link into your browser:</p>
                   <p style="font-size: 12px; color: #00AABB; word-break: break-all;">
-                    <a href="${resetLinkWithExpiry}" style="color: #00AABB;">${resetLinkWithExpiry}</a>
+                    <a href="${redirectUrl}" style="color: #00AABB;">${redirectUrl}</a>
                   </p>
                   <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
                   <p style="font-size: 12px; color: #666;">If you didn't request a password reset, please ignore this email. Your password will remain unchanged.</p>
