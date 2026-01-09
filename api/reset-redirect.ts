@@ -46,6 +46,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Create deep link with custom token (not OOB code)
   const deepLink = `defenduapp://resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`;
   
+  // Web app URL for desktop/PC testing
+  const webAppUrl = process.env.WEB_APP_URL || 'http://localhost:8081';
+  const webAppLink = `${webAppUrl}/resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`;
+  
   // HTML page that tries to open the app and shows fallback
   const html = `
     <!DOCTYPE html>
@@ -175,10 +179,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   showFallback();
                 }, 2000);
               }
-              // For desktop/web
+              // For desktop/web - redirect to web version of app
               else {
-                // Just show the button, let user click
-                showFallback();
+                // Redirect to web version of the app with token
+                const webLink = '${webAppLink}';
+                console.log('Desktop detected - redirecting to web app:', webLink);
+                
+                // Try to redirect to web version
+                setTimeout(function() {
+                  window.location.href = webLink;
+                }, 500);
+                
+                // Show fallback if web redirect doesn't work
+                setTimeout(function() {
+                  showFallback();
+                }, 2000);
               }
             }
             
@@ -226,13 +241,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             <p><strong>App didn't open?</strong></p>
             <p>Try these steps:</p>
             <ol style="text-align: left; max-width: 400px; margin: 10px auto;">
-              <li>Make sure the Defendu app is installed on your device</li>
-              <li>Click the "Open in Defendu App" button above</li>
-              <li>If still not working, copy and paste this link in your browser:</li>
+              <li><strong>On Mobile:</strong> Make sure the Defendu app is installed, then click the button above</li>
+              <li><strong>On PC/Web:</strong> <a href="${webAppLink}" style="color: #00AABB; text-decoration: underline;">Click here to open in web browser</a></li>
+              <li>Or copy and paste this link in your browser:</li>
             </ol>
-            <code>${deepLink}</code>
+            <code id="linkToCopy">${webAppLink}</code>
             <p style="margin-top: 20px; font-size: 12px; color: #999;">
-              Or manually open the Defendu app and navigate to the reset password screen.
+              <strong>Note:</strong> Deep links only work on mobile devices. On PC, use the web version link above.
             </p>
           </div>
         </div>
