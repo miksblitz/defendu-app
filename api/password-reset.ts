@@ -53,11 +53,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   try {
+    console.log('🔵 Password reset request received');
+    console.log('🔵 Request method:', req.method);
+    console.log('🔵 Request body:', JSON.stringify(req.body, null, 2));
+    
     const { email } = req.body;
 
     if (!email || typeof email !== 'string') {
+      console.error('❌ Invalid email in request');
       return res.status(400).json({ error: 'Email is required' });
     }
+    
+    console.log('🔵 Processing password reset for:', email);
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -81,15 +88,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Generate password reset link with custom action code settings
-    // Note: Firebase Admin SDK doesn't support custom expiry less than 1 hour
-    // We'll need to implement custom token expiry logic
+    // Generate password reset link
+    // Use Firebase hosting URL which is already allowlisted and configured in app.json
+    // The app is configured to handle links from defendu-e7970.firebaseapp.com
     const actionCodeSettings = {
-      url: `${process.env.API_BASE_URL || 'https://your-app-domain.com'}/resetpassword`,
-      handleCodeInApp: false,
+      // Use Firebase hosting URL - already allowlisted and configured in app.json
+      // The app will handle this via deep linking (see app/_layout.tsx)
+      url: 'https://defendu-e7970.firebaseapp.com/resetpassword',
+      handleCodeInApp: true, // Set to true for mobile apps to open in app
     };
 
+    console.log('🔵 Generating reset link with URL:', actionCodeSettings.url);
+    
     const resetLink = await auth.generatePasswordResetLink(email, actionCodeSettings);
+    console.log('🔵 Reset link generated successfully');
 
     // Store token with expiry timestamp (5 minutes from now)
     const tokenExpiry = Date.now() + 5 * 60 * 1000; // 5 minutes in milliseconds
@@ -113,12 +125,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const mailjetFromEmail = process.env.MAILJET_FROM_EMAIL || 'noreply@defendu.com';
     const mailjetFromName = process.env.MAILJET_FROM_NAME || 'Defendu';
 
+    console.log('🔵 Mailjet API Key exists:', !!mailjetApiKey);
+    console.log('🔵 Mailjet API Secret exists:', !!mailjetApiSecret);
+    console.log('🔵 From Email:', mailjetFromEmail);
+    console.log('🔵 To Email:', email);
+
     if (!mailjetApiKey || !mailjetApiSecret) {
-      throw new Error('Mailjet credentials not configured');
+      console.error('❌ Mailjet credentials missing!');
+      console.error('❌ MAILJET_API_KEY:', mailjetApiKey ? 'Set' : 'NOT SET');
+      console.error('❌ MAILJET_API_SECRET:', mailjetApiSecret ? 'Set' : 'NOT SET');
+      throw new Error('Mailjet credentials not configured. Please set MAILJET_API_KEY and MAILJET_API_SECRET in Vercel environment variables.');
     }
 
     // Send email via Mailjet
     const mailjetApiUrl = 'https://api.mailjet.com/v3.1/send';
+    console.log('🔵 Sending email via Mailjet to:', email);
     const emailData = {
       Messages: [
         {
@@ -166,6 +187,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     const authHeader = Buffer.from(`${mailjetApiKey}:${mailjetApiSecret}`).toString('base64');
+    
+    console.log('🔵 Calling Mailjet API...');
     const mailjetResponse = await fetch(mailjetApiUrl, {
       method: 'POST',
       headers: {
@@ -175,12 +198,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify(emailData),
     });
 
+    console.log('🔵 Mailjet Response Status:', mailjetResponse.status);
+    console.log('🔵 Mailjet Response OK:', mailjetResponse.ok);
+
     if (!mailjetResponse.ok) {
       const errorData = await mailjetResponse.json().catch(() => ({}));
-      throw new Error(
-        `Mailjet API error: ${mailjetResponse.status} - ${errorData.ErrorMessage || mailjetResponse.statusText}`
-      );
+      console.error('❌ Mailjet API Error:', errorData);
+      console.error('❌ Mailjet Status:', mailjetResponse.status);
+      console.error('❌ Mailjet Status Text:', mailjetResponse.statusText);
+      
+      let errorMessage = `Mailjet API error: ${mailjetResponse.status}`;
+      if (errorData.ErrorMessage) {
+        errorMessage += ` - ${errorData.ErrorMessage}`;
+      } else if (errorData.Messages && errorData.Messages[0]?.Errors) {
+        errorMessage += ` - ${errorData.Messages[0].Errors[0].ErrorMessage}`;
+      } else {
+        errorMessage += ` - ${mailjetResponse.statusText}`;
+      }
+      
+      throw new Error(errorMessage);
     }
+
+    const mailjetResult = await mailjetResponse.json().catch(() => ({}));
+    console.log('✅ Mailjet Response:', JSON.stringify(mailjetResult, null, 2));
+    console.log('✅ Email sent successfully via Mailjet!');
 
     return res.status(200).json({
       success: true,
@@ -188,9 +229,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error: any) {
     console.error('❌ Password reset error:', error);
+    console.error('❌ Error name:', error.name);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Error stack:', error.stack);
+    
+    // Return detailed error for debugging (remove in production if needed)
     return res.status(500).json({
       error: 'Failed to process password reset request',
       message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 }

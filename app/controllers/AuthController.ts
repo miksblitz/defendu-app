@@ -162,11 +162,19 @@ export class AuthController {
       console.log('🔵 API Response OK:', response.ok);
 
       const result = await response.json();
-      console.log('🔵 API Response Data:', result);
+      console.log('🔵 API Response Data:', JSON.stringify(result, null, 2));
 
       if (!response.ok) {
-        console.error('❌ API Error Response:', result);
-        throw new Error(result.error || 'Failed to send password reset email');
+        console.error('❌ API Error Response:', JSON.stringify(result, null, 2));
+        console.error('❌ API Error Message:', result.message);
+        console.error('❌ API Error Details:', result.details);
+        
+        // Show more detailed error message
+        let errorMsg = result.error || 'Failed to send password reset email';
+        if (result.message) {
+          errorMsg += `: ${result.message}`;
+        }
+        throw new Error(errorMsg);
       }
 
       console.log('✅ Password reset email sent successfully');
