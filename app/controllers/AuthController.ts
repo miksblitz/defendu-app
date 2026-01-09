@@ -47,9 +47,19 @@ export class AuthController {
         createdAt: userData.createdAt.getTime(), // Store as timestamp
       };
       
-      await set(ref(db, `users/${firebaseUser.uid}`), userDataForDB);
+      console.log('🔵 Database reference path:', `users/${firebaseUser.uid}`);
+      console.log('🔵 Database URL:', process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL);
       
-      console.log('✅ Successfully saved to Realtime Database!');
+      try {
+        await set(ref(db, `users/${firebaseUser.uid}`), userDataForDB);
+        console.log('✅ Successfully saved to Realtime Database!');
+      } catch (dbError: any) {
+        console.error('❌ Database save error:', dbError);
+        console.error('❌ Error code:', dbError.code);
+        console.error('❌ Error message:', dbError.message);
+        console.error('❌ Full error:', JSON.stringify(dbError, null, 2));
+        throw dbError; // Re-throw to be caught by outer catch
+      }
 
       // Save user to local storage
       await AsyncStorage.setItem('user', JSON.stringify(userData));
@@ -60,6 +70,21 @@ export class AuthController {
       console.error('❌ Registration error:', error);
       console.error('❌ Error code:', error.code);
       console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      console.error('❌ Full error object:', JSON.stringify(error, null, 2));
+      
+      // Check if it's a database error
+      if (error.code === 'permission-denied' || error.code === 'PERMISSION_DENIED') {
+        console.error('⚠️ PERMISSION DENIED: Check database security rules in Firebase Console');
+        console.error('⚠️ Go to: Firebase Console → Realtime Database → Rules');
+        console.error('⚠️ Temporarily set rules to: { "rules": { ".read": true, ".write": true } }');
+      }
+      
+      if (error.code === 'unavailable' || error.code === 'UNAVAILABLE') {
+        console.error('⚠️ DATABASE UNAVAILABLE: Check database URL and internet connection');
+        console.error('⚠️ Database URL:', process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL);
+      }
+      
       throw new Error(this.getErrorMessage(error.code));
     }
   }
@@ -122,6 +147,9 @@ export class AuthController {
     try {
       const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
       
+      console.log('🔵 Forgot password - API URL:', `${apiBaseUrl}/api/password-reset`);
+      console.log('🔵 Forgot password - Email:', data.email);
+      
       const response = await fetch(`${apiBaseUrl}/api/password-reset`, {
         method: 'POST',
         headers: {
@@ -130,15 +158,31 @@ export class AuthController {
         body: JSON.stringify({ email: data.email }),
       });
 
+      console.log('🔵 API Response Status:', response.status);
+      console.log('🔵 API Response OK:', response.ok);
+
       const result = await response.json();
+      console.log('🔵 API Response Data:', result);
 
       if (!response.ok) {
+        console.error('❌ API Error Response:', result);
         throw new Error(result.error || 'Failed to send password reset email');
       }
 
+      console.log('✅ Password reset email sent successfully');
       return result.message || 'Password reset email sent successfully';
     } catch (error: any) {
       console.error('❌ Forgot password error:', error);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      
+      // Check for network errors
+      if (error.message.includes('fetch') || error.message.includes('network')) {
+        console.error('⚠️ NETWORK ERROR: Check if Vercel API is deployed and accessible');
+        console.error('⚠️ API URL:', process.env.EXPO_PUBLIC_API_BASE_URL);
+        throw new Error('Network error. Please check your internet connection and try again.');
+      }
+      
       throw new Error(error.message || 'Failed to send password reset email');
     }
   }
