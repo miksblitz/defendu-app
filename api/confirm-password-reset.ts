@@ -20,8 +20,13 @@ function getAdminApp(): admin.app.App {
       Buffer.from(serviceAccountKey, 'base64').toString('utf8')
     );
 
+    // Get database URL from environment or use default
+    const databaseURL = process.env.FIREBASE_DATABASE_URL || 
+      'https://defendu-e7970-default-rtdb.asia-southeast1.firebasedatabase.app';
+
     adminApp = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+      databaseURL: databaseURL,
     });
   }
   return adminApp;
