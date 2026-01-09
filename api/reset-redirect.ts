@@ -53,12 +53,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       <head>
         <title>Opening Defendu App...</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="refresh" content="2;url=${deepLink}">
+        <meta name="apple-mobile-web-app-capable" content="yes">
         <style>
           body {
             font-family: Arial, sans-serif;
             text-align: center;
-            padding: 50px;
+            padding: 20px;
             background: linear-gradient(135deg, #041527 0%, #00AABB 100%);
             color: white;
             min-height: 100vh;
@@ -66,6 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            margin: 0;
           }
           .container {
             background: white;
@@ -73,6 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             padding: 40px;
             border-radius: 20px;
             max-width: 500px;
+            width: 100%;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
           }
           h1 {
@@ -101,9 +103,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             display: inline-block;
             margin-top: 20px;
             font-weight: bold;
+            cursor: pointer;
           }
           .button:hover {
             background-color: #0088aa;
+          }
+          .button:active {
+            background-color: #006688;
           }
           .fallback {
             margin-top: 30px;
@@ -112,15 +118,101 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             font-size: 14px;
             color: #666;
           }
+          code {
+            font-size: 10px;
+            word-break: break-all;
+            background: #f5f5f5;
+            padding: 5px;
+            border-radius: 4px;
+            display: block;
+            margin-top: 10px;
+          }
         </style>
         <script>
-          // Try to open the app immediately
-          window.location.href = "${deepLink}";
-          
-          // Fallback: If app doesn't open after 2 seconds, show instructions
-          setTimeout(function() {
-            document.getElementById('instructions').style.display = 'block';
-          }, 2000);
+          (function() {
+            const deepLink = "${deepLink}";
+            const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+            const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+            const isAndroid = /android/i.test(userAgent);
+            const isMobile = isIOS || isAndroid;
+            
+            console.log('Device detected:', { isIOS, isAndroid, isMobile });
+            
+            // Function to try opening the app
+            function tryOpenApp() {
+              console.log('Attempting to open app with:', deepLink);
+              
+              // For iOS, try multiple methods
+              if (isIOS) {
+                // Method 1: Direct location change
+                window.location.href = deepLink;
+                
+                // Method 2: Create hidden iframe (iOS sometimes blocks direct redirects)
+                setTimeout(function() {
+                  const iframe = document.createElement('iframe');
+                  iframe.style.display = 'none';
+                  iframe.src = deepLink;
+                  document.body.appendChild(iframe);
+                  
+                  // Remove iframe after a moment
+                  setTimeout(function() {
+                    document.body.removeChild(iframe);
+                  }, 2000);
+                }, 500);
+                
+                // Method 3: Fallback after delay
+                setTimeout(function() {
+                  showFallback();
+                }, 2500);
+              } 
+              // For Android
+              else if (isAndroid) {
+                // Try direct redirect
+                window.location.href = deepLink;
+                
+                // Fallback after delay
+                setTimeout(function() {
+                  showFallback();
+                }, 2000);
+              }
+              // For desktop/web
+              else {
+                // Just show the button, let user click
+                showFallback();
+              }
+            }
+            
+            function showFallback() {
+              const instructions = document.getElementById('instructions');
+              if (instructions) {
+                instructions.style.display = 'block';
+              }
+            }
+            
+            // Try to open immediately on page load
+            if (isMobile) {
+              tryOpenApp();
+            } else {
+              // For desktop, show instructions immediately
+              showFallback();
+            }
+            
+            // Also handle button click
+            document.addEventListener('DOMContentLoaded', function() {
+              const button = document.querySelector('.button');
+              if (button) {
+                button.addEventListener('click', function(e) {
+                  e.preventDefault();
+                  window.location.href = deepLink;
+                  
+                  // Show instructions after click
+                  setTimeout(function() {
+                    showFallback();
+                  }, 1000);
+                });
+              }
+            });
+          })();
         </script>
       </head>
       <body>
@@ -129,14 +221,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           <p>Opening the app...</p>
           <div class="spinner"></div>
           <p style="margin-top: 20px;">If the app doesn't open automatically, click the button below:</p>
-          <a href="${deepLink}" class="button">Open in Defendu App</a>
+          <a href="${deepLink}" class="button" id="openButton">Open in Defendu App</a>
           <div id="instructions" class="fallback" style="display: none;">
-            <p><strong>Don't have the app?</strong></p>
-            <p>If the app doesn't open, you may need to:</p>
-            <ol style="text-align: left; max-width: 400px; margin: 0 auto;">
-              <li>Make sure the Defendu app is installed</li>
-              <li>Copy this link and paste it in your browser: <code style="font-size: 10px; word-break: break-all;">${deepLink}</code></li>
+            <p><strong>App didn't open?</strong></p>
+            <p>Try these steps:</p>
+            <ol style="text-align: left; max-width: 400px; margin: 10px auto;">
+              <li>Make sure the Defendu app is installed on your device</li>
+              <li>Click the "Open in Defendu App" button above</li>
+              <li>If still not working, copy and paste this link in your browser:</li>
             </ol>
+            <code>${deepLink}</code>
+            <p style="margin-top: 20px; font-size: 12px; color: #999;">
+              Or manually open the Defendu app and navigate to the reset password screen.
+            </p>
           </div>
         </div>
       </body>
