@@ -4,9 +4,10 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { ref, set, get } from 'firebase/database';
+import { ref, set, get, update } from 'firebase/database';
 import { auth, db } from '../config/firebaseConfig';
 import { User, RegisterData, LoginData, ForgotPasswordData } from '../models/User';
+import { SkillProfile } from '../models/SkillProfile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export class AuthController {
@@ -36,6 +37,9 @@ export class AuthController {
         firstName: data.firstName,
         lastName: data.lastName,
         createdAt: new Date(),
+        role: 'individual', // Default role
+        hasCompletedSkillProfile: false, // Default to false
+        trainerApproved: false, // Default to false
       };
 
       console.log('🔵 Attempting to save to Realtime Database...');
@@ -113,10 +117,28 @@ export class AuthController {
       }
 
       const userDataRaw = userSnapshot.val();
-      // Convert timestamp back to Date object
+      // Convert timestamp back to Date object and set defaults for new fields
       const userData: User = {
         ...userDataRaw,
         createdAt: userDataRaw.createdAt ? new Date(userDataRaw.createdAt) : new Date(),
+        role: userDataRaw.role || 'individual', // Default to individual if not set
+        hasCompletedSkillProfile: userDataRaw.hasCompletedSkillProfile || false, // Default to false
+        trainerApproved: userDataRaw.trainerApproved || false, // Default to false
+        // Skill profile fields (optional, so they can be undefined)
+        height: userDataRaw.height,
+        weight: userDataRaw.weight,
+        age: userDataRaw.age,
+        gender: userDataRaw.gender,
+        physicalLimitations: userDataRaw.physicalLimitations,
+        // Normalize arrays to ensure they're always arrays
+        preferredTechnique: this.normalizeArray(userDataRaw.preferredTechnique),
+        trainingGoal: this.normalizeArray(userDataRaw.trainingGoal),
+        experienceLevel: userDataRaw.experienceLevel,
+        martialArtsBackground: this.normalizeArray(userDataRaw.martialArtsBackground),
+        previousTrainingDetails: userDataRaw.previousTrainingDetails,
+        currentFitnessLevel: userDataRaw.currentFitnessLevel,
+        trainingFrequency: userDataRaw.trainingFrequency,
+        currentInjuries: userDataRaw.currentInjuries,
       };
       console.log('✅ User data retrieved:', userData);
 
@@ -168,6 +190,12 @@ export class AuthController {
         console.error('❌ API Error Response:', JSON.stringify(result, null, 2));
         console.error('❌ API Error Message:', result.message);
         console.error('❌ API Error Details:', result.details);
+        console.error('❌ API Status Code:', response.status);
+        
+        // Handle specific error codes
+        if (response.status === 404 && result.code === 'USER_NOT_FOUND') {
+          throw new Error('No account found with this email address. Please check your email or create an account.');
+        }
         
         // Show more detailed error message
         let errorMsg = result.error || 'Failed to send password reset email';
@@ -195,12 +223,61 @@ export class AuthController {
     }
   }
 
+  // Helper function to normalize arrays (Firebase sometimes returns arrays as objects)
+  private static normalizeArray(value: any): string[] | undefined {
+    if (!value) return undefined;
+    if (Array.isArray(value)) return value;
+    // If it's an object with numeric keys, convert to array
+    if (typeof value === 'object') {
+      const keys = Object.keys(value).sort((a, b) => Number(a) - Number(b));
+      if (keys.every(k => !isNaN(Number(k)))) {
+        return keys.map(k => value[k]);
+      }
+    }
+    return undefined;
+  }
+
   // Get current user
   static async getCurrentUser(): Promise<User | null> {
     try {
       const userJson = await AsyncStorage.getItem('user');
-      return userJson ? JSON.parse(userJson) : null;
+      if (!userJson) {
+        return null;
+      }
+
+      const userDataRaw = JSON.parse(userJson);
+      
+      // Convert Date string back to Date object and set defaults for new fields
+      const userData: User = {
+        ...userDataRaw,
+        createdAt: userDataRaw.createdAt 
+          ? (typeof userDataRaw.createdAt === 'string' 
+              ? new Date(userDataRaw.createdAt) 
+              : new Date(userDataRaw.createdAt))
+          : new Date(),
+        role: userDataRaw.role || 'individual', // Default to individual if not set
+        hasCompletedSkillProfile: userDataRaw.hasCompletedSkillProfile ?? false, // Default to false
+        trainerApproved: userDataRaw.trainerApproved ?? false, // Default to false
+        // Skill profile fields (optional, so they can be undefined)
+        height: userDataRaw.height,
+        weight: userDataRaw.weight,
+        age: userDataRaw.age,
+        gender: userDataRaw.gender,
+        physicalLimitations: userDataRaw.physicalLimitations,
+        // Normalize arrays to ensure they're always arrays
+        preferredTechnique: this.normalizeArray(userDataRaw.preferredTechnique),
+        trainingGoal: this.normalizeArray(userDataRaw.trainingGoal),
+        experienceLevel: userDataRaw.experienceLevel,
+        martialArtsBackground: this.normalizeArray(userDataRaw.martialArtsBackground),
+        previousTrainingDetails: userDataRaw.previousTrainingDetails,
+        currentFitnessLevel: userDataRaw.currentFitnessLevel,
+        trainingFrequency: userDataRaw.trainingFrequency,
+        currentInjuries: userDataRaw.currentInjuries,
+      };
+
+      return userData;
     } catch (error) {
+      console.error('Error getting current user:', error);
       return null;
     }
   }
@@ -209,6 +286,192 @@ export class AuthController {
   static async isAuthenticated(): Promise<boolean> {
     const user = await this.getCurrentUser();
     return !!user;
+  }
+
+  // Save skill profile to database
+  static async saveSkillProfile(profile: SkillProfile): Promise<void> {
+    try {
+      // Validate profile data
+      if (!profile.physicalAttributes || !profile.preferences || !profile.pastExperience || !profile.fitnessCapabilities) {
+        console.error('❌ Invalid profile data - missing required sections');
+        throw new Error('Invalid profile data - missing required sections');
+      }
+
+      console.log('🔵 saveSkillProfile called');
+      console.log('🔵 Profile data:', {
+        uid: profile.uid,
+        hasPhysicalAttributes: !!profile.physicalAttributes,
+        hasPreferences: !!profile.preferences,
+        hasPastExperience: !!profile.pastExperience,
+        hasFitnessCapabilities: !!profile.fitnessCapabilities,
+      });
+      
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        console.error('❌ No current user found');
+        throw new Error('User not authenticated');
+      }
+
+      console.log('✅ Current user found:', currentUser.uid);
+
+      // Check if profile already exists
+      const existingProfileSnapshot = await get(ref(db, `skillProfiles/${currentUser.uid}`));
+      const isUpdate = existingProfileSnapshot.exists();
+      console.log('🔵 Profile exists:', isUpdate);
+
+      // Convert Date to timestamp for Realtime Database
+      const profileForDB = {
+        uid: profile.uid,
+        physicalAttributes: {
+          height: profile.physicalAttributes.height,
+          weight: profile.physicalAttributes.weight,
+          age: profile.physicalAttributes.age,
+          gender: profile.physicalAttributes.gender,
+          limitations: profile.physicalAttributes.limitations || null,
+        },
+        preferences: {
+          preferredTechnique: profile.preferences.preferredTechnique || [],
+          trainingGoal: profile.preferences.trainingGoal || [],
+        },
+        pastExperience: {
+          experienceLevel: profile.pastExperience.experienceLevel,
+          martialArtsBackground: profile.pastExperience.martialArtsBackground || [],
+          previousTrainingDetails: profile.pastExperience.previousTrainingDetails || null,
+        },
+        fitnessCapabilities: {
+          currentFitnessLevel: profile.fitnessCapabilities.currentFitnessLevel,
+          trainingFrequency: profile.fitnessCapabilities.trainingFrequency,
+          injuries: profile.fitnessCapabilities.injuries || null,
+        },
+        completedAt: isUpdate 
+          ? existingProfileSnapshot.val().completedAt // Keep original completion date
+          : profile.completedAt.getTime(),
+        updatedAt: new Date().getTime(), // Always update the updatedAt timestamp
+      };
+
+      console.log('🔵 Saving complete skill profile to skillProfiles');
+      console.log('🔵 Profile data structure:', {
+        uid: profileForDB.uid,
+        physicalAttributes: profileForDB.physicalAttributes,
+        preferences: profileForDB.preferences,
+        pastExperience: profileForDB.pastExperience,
+        fitnessCapabilities: profileForDB.fitnessCapabilities,
+      });
+
+      // Save skill profile
+      try {
+        await set(ref(db, `skillProfiles/${currentUser.uid}`), profileForDB);
+        console.log('✅ Skill profile saved to skillProfiles/' + currentUser.uid);
+      } catch (profileError: any) {
+        console.error('❌ Error saving skill profile:', profileError);
+        console.error('❌ Error code:', profileError.code);
+        console.error('❌ Error message:', profileError.message);
+        throw profileError;
+      }
+
+      // Update user record with individual skill profile fields
+      const userUpdates: any = {
+        hasCompletedSkillProfile: true,
+        // Physical Attributes
+        height: profile.physicalAttributes.height,
+        weight: profile.physicalAttributes.weight,
+        age: profile.physicalAttributes.age,
+        gender: profile.physicalAttributes.gender,
+        physicalLimitations: profile.physicalAttributes.limitations || null,
+        // Preferences (arrays - save as arrays, empty arrays stay as empty arrays)
+        preferredTechnique: profile.preferences.preferredTechnique || [],
+        trainingGoal: profile.preferences.trainingGoal || [],
+        // Past Experience
+        experienceLevel: profile.pastExperience.experienceLevel,
+        martialArtsBackground: profile.pastExperience.martialArtsBackground || [],
+        previousTrainingDetails: profile.pastExperience.previousTrainingDetails || null,
+        // Fitness Capabilities
+        currentFitnessLevel: profile.fitnessCapabilities.currentFitnessLevel,
+        trainingFrequency: profile.fitnessCapabilities.trainingFrequency,
+        currentInjuries: profile.fitnessCapabilities.injuries || null,
+      };
+
+      console.log('🔵 Saving skill profile data to user record:', JSON.stringify(userUpdates, null, 2));
+      console.log('🔵 User UID:', currentUser.uid);
+      console.log('🔵 Database path: users/' + currentUser.uid);
+
+      try {
+        await update(ref(db, `users/${currentUser.uid}`), userUpdates);
+        console.log('✅ User record updated successfully in database');
+      } catch (updateError: any) {
+        console.error('❌ Error updating user record:', updateError);
+        console.error('❌ Error code:', updateError.code);
+        console.error('❌ Error message:', updateError.message);
+        throw updateError;
+      }
+
+      // Update local storage with all the new fields
+      const updatedUser: User = {
+        ...currentUser,
+        ...userUpdates,
+      };
+      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+      console.log('✅ Local storage updated');
+
+      console.log(`✅ Skill profile ${isUpdate ? 'updated' : 'saved'} successfully`);
+      console.log('✅ All data saved to database and local storage');
+    } catch (error: any) {
+      console.error('❌ Error saving skill profile:', error);
+      console.error('❌ Error code:', error.code);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      
+      // Check for database permission errors
+      if (error.code === 'permission-denied' || error.code === 'PERMISSION_DENIED' || error.message?.includes('Permission denied')) {
+        console.error('⚠️ PERMISSION DENIED: Check database security rules');
+        console.error('⚠️ Go to Firebase Console → Realtime Database → Rules');
+        console.error('⚠️ Set rules to allow authenticated users to write to their own data');
+        throw new Error('Database permission denied. Please check Firebase Console → Realtime Database → Rules. See FIREBASE_DATABASE_RULES.md for the correct rules.');
+      }
+      
+      throw new Error(error.message || 'Failed to save skill profile');
+    }
+  }
+
+  // Update user role (for admin approval)
+  static async updateUserRole(uid: string, role: 'individual' | 'trainer' | 'admin', trainerApproved?: boolean): Promise<void> {
+    try {
+      const updates: any = { role };
+      if (trainerApproved !== undefined) {
+        updates.trainerApproved = trainerApproved;
+      }
+
+      await update(ref(db, `users/${uid}`), updates);
+      console.log('✅ User role updated successfully');
+    } catch (error: any) {
+      console.error('❌ Error updating user role:', error);
+      throw new Error('Failed to update user role');
+    }
+  }
+
+  // Get skill profile for current user
+  static async getSkillProfile(): Promise<SkillProfile | null> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        return null;
+      }
+
+      const profileSnapshot = await get(ref(db, `skillProfiles/${currentUser.uid}`));
+      if (!profileSnapshot.exists()) {
+        return null;
+      }
+
+      const profileData = profileSnapshot.val();
+      return {
+        ...profileData,
+        completedAt: new Date(profileData.completedAt),
+        updatedAt: profileData.updatedAt ? new Date(profileData.updatedAt) : undefined,
+      };
+    } catch (error: any) {
+      console.error('❌ Error getting skill profile:', error);
+      return null;
+    }
   }
 
   // Helper method to get user-friendly error messages

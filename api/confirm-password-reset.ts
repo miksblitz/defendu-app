@@ -95,8 +95,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Token has already been used' });
     }
 
-    // Update password using Firebase Admin SDK
+    // Get user record
     const userRecord = await auth.getUserByEmail(tokenData.email);
+    
+    // IMPORTANT: Check if new password is the same as the old password
+    // We use Firebase Auth REST API to attempt sign-in with the new password
+    // If sign-in succeeds, it means the password hasn't changed
+    const firebaseApiKey = process.env.FIREBASE_API_KEY;
+    
+    if (!firebaseApiKey) {
+      console.error('❌ FIREBASE_API_KEY not set - cannot verify password difference');
+      console.error('⚠️ WARNING: Password reset will proceed without checking if password is different');
+      // Continue without the check, but this is a security concern
+      // In production, FIREBASE_API_KEY should always be set
+    } else {
+      try {
+        // Use Firebase Auth REST API to verify if password matches current password
+        const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseApiKey}`;
+        const verifyResponse = await fetch(verifyUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: tokenData.email,
+            password: newPassword,
+            returnSecureToken: true,
+          }),
+        });
+
+        const verifyResult = await verifyResponse.json();
+        
+        // If sign-in succeeds (status 200 and we get an idToken), 
+        // the new password is the same as the current password - BLOCK IT
+        if (verifyResponse.ok && verifyResult.idToken) {
+          console.log('❌ Password reset BLOCKED: New password is identical to current password');
+          return res.status(400).json({ 
+            error: 'New password must be different from your current password. Please choose a different password.' 
+          });
+        }
+        
+        // If sign-in fails, check the error type
+        if (verifyResult.error) {
+          const errorMessage = verifyResult.error?.message || '';
+          const errorCode = verifyResult.error?.code || '';
+          
+          // If error is "INVALID_PASSWORD" or "wrong-password", that's GOOD - password is different
+          if (errorCode === 400 && (
+            errorMessage.includes('INVALID_PASSWORD') || 
+            errorMessage.includes('wrong-password') ||
+            errorMessage.includes('INVALID_LOGIN_CREDENTIALS')
+          )) {
+            // Password is different from current - this is what we want, proceed with reset
+            console.log('✅ Password validation passed: New password is different from current password');
+          } else {
+            // Other errors (user-not-found, network issues, etc.) - log but don't block
+            // These shouldn't prevent password reset
+            console.log('⚠️ Password check returned unexpected error:', errorMessage);
+            console.log('⚠️ Proceeding with password reset despite check error');
+          }
+        }
+      } catch (checkError: any) {
+        // Network errors or other exceptions - log but don't block
+        // We don't want to prevent password reset due to temporary network issues
+        console.error('⚠️ Password check exception:', checkError.message);
+        console.error('⚠️ Proceeding with password reset - check failed but not blocking');
+      }
+    }
+
+    // Update password using Firebase Admin SDK
     await auth.updateUser(userRecord.uid, {
       password: newPassword,
     });

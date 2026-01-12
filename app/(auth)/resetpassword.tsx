@@ -11,6 +11,10 @@ import {
   ActivityIndicator 
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { auth } from '../config/firebaseConfig';
 
 export default function ResetPasswordScreen() {
   const [password, setPassword] = useState('');
@@ -22,10 +26,12 @@ export default function ResetPasswordScreen() {
   const [hasValidCode, setHasValidCode] = useState(false);
   const [tokenValidated, setTokenValidated] = useState(false);
   const [tokenEmail, setTokenEmail] = useState<string | null>(null);
+  const [oldPassword, setOldPassword] = useState<string | null>(null);
   
   const router = useRouter();
   const params = useLocalSearchParams();
   const token = params.token as string; // Changed from oobCode to token
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
 
   useEffect(() => {
     // Only check for token if params are loaded
@@ -153,8 +159,8 @@ export default function ResetPasswordScreen() {
   const handleChangePassword = async () => {
     // Check if we have a valid token
     if (!token) {
-      Alert.alert('Error', 'Invalid reset link. Please request a new password reset.');
-      router.replace('/forgotpassword');
+      showToast('Invalid reset link. Please request a new password reset.');
+      setTimeout(() => router.replace('/forgotpassword'), 2000);
       return;
     }
 
@@ -168,14 +174,56 @@ export default function ResetPasswordScreen() {
     });
 
     if (passwordError || confirmPasswordError) {
-      Alert.alert('Validation Error', 'Please fix the errors before submitting');
+      showToast('Please fix the errors before submitting');
       return;
     }
 
     // Validate token before proceeding
     if (!tokenValidated || !token) {
-      Alert.alert('Error', 'Please wait for token validation to complete.');
+      showToast('Please wait for token validation to complete.');
       return;
+    }
+
+    // IMPORTANT: Client-side check - verify new password is different from current password
+    // Attempt to sign in with the new password. If it succeeds, the password is the same.
+    if (tokenEmail) {
+      try {
+        // Try to sign in with the new password
+        const userCredential = await signInWithEmailAndPassword(auth, tokenEmail, password);
+        
+        // If sign-in succeeds, the password is the same - BLOCK IT
+        // Sign out immediately to prevent unwanted login
+        await signOut(auth);
+        
+        const errorMsg = 'New password must be different from your current password. Please choose a different password.';
+        setErrors(prev => ({ ...prev, password: 'Password must be different from your current password' }));
+        showToast(errorMsg);
+        return;
+      } catch (signInError: any) {
+        // Sign-in failed - check the error type
+        const errorCode = signInError?.code || '';
+        const errorMessage = signInError?.message || '';
+        
+        // If error is "wrong-password" or "invalid-credential", that's GOOD - password is different
+        if (
+          errorCode.includes('wrong-password') || 
+          errorCode.includes('invalid-credential') ||
+          errorCode.includes('auth/wrong-password') ||
+          errorCode.includes('auth/invalid-credential')
+        ) {
+          // Password is different - this is what we want, proceed with reset
+          console.log('✅ Client-side check: Password is different from current password');
+        } else if (
+          errorCode.includes('user-not-found') ||
+          errorCode.includes('auth/user-not-found')
+        ) {
+          // User not found - this shouldn't happen if token is valid, but proceed anyway
+          console.log('⚠️ Client-side check: User not found (unexpected)');
+        } else {
+          // Other errors - log but proceed (might be network issues, etc.)
+          console.log('⚠️ Client-side check error:', errorCode, errorMessage);
+        }
+      }
     }
 
     setLoading(true);
@@ -197,44 +245,41 @@ export default function ResetPasswordScreen() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to reset password');
+        // Check for specific error messages
+        let errorMessage = result.error || 'Failed to reset password';
+        
+        // Check for password same as current password error
+        if (
+          errorMessage.toLowerCase().includes('same') || 
+          errorMessage.toLowerCase().includes('previous') || 
+          errorMessage.toLowerCase().includes('current') ||
+          errorMessage.toLowerCase().includes('different')
+        ) {
+          errorMessage = 'New password must be different from your current password. Please choose a different password.';
+          // Set error on password field to highlight it
+          setErrors(prev => ({ ...prev, password: 'Password must be different from your current password' }));
+        } else if (errorMessage.includes('expired')) {
+          errorMessage = 'This reset link has expired. Please request a new one.';
+        } else if (errorMessage.includes('invalid') || errorMessage.includes('used')) {
+          errorMessage = 'This reset link is invalid or has already been used. Please request a new one.';
+        } else if (errorMessage.includes('weak')) {
+          errorMessage = 'Password is too weak. Please choose a stronger password.';
+        }
+        
+        throw new Error(errorMessage);
       }
       
-      Alert.alert(
-        'Success! 🎉',
-        'Your password has been reset successfully! You can now log in with your new password.',
-        [
-          {
-            text: 'Go to Login',
-            onPress: () => router.replace('/login'),
-          },
-        ]
-      );
+      // Show success toast
+      showToast('Password reset successfully! Redirecting to login...');
+      
+      // Navigate to login after a short delay
+      setTimeout(() => {
+        setLoading(false);
+        router.replace('/login');
+      }, 2000);
     } catch (error: any) {
       console.error('Password reset error:', error);
-      let errorMessage = 'Failed to reset password';
-      
-      if (error.message.includes('expired')) {
-        errorMessage = 'This reset link has expired. Please request a new one.';
-      } else if (error.message.includes('invalid') || error.message.includes('used')) {
-        errorMessage = 'This reset link is invalid or has already been used. Please request a new one.';
-      } else if (error.message.includes('weak')) {
-        errorMessage = 'Password is too weak. Please choose a stronger password.';
-      } else {
-        errorMessage = error.message || 'Failed to reset password. Please try again.';
-      }
-      
-      Alert.alert('Error', errorMessage, [
-        {
-          text: 'Request New Link',
-          onPress: () => router.replace('/forgotpassword'),
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]);
-    } finally {
+      showToast(error.message || 'Failed to reset password. Please try again.');
       setLoading(false);
     }
   };
@@ -259,6 +304,7 @@ export default function ResetPasswordScreen() {
   }
 
   return (
+    <View style={styles.wrapper}>
     <View style={styles.container}>
       <Image
         source={require('../../assets/images/defendulogo.png')}
@@ -360,11 +406,23 @@ export default function ResetPasswordScreen() {
       >
         <Text style={styles.backText}>← Request New Reset Link</Text>
       </TouchableOpacity>
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={3000}
+      />
+    </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#041527',
+  },
   container: {
     flex: 1,
     backgroundColor: '#041527',

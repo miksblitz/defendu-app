@@ -1,10 +1,30 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, FontAwesome } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useSkillProfile } from '../contexts/SkillProfileContext';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 
 export default function SelfDefensePreferencesScreen() {
-  const [selectedTechnique, setSelectedTechnique] = useState<string | null>(null);
-  const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
+  const router = useRouter();
+  const { setPreferences, preferences } = useSkillProfile();
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  // Handle both array and string formats for backward compatibility
+  const [selectedTechniques, setSelectedTechniques] = useState<string[]>(
+    preferences?.preferredTechnique 
+      ? (Array.isArray(preferences.preferredTechnique) ? preferences.preferredTechnique : [preferences.preferredTechnique])
+      : []
+  );
+  const [selectedGoals, setSelectedGoals] = useState<string[]>(
+    preferences?.trainingGoal
+      ? (Array.isArray(preferences.trainingGoal) ? preferences.trainingGoal : [preferences.trainingGoal])
+      : []
+  );
+  const [errors, setErrors] = useState({
+    technique: '',
+    goal: '',
+  });
 
   const preferredTechniques = [
     { key: 'Punching', icon: <Ionicons name="flash" size={16} color="#09AEC3" /> },
@@ -21,6 +41,7 @@ export default function SelfDefensePreferencesScreen() {
   ];
 
   return (
+    <View style={styles.wrapper}>
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
     {/* Header */}
 <View style={styles.header}>
@@ -32,7 +53,7 @@ export default function SelfDefensePreferencesScreen() {
 </View>
 
       {/* Back Arrow */}
-      <TouchableOpacity style={styles.backRow} activeOpacity={0.7} onPress={() => {/* TODO: Add back navigation */}}>
+      <TouchableOpacity style={styles.backRow} activeOpacity={0.7} onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={20} color="#09AEC3" />
         <Text style={styles.backText}>Self-Defense Preferences</Text>
       </TouchableOpacity>
@@ -44,16 +65,25 @@ export default function SelfDefensePreferencesScreen() {
       <Text style={styles.sectionTitle}>Preferred Techniques</Text>
       <View style={styles.optionsColumn}>
         {preferredTechniques.map(({ key, icon }) => {
-          const selected = selectedTechnique === key;
+          const selected = selectedTechniques.includes(key);
           return (
             <TouchableOpacity
               key={key}
               style={styles.optionRow}
-              onPress={() => setSelectedTechnique(key)}
+              onPress={() => {
+                if (selected) {
+                  setSelectedTechniques(selectedTechniques.filter(t => t !== key));
+                } else {
+                  setSelectedTechniques([...selectedTechniques, key]);
+                }
+                if (errors.technique) {
+                  setErrors(prev => ({ ...prev, technique: '' }));
+                }
+              }}
               activeOpacity={0.7}
             >
-              <View style={[styles.radioOuterCircle, selected && styles.radioCircleSelected]}>
-                {selected && <View style={styles.radioInnerCircle} />}
+              <View style={[styles.checkboxOuter, selected && styles.checkboxSelected]}>
+                {selected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
               </View>
               <View style={styles.iconContainer}>{icon}</View>
               <Text style={styles.optionText}>{key}</Text>
@@ -61,21 +91,31 @@ export default function SelfDefensePreferencesScreen() {
           );
         })}
       </View>
+      {errors.technique ? <Text style={styles.errorText}>{errors.technique}</Text> : null}
 
       {/* Training Goals */}
       <Text style={styles.sectionTitle}>Training Goals</Text>
       <View style={styles.optionsColumn}>
         {trainingGoals.map(({ key, icon }) => {
-          const selected = selectedGoal === key;
+          const selected = selectedGoals.includes(key);
           return (
             <TouchableOpacity
               key={key}
               style={styles.optionRow}
-              onPress={() => setSelectedGoal(key)}
+              onPress={() => {
+                if (selected) {
+                  setSelectedGoals(selectedGoals.filter(g => g !== key));
+                } else {
+                  setSelectedGoals([...selectedGoals, key]);
+                }
+                if (errors.goal) {
+                  setErrors(prev => ({ ...prev, goal: '' }));
+                }
+              }}
               activeOpacity={0.7}
             >
-              <View style={[styles.radioOuterCircle, selected && styles.radioCircleSelected]}>
-                {selected && <View style={styles.radioInnerCircle} />}
+              <View style={[styles.checkboxOuter, selected && styles.checkboxSelected]}>
+                {selected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
               </View>
               <View style={styles.iconContainer}>{icon}</View>
               <Text style={styles.optionText}>{key}</Text>
@@ -83,16 +123,54 @@ export default function SelfDefensePreferencesScreen() {
           );
         })}
       </View>
+      {errors.goal ? <Text style={styles.errorText}>{errors.goal}</Text> : null}
 
       {/* Next Button */}
-      <TouchableOpacity style={styles.nextButton} activeOpacity={0.7} onPress={() => {/* TODO: Add next navigation */}}>
+      <TouchableOpacity
+        style={styles.nextButton}
+        activeOpacity={0.7}
+        onPress={() => {
+          const techniqueError = selectedTechniques.length === 0 ? 'Please select at least one preferred technique' : '';
+          const goalError = selectedGoals.length === 0 ? 'Please select at least one training goal' : '';
+          
+          const newErrors = {
+            technique: techniqueError,
+            goal: goalError,
+          };
+          setErrors(newErrors);
+
+          if (techniqueError || goalError) {
+            showToast('Invalid inputs. Try again');
+            return;
+          }
+
+          setPreferences({
+            preferredTechnique: selectedTechniques,
+            trainingGoal: selectedGoals,
+          });
+          router.push('/(tabs)/pastexperienceQuestion');
+        }}
+      >
         <Text style={styles.nextButtonText}>Next</Text>
       </TouchableOpacity>
+
     </ScrollView>
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={3000}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#041527',
+  },
   container: {
     backgroundColor: '#041527',
     paddingHorizontal: 24,
@@ -160,22 +238,17 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     gap: 12,
   },
-  radioOuterCircle: {
+  checkboxOuter: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: '#09AEC3',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  radioCircleSelected: {
+  checkboxSelected: {
     borderColor: '#09AEC3',
-  },
-  radioInnerCircle: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
     backgroundColor: '#09AEC3',
   },
   iconContainer: {
@@ -210,10 +283,18 @@ const styles = StyleSheet.create({
   borderRadius: 4,
   marginBottom: 32,
 },
-progressBarFill: {
+  progressBarFill: {
   height: 4,
   backgroundColor: '#09AEC3',
   width: '50%', // 2 of 4 steps = 50%
   borderRadius: 4,
 },
+  errorText: {
+    color: '#FF4444',
+    fontSize: 12,
+    marginTop: -8,
+    marginBottom: 8,
+    alignSelf: 'center',
+    maxWidth: 320,
+  },
 });

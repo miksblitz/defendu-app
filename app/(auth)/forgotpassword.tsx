@@ -3,12 +3,15 @@ import React, { useState } from 'react';
 import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AuthController } from '../controllers/AuthController';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
 
   // Email validation function
   const validateEmail = (email: string) => {
@@ -38,31 +41,27 @@ export default function ForgotPasswordScreen() {
     setError(validationError);
 
     if (validationError) {
-      Alert.alert('Validation Error', validationError);
+      showToast(validationError);
       return;
     }
 
     setLoading(true);
     try {
       const message = await AuthController.forgotPassword({ email });
-      Alert.alert(
-        'Success', 
-        'Password reset email sent! Please check your inbox.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.push('/login'),
-          },
-        ]
-      );
+      showToast('Password reset email sent successfully! Please check your inbox.');
+      
+      // Navigate after a short delay to allow toast to be visible
+      setTimeout(() => {
+        router.push('/login');
+      }, 2000);
     } catch (error: any) {
-      Alert.alert('Error', error.message);
-    } finally {
+      showToast(error.message || 'Failed to send reset email. Please try again.');
       setLoading(false);
     }
   };
 
   return (
+    <View style={styles.wrapper}>
     <View style={styles.container}>
       <Image
         source={require('../../assets/images/defendulogo.png')}
@@ -96,7 +95,11 @@ export default function ForgotPasswordScreen() {
           editable={!loading}
         />
       </View>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
 
       <TouchableOpacity 
         style={[styles.button, loading && styles.buttonDisabled]} 
@@ -118,11 +121,23 @@ export default function ForgotPasswordScreen() {
       >
         <Text style={styles.backText}>← Back to Login</Text>
       </TouchableOpacity>
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={3000}
+      />
+    </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#041527',
+  },
   container: {
     flex: 1,
     backgroundColor: '#041527',
@@ -175,14 +190,16 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
     height: 56,
   },
+  errorContainer: {
+    width: 500,
+    marginTop: -4,
+    marginBottom: 16,
+    paddingLeft: 15,
+    alignSelf: 'center',
+  },
   errorText: {
     color: '#FF6B6B',
     fontSize: 12,
-    marginBottom: 16,
-    marginTop: -4,
-    width: 500,
-    paddingLeft: 15,
-    alignSelf: 'center',
   },
   button: {
     backgroundColor: '#00AABB',

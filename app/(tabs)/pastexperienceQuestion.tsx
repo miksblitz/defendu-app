@@ -1,11 +1,33 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, FontAwesome } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useSkillProfile } from '../contexts/SkillProfileContext';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 
 export default function PastExperienceScreen() {
-  const [selectedExperience, setSelectedExperience] = useState<string | null>(null);
-  const [martialArtsBackground, setMartialArtsBackground] = useState('');
-  const [previousTrainingDetails, setPreviousTrainingDetails] = useState('');
+  const router = useRouter();
+  const { setPastExperience, pastExperience } = useSkillProfile();
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  const [selectedExperience, setSelectedExperience] = useState<string | null>(pastExperience?.experienceLevel || null);
+  // Handle both array and string formats for backward compatibility
+  const [selectedMartialArts, setSelectedMartialArts] = useState<string[]>(
+    pastExperience?.martialArtsBackground
+      ? (Array.isArray(pastExperience.martialArtsBackground) ? pastExperience.martialArtsBackground : [pastExperience.martialArtsBackground])
+      : []
+  );
+  const [hasNoMartialArts, setHasNoMartialArts] = useState(
+    !pastExperience?.martialArtsBackground || 
+    (Array.isArray(pastExperience.martialArtsBackground) && pastExperience.martialArtsBackground.length === 0) ||
+    (!Array.isArray(pastExperience.martialArtsBackground) && !pastExperience.martialArtsBackground)
+  );
+  const [selectedDuration, setSelectedDuration] = useState<string | null>(pastExperience?.previousTrainingDetails || null);
+  const [errors, setErrors] = useState({
+    experience: '',
+    martialArt: '',
+    duration: '',
+  });
 
   const experienceLevels = [
     { title: 'Complete Beginner', subtitle: 'New to Self Defense' },
@@ -14,7 +36,39 @@ export default function PastExperienceScreen() {
     { title: 'Expert/Instructor', subtitle: 'Teaching Others' },
   ];
 
+  const martialArtsOptions = [
+    'Boxing',
+    'Brazilian Jiu-Jitsu (BJJ)',
+    'MMA (Mixed Martial Arts)',
+    'Taekwondo (TKD)',
+    'Muay Thai',
+    'Wushu',
+    'Karate',
+    'Judo',
+    'Wrestling',
+    'Kickboxing',
+    'Krav Maga',
+    'Aikido',
+    'Capoeira',
+    'Kung Fu',
+    'Jiu-Jitsu',
+    'Sambo',
+    'Savate',
+    'Other',
+  ];
+
+  const experienceDurations = [
+    'None',
+    '1-6 months',
+    '7-12 months',
+    '1-2 years',
+    '3-5 years',
+    '5-10 years',
+    'Over 10 years',
+  ];
+
   return (
+    <View style={styles.wrapper}>
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       {/* Header */}
       <View style={styles.header}>
@@ -26,7 +80,7 @@ export default function PastExperienceScreen() {
       </View>
 
       {/* Back Arrow & Title */}
-      <TouchableOpacity style={styles.backRow} activeOpacity={0.7} onPress={() => {/* Add back navigation */}}>
+      <TouchableOpacity style={styles.backRow} activeOpacity={0.7} onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={20} color="#09AEC3" />
         <Text style={styles.backText}>Past Experience</Text>
       </TouchableOpacity>
@@ -42,7 +96,12 @@ export default function PastExperienceScreen() {
             <TouchableOpacity
               key={title}
               style={styles.optionRow}
-              onPress={() => setSelectedExperience(title)}
+              onPress={() => {
+                setSelectedExperience(title);
+                if (errors.experience) {
+                  setErrors(prev => ({ ...prev, experience: '' }));
+                }
+              }}
               activeOpacity={0.7}
             >
               <View style={[styles.radioOuterCircle, selected && styles.radioCircleSelected]}>
@@ -56,42 +115,139 @@ export default function PastExperienceScreen() {
           );
         })}
       </View>
+      {errors.experience ? <Text style={styles.errorText}>{errors.experience}</Text> : null}
 
       {/* Martial Arts Background */}
       <Text style={styles.sectionTitle}>Martial Arts Background</Text>
-      <TextInput
-        style={styles.textArea}
-        placeholder="List any martial arts or self-defense training you’ve had..."
-        placeholderTextColor="#FFFFFF"
-        multiline
-        numberOfLines={4}
-        maxLength={300}
-        value={martialArtsBackground}
-        onChangeText={setMartialArtsBackground}
-      />
+      
+      {/* None Option */}
+      <TouchableOpacity
+        style={styles.noneOptionRow}
+        onPress={() => {
+          const newHasNone = !hasNoMartialArts;
+          setHasNoMartialArts(newHasNone);
+          if (newHasNone) {
+            setSelectedMartialArts([]);
+          }
+          if (errors.martialArt) {
+            setErrors(prev => ({ ...prev, martialArt: '' }));
+          }
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.checkboxOuter, hasNoMartialArts && styles.checkboxSelected]}>
+          {hasNoMartialArts && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+        </View>
+        <Text style={styles.noneOptionText}>None</Text>
+      </TouchableOpacity>
 
-      {/* Previous Training Details */}
-      <Text style={styles.sectionTitle}>Previous Training Details</Text>
-      <TextInput
-        style={styles.textArea}
-        placeholder="Describe your previous training experience, duration, achievements..."
-        placeholderTextColor="#FFFFFF"
-        multiline
-        numberOfLines={4}
-        maxLength={300}
-        value={previousTrainingDetails}
-        onChangeText={setPreviousTrainingDetails}
-      />
+      {!hasNoMartialArts && (
+        <View style={styles.optionsContainer}>
+          {martialArtsOptions.map((art) => {
+            const selected = selectedMartialArts.includes(art);
+            return (
+              <TouchableOpacity
+                key={art}
+                style={styles.optionRow}
+                onPress={() => {
+                  if (selected) {
+                    setSelectedMartialArts(selectedMartialArts.filter(a => a !== art));
+                  } else {
+                    setSelectedMartialArts([...selectedMartialArts, art]);
+                  }
+                  if (errors.martialArt) {
+                    setErrors(prev => ({ ...prev, martialArt: '' }));
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.checkboxOuter, selected && styles.checkboxSelected]}>
+                  {selected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+                </View>
+                <Text style={styles.optionTitle}>{art}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+      {errors.martialArt ? <Text style={styles.errorText}>{errors.martialArt}</Text> : null}
+
+      {/* Martial Arts Experience Duration */}
+      <Text style={styles.sectionTitle}>Martial Arts Experience Duration</Text>
+      <View style={styles.optionsContainer}>
+        {experienceDurations.map((duration) => {
+          const selected = selectedDuration === duration;
+          return (
+            <TouchableOpacity
+              key={duration}
+              style={styles.optionRow}
+              onPress={() => {
+                setSelectedDuration(duration);
+                if (errors.duration) {
+                  setErrors(prev => ({ ...prev, duration: '' }));
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.radioOuterCircle, selected && styles.radioCircleSelected]}>
+                {selected && <View style={styles.radioInnerCircle} />}
+              </View>
+              <Text style={styles.optionTitle}>{duration}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {errors.duration ? <Text style={styles.errorText}>{errors.duration}</Text> : null}
 
       {/* Next Button */}
-      <TouchableOpacity style={styles.nextButton} activeOpacity={0.7} onPress={() => {/* Add next navigation */}}>
+      <TouchableOpacity
+        style={styles.nextButton}
+        activeOpacity={0.7}
+        onPress={() => {
+          const experienceError = !selectedExperience ? 'Please select an experience level' : '';
+          const martialArtError = !hasNoMartialArts && selectedMartialArts.length === 0 ? 'Please select at least one martial arts background or select None' : '';
+          const durationError = !selectedDuration ? 'Please select an experience duration' : '';
+          
+          const newErrors = {
+            experience: experienceError,
+            martialArt: martialArtError,
+            duration: durationError,
+          };
+          setErrors(newErrors);
+
+          if (experienceError || martialArtError || durationError) {
+            showToast('Invalid inputs. Try again');
+            return;
+          }
+
+          setPastExperience({
+            experienceLevel: selectedExperience,
+            martialArtsBackground: hasNoMartialArts ? [] : selectedMartialArts,
+            previousTrainingDetails: selectedDuration,
+          });
+          router.push('/(tabs)/fitnessCapabilitiesQuestion');
+        }}
+      >
         <Text style={styles.nextButtonText}>Next</Text>
       </TouchableOpacity>
+
     </ScrollView>
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={3000}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#041527',
+  },
   container: {
     backgroundColor: '#041527',
     paddingHorizontal: 24,
@@ -182,6 +338,20 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#09AEC3',
   },
+  checkboxOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#09AEC3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  checkboxSelected: {
+    borderColor: '#09AEC3',
+    backgroundColor: '#09AEC3',
+  },
   optionTitle: {
     color: '#FFFFFF',
     fontWeight: '700',
@@ -191,19 +361,16 @@ const styles = StyleSheet.create({
     color: '#cccccc',
     fontSize: 13,
   },
-  textArea: {
-    borderWidth: 1,
-    borderColor: '#09AEC3',
-    borderRadius: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  noneOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    width: '100%',
+    maxWidth: 320,
+  },
+  noneOptionText: {
     color: '#FFFFFF',
     fontSize: 14,
-    maxWidth: 320,
-    width: '100%',
-    marginBottom: 40,
-    minHeight: 100,
-    textAlignVertical: 'top',
   },
   nextButton: {
     backgroundColor: '#09AEC3',
@@ -217,5 +384,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 16,
+  },
+  errorText: {
+    color: '#FF4444',
+    fontSize: 12,
+    marginTop: -8,
+    marginBottom: 8,
+    alignSelf: 'center',
+    maxWidth: 320,
   },
 });

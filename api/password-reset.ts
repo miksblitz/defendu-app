@@ -69,29 +69,84 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Email is required' });
     }
     
-    console.log('🔵 Processing password reset for:', email);
-
-    // Validate email format
+    // Validate email format FIRST
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
+    // CRITICAL: Check user existence BEFORE any other processing
+    // This MUST be the first check after email validation
+    console.log('🔵 STEP 1: Checking if user exists for email:', email);
+    
     const adminApp = getAdminApp();
     const auth = adminApp.auth();
 
-    // Check if user exists
-    let userRecord;
+    // STEP 2: Attempt to get user - if this fails, STOP IMMEDIATELY
+    let userRecord: admin.auth.UserRecord | null = null;
+    
     try {
+      console.log('🔵 STEP 2: Attempting to get user by email:', email);
       userRecord = await auth.getUserByEmail(email);
+      console.log('🔵 getUserByEmail returned - validating result...');
+      
+      // Validate the user record is actually valid
+      if (!userRecord) {
+        console.error('❌ BLOCKING: getUserByEmail returned null');
+        return res.status(404).json({ 
+          error: 'No account found with this email address. Please check your email or create an account.',
+          code: 'USER_NOT_FOUND'
+        });
+      }
+      
+      if (!userRecord.uid || typeof userRecord.uid !== 'string' || userRecord.uid.length === 0) {
+        console.error('❌ BLOCKING: getUserByEmail returned invalid UID');
+        console.error('❌ userRecord.uid:', userRecord.uid);
+        return res.status(404).json({ 
+          error: 'No account found with this email address. Please check your email or create an account.',
+          code: 'USER_NOT_FOUND'
+        });
+      }
+      
+      // User exists and is valid
+      console.log('✅ User found and validated - UID:', userRecord.uid);
+      
     } catch (error: any) {
-      // Don't reveal if user exists or not (security best practice)
-      // Return success even if user doesn't exist
-      return res.status(200).json({ 
-        success: true, 
-        message: 'If an account exists with this email, a password reset link has been sent.' 
+      // ANY error means user doesn't exist - BLOCK IMMEDIATELY
+      console.log('❌ BLOCKING: Exception caught when checking user');
+      console.log('❌ Email:', email);
+      console.log('❌ Error type:', typeof error);
+      console.log('❌ Error code:', error?.code);
+      console.log('❌ Error message:', error?.message);
+      console.log('❌ Error name:', error?.name);
+      
+      // Log full error for debugging
+      try {
+        console.log('❌ Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      } catch (e) {
+        console.log('❌ Could not stringify error');
+      }
+      
+      // ANY exception from getUserByEmail means user doesn't exist
+      // Return 404 immediately - do NOT proceed with any processing
+      console.log('❌ RETURNING 404 - User does not exist, stopping all processing');
+      return res.status(404).json({ 
+        error: 'No account found with this email address. Please check your email or create an account.',
+        code: 'USER_NOT_FOUND'
       });
     }
+    
+    // FINAL VALIDATION: Ensure userRecord is still valid before proceeding
+    if (!userRecord || !userRecord.uid) {
+      console.error('❌ CRITICAL: Final validation failed - userRecord invalid');
+      return res.status(404).json({ 
+        error: 'No account found with this email address. Please check your email or create an account.',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+    
+    console.log('✅ STEP 3: User validation complete - proceeding with password reset process');
+    console.log('✅ Confirmed user UID:', userRecord.uid);
 
     // Generate custom secure token (NOT using Firebase OOB codes)
     // Create a cryptographically secure random token
@@ -100,6 +155,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Store token with expiry timestamp (5 minutes from now)
     const tokenExpiry = Date.now() + 5 * 60 * 1000; // 5 minutes in milliseconds
+    
+    // FINAL CHECK: Ensure userRecord is valid before using it
+    if (!userRecord || !userRecord.uid) {
+      console.error('❌ CRITICAL: userRecord invalid before token storage - ABORTING');
+      return res.status(404).json({ 
+        error: 'No account found with this email address. Please check your email or create an account.',
+        code: 'USER_NOT_FOUND'
+      });
+    }
     
     // Store token metadata in Realtime Database for validation
     const db = adminApp.database();
@@ -143,9 +207,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error('Mailjet credentials not configured. Please set MAILJET_API_KEY and MAILJET_API_SECRET in Vercel environment variables.');
     }
 
+    // FINAL SAFETY CHECK: Ensure we have a valid user before sending email
+    if (!userRecord || !userRecord.uid) {
+      console.error('❌ CRITICAL SAFETY CHECK FAILED: userRecord is invalid before sending email');
+      return res.status(404).json({ 
+        error: 'No account found with this email address. Please check your email or create an account.',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+    
     // Send email via Mailjet
     const mailjetApiUrl = 'https://api.mailjet.com/v3.1/send';
     console.log('🔵 Sending email via Mailjet to:', email);
+    console.log('🔵 Confirmed user UID:', userRecord.uid);
     const emailData = {
       Messages: [
         {

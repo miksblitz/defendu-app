@@ -1,43 +1,91 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useSkillProfile } from '../contexts/SkillProfileContext';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 
 export default function SetupProfileScreen() {
-  const [height, setHeight] = useState('');
-  const [weight, setWeight] = useState('');
-  const [age, setAge] = useState('');
-  const [gender, setGender] = useState<'Male' | 'Female' | 'Other' | null>(null);
-  const [limitations, setLimitations] = useState('');
+  const router = useRouter();
+  const { setPhysicalAttributes, physicalAttributes } = useSkillProfile();
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  const [height, setHeight] = useState(physicalAttributes?.height?.toString() || '');
+  const [weight, setWeight] = useState(physicalAttributes?.weight?.toString() || '');
+  const [age, setAge] = useState(physicalAttributes?.age?.toString() || '');
+  const [gender, setGender] = useState<'Male' | 'Female' | 'Other' | null>(physicalAttributes?.gender || null);
+  const [limitations, setLimitations] = useState(physicalAttributes?.limitations || '');
+  const [hasNoLimitations, setHasNoLimitations] = useState(!physicalAttributes?.limitations);
+  
+  const [errors, setErrors] = useState({
+    height: '',
+    weight: '',
+    age: '',
+    gender: '',
+  });
 
-  // Validation
-  const validateNumberInput = (value: string, fieldName: string, min: number, max: number) => {
+  // Realistic validation ranges (ages 4+)
+  const validateHeight = (value: string): string => {
+    if (!value) return 'Height is required';
     const num = Number(value);
-    if (!value) return `${fieldName} is required`;
-    if (isNaN(num)) return `${fieldName} must be a number`;
-    if (num < min || num > max) return `${fieldName} must be between ${min} and ${max}`;
-    if (!/^\d*\.?\d*$/.test(value)) return `${fieldName} must be a valid positive number`;
+    if (isNaN(num) || !/^\d*\.?\d*$/.test(value)) return 'Height must be a valid number';
+    if (num < 80 || num > 250) return 'Height must be between 80-250 cm';
+    return '';
+  };
+
+  const validateWeight = (value: string): string => {
+    if (!value) return 'Weight is required';
+    const num = Number(value);
+    if (isNaN(num) || !/^\d*\.?\d*$/.test(value)) return 'Weight must be a valid number';
+    if (num < 15 || num > 300) return 'Weight must be between 15-300 kg';
+    return '';
+  };
+
+  const validateAge = (value: string): string => {
+    if (!value) return 'Age is required';
+    const num = Number(value);
+    if (isNaN(num) || !/^\d+$/.test(value)) return 'Age must be a valid number';
+    if (num < 4 || num > 120) return 'Age must be between 4-120 years';
     return '';
   };
 
   // Handle Next pressed
   const handleNext = () => {
-    const heightError = validateNumberInput(height, 'Height', 30, 300);     // cm
-    const weightError = validateNumberInput(weight, 'Weight', 1, 500);      // kg
-    const ageError = validateNumberInput(age, 'Age', 1, 120);
+    const heightError = validateHeight(height);
+    const weightError = validateWeight(weight);
+    const ageError = validateAge(age);
+    const genderError = !gender ? 'Please select a gender' : '';
 
-    if (heightError || weightError || ageError) {
-      Alert.alert('Validation Error', `${heightError}\n${weightError}\n${ageError}`);
+    const newErrors = {
+      height: heightError,
+      weight: weightError,
+      age: ageError,
+      gender: genderError,
+    };
+
+    setErrors(newErrors);
+
+    const hasErrors = heightError || weightError || ageError || genderError;
+    if (hasErrors) {
+      showToast('Invalid inputs. Try again');
       return;
     }
-    if (!gender) {
-      Alert.alert('Validation Error', 'Please select a gender');
-      return;
-    }
 
-    Alert.alert('Success', 'Profile setup validated!');
+    // Save to context
+    setPhysicalAttributes({
+      height: Number(height),
+      weight: Number(weight),
+      age: Number(age),
+      gender,
+      limitations: hasNoLimitations ? undefined : (limitations || undefined),
+    });
+
+    // Navigate to next screen
+    router.push('/(tabs)/preferencesQuestions');
   };
 
   return (
+    <View style={styles.wrapper}>
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       {/* Header */}
       <View style={styles.header}>
@@ -61,11 +109,25 @@ export default function SetupProfileScreen() {
           style={styles.input}
           keyboardType="numeric"
           value={height}
-          onChangeText={setHeight}
+          onChangeText={(text) => {
+            setHeight(text);
+            if (errors.height) {
+              setErrors(prev => ({ ...prev, height: '' }));
+            }
+          }}
+          onBlur={() => {
+            const error = validateHeight(height);
+            setErrors(prev => ({ ...prev, height: error }));
+          }}
           maxLength={3}
           selectionColor="#09AEC3"
         />
       </View>
+      {errors.height ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{errors.height}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.inputWrapper}>
         <MaterialCommunityIcons name="weight-lifter" size={18} color="#FFF" style={styles.icon} />
@@ -75,11 +137,25 @@ export default function SetupProfileScreen() {
           style={styles.input}
           keyboardType="numeric"
           value={weight}
-          onChangeText={setWeight}
+          onChangeText={(text) => {
+            setWeight(text);
+            if (errors.weight) {
+              setErrors(prev => ({ ...prev, weight: '' }));
+            }
+          }}
+          onBlur={() => {
+            const error = validateWeight(weight);
+            setErrors(prev => ({ ...prev, weight: error }));
+          }}
           maxLength={3}
           selectionColor="#09AEC3"
         />
       </View>
+      {errors.weight ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{errors.weight}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.inputWrapper}>
         <FontAwesome5 name="birthday-cake" size={18} color="#FFF" style={styles.icon} />
@@ -89,11 +165,25 @@ export default function SetupProfileScreen() {
           style={styles.input}
           keyboardType="numeric"
           value={age}
-          onChangeText={setAge}
+          onChangeText={(text) => {
+            setAge(text);
+            if (errors.age) {
+              setErrors(prev => ({ ...prev, age: '' }));
+            }
+          }}
+          onBlur={() => {
+            const error = validateAge(age);
+            setErrors(prev => ({ ...prev, age: error }));
+          }}
           maxLength={3}
           selectionColor="#09AEC3"
         />
       </View>
+      {errors.age ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{errors.age}</Text>
+        </View>
+      ) : null}
 
       {/* Gender */}
       <Text style={styles.genderLabel}>Gender</Text>
@@ -104,7 +194,12 @@ export default function SetupProfileScreen() {
             <TouchableOpacity
               key={option}
               style={styles.genderOption}
-              onPress={() => setGender(option)}
+              onPress={() => {
+                setGender(option);
+                if (errors.gender) {
+                  setErrors(prev => ({ ...prev, gender: '' }));
+                }
+              }}
               activeOpacity={0.7}
             >
               <View style={[styles.radioCircle, selected && styles.radioCircleSelected]}>
@@ -115,6 +210,11 @@ export default function SetupProfileScreen() {
           );
         })}
       </View>
+      {errors.gender ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{errors.gender}</Text>
+        </View>
+      ) : null}
 
       {/* Physical Limitations */}
       <View style={styles.limitationsLabelWrapper}>
@@ -122,26 +222,58 @@ export default function SetupProfileScreen() {
         <Text style={styles.limitationsLabel}>Physical Limitations (Optional)</Text>
       </View>
 
-      <TextInput
-        style={styles.limitationsInput}
-        placeholder="Any injuries or physical limitations we should know about..."
-        placeholderTextColor="#FFF"
-        multiline
-        numberOfLines={4}
-        value={limitations}
-        onChangeText={setLimitations}
-        selectionColor="#09AEC3"
-      />
+      {/* None Option */}
+      <TouchableOpacity
+        style={styles.noneOptionRow}
+        onPress={() => {
+          setHasNoLimitations(!hasNoLimitations);
+          if (!hasNoLimitations) {
+            setLimitations('');
+          }
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.radioCircle, hasNoLimitations && styles.radioCircleSelected]}>
+          {hasNoLimitations && <View style={styles.radioInnerCircle} />}
+        </View>
+        <Text style={styles.noneOptionText}>None</Text>
+      </TouchableOpacity>
+
+      {!hasNoLimitations && (
+        <TextInput
+          style={styles.limitationsInput}
+          placeholder="Any injuries or physical limitations we should know about..."
+          placeholderTextColor="#FFF"
+          multiline
+          numberOfLines={4}
+          value={limitations}
+          onChangeText={setLimitations}
+          selectionColor="#09AEC3"
+        />
+      )}
 
       {/* Next Button */}
       <TouchableOpacity style={styles.nextButton} activeOpacity={0.7} onPress={handleNext}>
         <Text style={styles.nextButtonText}>Next</Text>
       </TouchableOpacity>
+
     </ScrollView>
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={3000}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#041527',
+  },
   container: {
     backgroundColor: '#041527',
     paddingHorizontal: 24,
@@ -265,6 +397,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
+  noneOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    width: '100%',
+    maxWidth: 320,
+  },
+  noneOptionText: {
+    color: '#FFF',
+    fontSize: 14,
+  },
   limitationsInput: {
     borderColor: '#FFF',
     borderWidth: 1,
@@ -293,5 +436,16 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '700',
     fontSize: 18,
+  },
+  errorContainer: {
+    width: '100%',
+    maxWidth: 320,
+    marginTop: -12,
+    marginBottom: 8,
+    paddingLeft: 12,
+  },
+  errorText: {
+    color: '#FF4444',
+    fontSize: 12,
   },
 });

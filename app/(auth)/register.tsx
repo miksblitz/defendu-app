@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AuthController } from '../controllers/AuthController';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 
 export default function SignUpScreen() {
   const [form, setForm] = useState({
@@ -25,6 +27,7 @@ export default function SignUpScreen() {
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
 
   // Name validation function (no numbers allowed)
   const validateName = (name: string, fieldName: string) => {
@@ -146,13 +149,13 @@ export default function SignUpScreen() {
 
     // Check if there are any errors
     if (firstNameError || lastNameError || emailError || passwordError || confirmPasswordError) {
-      Alert.alert('Validation Error', 'Please fix the errors before submitting');
+      showToast('Please fix the errors before submitting');
       return;
     }
 
     // Check if username is filled
     if (!form.username) {
-      Alert.alert('Missing Information', 'Please enter a username');
+      showToast('Please enter a username');
       return;
     }
 
@@ -167,24 +170,22 @@ export default function SignUpScreen() {
         lastName: form.lastName,
       });
       
-      Alert.alert(
-        'Success', 
-        'Account created successfully!',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.replace('/(tabs)/dashboard'),
-          },
-        ]
-      );
+      // Show success toast
+      showToast('Account created successfully! Please complete your skill profile.');
+      
+      // Navigate after a short delay to allow toast to be visible
+      setTimeout(() => {
+        setLoading(false);
+        router.replace('/(tabs)/physicalAttributesQuestion');
+      }, 2000);
     } catch (error: any) {
-      Alert.alert('Registration Failed', error.message);
-    } finally {
+      showToast(error.message || 'Registration failed. Please try again.');
       setLoading(false);
     }
   };
 
   return (
+    <View style={styles.wrapper}>
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       {/* Logo Image */}
       <Image
@@ -381,10 +382,22 @@ export default function SignUpScreen() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={3000}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#041527',
+  },
   container: {
     backgroundColor: '#041527',
     paddingHorizontal: 24,

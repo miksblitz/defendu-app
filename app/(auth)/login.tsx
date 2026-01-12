@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AuthController } from '../controllers/AuthController';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -10,25 +12,54 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showToast('Please fill in all fields');
       return;
     }
 
     setLoading(true);
     try {
-      await AuthController.login({ email, password });
-      router.replace('/(tabs)/dashboard');
+      const user = await AuthController.login({ email, password });
+      
+      // Check if user has completed skill profile
+      if (!user.hasCompletedSkillProfile) {
+        // Redirect to first skill profile question
+        router.replace('/(tabs)/physicalAttributesQuestion');
+      } else {
+        // Redirect to dashboard
+        router.replace('/(tabs)/dashboard');
+      }
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
+      // Provide specific error messages for different login failures
+      let errorMessage = 'Login failed. Please try again.';
+      
+      if (error.message) {
+        if (error.message.includes('user-not-found') || error.message.includes('No account found')) {
+          errorMessage = 'Invalid credentials. No account found with this email.';
+        } else if (error.message.includes('wrong-password') || error.message.includes('Incorrect password')) {
+          errorMessage = 'Invalid credentials. Incorrect password.';
+        } else if (error.message.includes('invalid-email')) {
+          errorMessage = 'Invalid email format. Please check your email address.';
+        } else if (error.message.includes('too-many-requests')) {
+          errorMessage = 'Too many login attempts. Please try again later.';
+        } else if (error.message.includes('network') || error.message.includes('Network')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      showToast(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   return (
+    <View style={styles.wrapper}>
     <View style={styles.container}>
       <Image
         source={require('../../assets/images/defendulogo.png')}
@@ -110,11 +141,23 @@ export default function LoginScreen() {
           <Text style={styles.linkText}>Create an Account</Text>
         </TouchableOpacity>
       </View>
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={3000}
+      />
+    </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#041527',
+  },
   container: {
     flex: 1,
     backgroundColor: '#041527',
