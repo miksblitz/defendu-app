@@ -1,15 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Animated,
-  Easing,
   SafeAreaView,
   Image,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
 
 const circleSize = 40;
@@ -25,22 +24,12 @@ const trainingModules = [
   { key: 'Module 5' },
 ];
 
-const days = ['Sun', 'Mon', 'Tue', 'Thu', 'Fri', 'Sat'];
+const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const progressValues = Array(days.length).fill(0); // 0% progress for each day
 
 export default function DashboardScreen() {
   const [selectedDay, setSelectedDay] = useState(0);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuAnim = useRef(new Animated.Value(-220)).current; // sidebar width is 220
-
-  useEffect(() => {
-    Animated.timing(menuAnim, {
-      toValue: menuOpen ? 0 : -220,
-      duration: 300,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }, [menuOpen]);
+  const router = useRouter();
 
   const CircularProgress = ({ progress }: { progress: number }) => {
     const strokeDashoffset = circumference * (1 - progress);
@@ -74,46 +63,34 @@ export default function DashboardScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Hamburger icon fixed top-left, always visible */}
-        <TouchableOpacity
-          style={styles.hamburgerIcon}
-          onPress={() => setMenuOpen((v) => !v)}
-          accessibilityLabel={menuOpen ? 'Close menu' : 'Open menu'}
-          accessibilityRole="button"
-        >
-          {/* Using a simple text placeholder here but can be Icon component */}
-          <Text style={{ color: '#07bbc0', fontSize: 36 }}>
-            {menuOpen ? '✕' : '≡'}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Sidebar sliding in/out */}
-        <Animated.View
-          style={[styles.sidebar, { transform: [{ translateX: menuAnim }] }]}
-        >
+        {/* Fixed Sidebar - always visible */}
+        <View style={styles.sidebar}>
           <View style={styles.sidebarIconsBottom}>
+            <TouchableOpacity 
+              style={styles.sidebarButton}
+              onPress={() => router.push('/profile')}
+            >
+              <Image
+                source={require('../../assets/images/blueprofileicon.png')}
+                style={styles.iconImage}
+              />
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.sidebarButton}>
-  <Image
-    source={require('../../assets/images/blueprofileicon.png')}
-    style={styles.iconImage}
-  />
-</TouchableOpacity>
+              <Image
+                source={require('../../assets/images/trainericon.png')}
+                style={styles.iconImage}
+              />
+            </TouchableOpacity>
 
-<TouchableOpacity style={styles.sidebarButton}>
-  <Image
-    source={require('../../assets/images/trainericon.png')}
-    style={styles.iconImage}
-  />
-</TouchableOpacity>
-
-<TouchableOpacity style={[styles.sidebarButton, styles.sidebarActive]}>
-  <Image
-    source={require('../../assets/images/homeicon.png')}
-    style={styles.iconImage}
-  />
-</TouchableOpacity>
+            <TouchableOpacity style={[styles.sidebarButton, styles.sidebarActive]}>
+              <Image
+                source={require('../../assets/images/homeicon.png')}
+                style={styles.iconImage}
+              />
+            </TouchableOpacity>
           </View>
-        </Animated.View>
+        </View>
 
         {/* Main Content */}
         <View style={styles.mainContent}>
@@ -142,14 +119,21 @@ export default function DashboardScreen() {
                   accessibilityState={{ selected: selectedDay === i }}
                 >
                   <CircularProgress progress={progressValues[i]} />
-                  <Text
+                  <View
                     style={[
-                      styles.dayLabel,
-                      i === selectedDay && styles.dayLabelActive,
+                      styles.dayLabelContainer,
+                      i === selectedDay && styles.dayLabelContainerSelected,
                     ]}
                   >
-                    {day}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.dayLabel,
+                        i === selectedDay && styles.dayLabelActive,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
@@ -169,8 +153,11 @@ export default function DashboardScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`Open training module ${key}`}
               >
+                <View style={styles.moduleHeader}>
+                  <Text style={styles.moduleHeaderText}>{key}</Text>
+                </View>
                 <View style={styles.imagePlaceholder}>
-                  <Text style={styles.imagePlaceholderText}>{key}</Text>
+                  <Text style={styles.imagePlaceholderText}>Image Placeholder</Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -184,27 +171,13 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#041527' },
   container: { flex: 1, flexDirection: 'row' },
-  hamburgerIcon: {
-    position: 'absolute',
-    top: 40,
-    left: 16,
-    zIndex: 30,
-    padding: 8,
-    backgroundColor: '#031A23',
-    borderRadius: 6,
-  },
   sidebar: {
     backgroundColor: '#031A23',
-    width: 220,
+    width: 80,
     paddingTop: 20,
     paddingBottom: 30,
     alignItems: 'center',
     justifyContent: 'flex-end', // Moves icons to bottom
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    zIndex: 10,
   },
   sidebarIconsBottom: {
     flexDirection: 'column',
@@ -229,7 +202,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 30,
     paddingVertical: 25,
-    marginLeft: 60,
   },
   logoImage: {
     width: 180,
@@ -239,10 +211,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   weeklyGoalContainer: {
-    backgroundColor: '#062731',
+    backgroundColor: '#041527',
     borderRadius: 25,
     padding: 25,
     marginBottom: 30,
+    borderWidth: 1,
+    borderColor: '#000E1C',
   },
   weeklyGoalTitle: {
     fontSize: 18,
@@ -274,10 +248,18 @@ const styles = StyleSheet.create({
   dayProgressContainer: {
     alignItems: 'center',
   },
+  dayLabelContainer: {
+    marginTop: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  dayLabelContainerSelected: {
+    backgroundColor: '#0097A7',
+  },
   dayLabel: {
     color: '#6b8693',
     fontSize: 14,
-    marginTop: 4,
   },
   dayLabelActive: {
     color: '#041527',
@@ -297,19 +279,31 @@ const styles = StyleSheet.create({
     height: 210,
     borderRadius: 15,
     backgroundColor: '#011f36',
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
     marginRight: 15,
   },
+  moduleHeader: {
+    backgroundColor: '#062731',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+  },
+  moduleHeaderText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   imagePlaceholder: {
-    width: 120,
-    height: 210,
+    flex: 1,
+    backgroundColor: '#0a3645',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 10,
   },
   imagePlaceholderText: {
-    color: '#07bbc0',
-    fontWeight: '700',
-    fontSize: 16,
+    color: '#6b8693',
+    fontSize: 10,
+    textAlign: 'center',
   },
 });
