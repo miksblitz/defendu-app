@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
+import { AuthController } from '../controllers/AuthController';
 
 const circleSize = 40;
 const strokeWidth = 4;
@@ -29,7 +30,23 @@ const progressValues = Array(days.length).fill(0); // 0% progress for each day
 
 export default function DashboardScreen() {
   const [selectedDay, setSelectedDay] = useState(0);
+  const [showMenu, setShowMenu] = useState(false);
   const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      await AuthController.logout();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const handleMessages = () => {
+    setShowMenu(false);
+    // TODO: Navigate to messages page
+    console.log('Navigate to messages');
+  };
 
   const CircularProgress = ({ progress }: { progress: number }) => {
     const strokeDashoffset = circumference * (1 - progress);
@@ -65,6 +82,17 @@ export default function DashboardScreen() {
       <View style={styles.container}>
         {/* Fixed Sidebar - always visible */}
         <View style={styles.sidebar}>
+          {/* Three dots icon at top */}
+          <TouchableOpacity 
+            style={styles.sidebarTopButton}
+            onPress={() => setShowMenu(true)}
+          >
+            <Image
+              source={require('../../assets/images/threedoticon.png')}
+              style={styles.threeDotIcon}
+            />
+          </TouchableOpacity>
+
           <View style={styles.sidebarIconsBottom}>
             <TouchableOpacity 
               style={styles.sidebarButton}
@@ -76,7 +104,10 @@ export default function DashboardScreen() {
               />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.sidebarButton}>
+            <TouchableOpacity 
+              style={styles.sidebarButton}
+              onPress={() => router.push('/trainer')}
+            >
               <Image
                 source={require('../../assets/images/trainericon.png')}
                 style={styles.iconImage}
@@ -164,6 +195,39 @@ export default function DashboardScreen() {
           </ScrollView>
         </View>
       </View>
+
+      {/* Pop-up Menu */}
+      {showMenu && (
+        <TouchableOpacity 
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMenu(false)}
+        >
+          <View style={styles.menuContainer}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={handleMessages}
+            >
+              <Image
+                source={require('../../assets/images/messageicon.png')}
+                style={styles.menuIcon}
+              />
+              <Text style={styles.menuText}>Messages</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={handleLogout}
+            >
+              <Image
+                source={require('../../assets/images/logouticon.png')}
+                style={styles.menuIcon}
+              />
+              <Text style={styles.menuText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -177,7 +241,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 30,
     alignItems: 'center',
-    justifyContent: 'flex-end', // Moves icons to bottom
+    justifyContent: 'space-between', // Space between top icon and bottom icons
   },
   sidebarIconsBottom: {
     flexDirection: 'column',
@@ -196,6 +260,14 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     tintColor: '#07bbc0',
+    resizeMode: 'contain',
+  },
+  sidebarTopButton: {
+    padding: 8,
+  },
+  threeDotIcon: {
+    width: 24,
+    height: 24,
     resizeMode: 'contain',
   },
   mainContent: {
@@ -305,5 +377,46 @@ const styles = StyleSheet.create({
     color: '#6b8693',
     fontSize: 10,
     textAlign: 'center',
+  },
+  menuOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
+  menuContainer: {
+    position: 'absolute',
+    top: 20,
+    left: 90,
+    backgroundColor: '#011f36',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#6b8693',
+    paddingVertical: 10,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+  },
+  menuIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 12,
+    resizeMode: 'contain',
+  },
+  menuText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

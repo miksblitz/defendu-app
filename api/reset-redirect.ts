@@ -63,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             font-family: Arial, sans-serif;
             text-align: center;
             padding: 20px;
-            background: linear-gradient(135deg, #041527 0%, #00AABB 100%);
+            background: linear-gradient(135deg, #041527 0%, #000C17 100%);
             color: white;
             min-height: 100vh;
             display: flex;
@@ -82,12 +82,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
           }
           h1 {
-            color: #00AABB;
+            color: #000C17;
             margin-bottom: 20px;
           }
           .spinner {
             border: 4px solid #f3f3f3;
-            border-top: 4px solid #00AABB;
+            border-top: 4px solid #000C17;
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -99,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             100% { transform: rotate(360deg); }
           }
           .button {
-            background-color: #00AABB;
+            background-color: #000C17;
             color: white;
             padding: 12px 30px;
             text-decoration: none;
@@ -110,10 +110,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             cursor: pointer;
           }
           .button:hover {
-            background-color: #0088aa;
+            background-color: #001a2e;
           }
           .button:active {
-            background-color: #006688;
+            background-color: #000a14;
           }
           .fallback {
             margin-top: 30px;
@@ -242,7 +242,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             <p>Try these steps:</p>
             <ol style="text-align: left; max-width: 400px; margin: 10px auto;">
               <li><strong>On Mobile:</strong> Make sure the Defendu app is installed, then click the button above</li>
-              <li><strong>On PC/Web:</strong> <a href="${webAppLink}" style="color: #00AABB; text-decoration: underline;">Click here to open in web browser</a></li>
+              <li><strong>On PC/Web:</strong> <a href="${webAppLink}" style="color: #000C17; text-decoration: underline;">Click here to open in web browser</a></li>
               <li>Or copy and paste this link in your browser:</li>
             </ol>
             <code id="linkToCopy">${webAppLink}</code>

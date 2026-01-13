@@ -24,6 +24,12 @@ export default function LoginScreen() {
     try {
       const user = await AuthController.login({ email, password });
       
+      // Check if user is admin - redirect to admin dashboard
+      if (user.role === 'admin') {
+        router.replace('/(admin)/adminDashboard');
+        return;
+      }
+      
       // Check if user has completed skill profile
       if (!user.hasCompletedSkillProfile) {
         // Redirect to first skill profile question

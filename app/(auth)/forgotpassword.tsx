@@ -26,6 +26,10 @@ export default function ForgotPasswordScreen() {
     if (!emailRegex.test(email)) {
       return 'Please enter a valid email address (e.g., user@domain.com)';
     }
+    // Block admin email
+    if (email.toLowerCase() === 'admin@defendu.com') {
+      return 'This email is not available for password reset. Please contact support.';
+    }
     return '';
   };
 
@@ -42,6 +46,13 @@ export default function ForgotPasswordScreen() {
 
     if (validationError) {
       showToast(validationError);
+      return;
+    }
+
+    // Double check admin email before sending
+    if (email.toLowerCase() === 'admin@defendu.com') {
+      showToast('This email is not available for password reset. Please contact support.');
+      setLoading(false);
       return;
     }
 

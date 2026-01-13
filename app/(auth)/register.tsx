@@ -60,6 +60,10 @@ export default function SignUpScreen() {
     if (!emailRegex.test(email)) {
       return 'Please enter a valid email address (e.g., user@domain.com)';
     }
+    // Block admin email
+    if (email.toLowerCase() === 'admin@defendu.com') {
+      return 'This email is not allowed. Please try a different one.';
+    }
     return '';
   };
 
@@ -150,6 +154,13 @@ export default function SignUpScreen() {
     // Check if there are any errors
     if (firstNameError || lastNameError || emailError || passwordError || confirmPasswordError) {
       showToast('Please fix the errors before submitting');
+      return;
+    }
+
+    // Double check admin email before registering
+    if (form.email.toLowerCase() === 'admin@defendu.com') {
+      setErrors(prev => ({ ...prev, email: 'This email is not allowed. Please try a different one.' }));
+      showToast('This email is not allowed. Please try a different one.');
       return;
     }
 

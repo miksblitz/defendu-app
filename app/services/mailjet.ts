@@ -58,7 +58,7 @@ export class MailjetService {
                   <p>You requested to reset your password. Click the button below to create a new password. This link will expire in <strong>5 minutes</strong>.</p>
                   <div style="text-align: center; margin: 30px 0;">
                     <a href="${resetLinkWithExpiry}" 
-                       style="background-color: #00AABB; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; display: inline-block; font-weight: bold;">
+                       style="background-color: #000C17; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; display: inline-block; font-weight: bold;">
                       Reset Password
                     </a>
                   </div>

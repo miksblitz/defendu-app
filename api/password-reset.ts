@@ -75,6 +75,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
+    // Block admin email from password reset
+    if (email.toLowerCase() === 'admin@defendu.com') {
+      console.log('❌ BLOCKED: Admin email attempted password reset');
+      return res.status(403).json({ 
+        error: 'This email is not available for password reset. Please contact support.',
+        code: 'ADMIN_EMAIL_BLOCKED'
+      });
+    }
+
     // CRITICAL: Check user existence BEFORE any other processing
     // This MUST be the first check after email validation
     console.log('🔵 STEP 1: Checking if user exists for email:', email);
@@ -250,7 +259,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   <p>You requested to reset your password. Click the button below to create a new password. This link will expire in <strong>5 minutes</strong>.</p>
                   <div style="text-align: center; margin: 30px 0;">
                     <a href="${redirectUrl}" 
-                       style="background-color: #00AABB; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; display: inline-block; font-weight: bold;">
+                       style="background-color: #000C17; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; display: inline-block; font-weight: bold;">
                       Reset Password
                     </a>
                   </div>

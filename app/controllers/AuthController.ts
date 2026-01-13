@@ -433,6 +433,32 @@ export class AuthController {
     }
   }
 
+  // Create admin account (one-time setup - requires admin privileges)
+  static async createAdminAccount(data: RegisterData): Promise<User> {
+    try {
+      // First register the user normally
+      const user = await this.register(data);
+      
+      // Then update the role to admin
+      await this.updateUserRole(user.uid, 'admin', true);
+      
+      // Update local user data
+      const adminUser: User = {
+        ...user,
+        role: 'admin',
+        trainerApproved: true,
+      };
+      
+      await AsyncStorage.setItem('user', JSON.stringify(adminUser));
+      
+      console.log('✅ Admin account created successfully');
+      return adminUser;
+    } catch (error: any) {
+      console.error('❌ Error creating admin account:', error);
+      throw new Error(error.message || 'Failed to create admin account');
+    }
+  }
+
   // Update user role (for admin approval)
   static async updateUserRole(uid: string, role: 'individual' | 'trainer' | 'admin', trainerApproved?: boolean): Promise<void> {
     try {
@@ -446,6 +472,54 @@ export class AuthController {
     } catch (error: any) {
       console.error('❌ Error updating user role:', error);
       throw new Error('Failed to update user role');
+    }
+  }
+
+  // Update username
+  static async updateUsername(newUsername: string): Promise<void> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      // Remove @ if present (we'll add it back in the UI)
+      const cleanUsername = newUsername.startsWith('@') ? newUsername.substring(1) : newUsername;
+      
+      // Validate username
+      if (!cleanUsername || cleanUsername.trim().length === 0) {
+        throw new Error('Username cannot be empty');
+      }
+      if (cleanUsername.length > 50) {
+        throw new Error('Username is too long (max 50 characters)');
+      }
+
+      console.log('🔵 Updating username for user:', currentUser.uid);
+      console.log('🔵 New username:', cleanUsername);
+
+      // Update username in database
+      await update(ref(db, `users/${currentUser.uid}`), { username: cleanUsername });
+      console.log('✅ Username updated successfully in database');
+
+      // Update local storage
+      const updatedUser: User = {
+        ...currentUser,
+        username: cleanUsername,
+      };
+      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+      console.log('✅ Local storage updated');
+    } catch (error: any) {
+      console.error('❌ Error updating username:', error);
+      console.error('❌ Error code:', error.code);
+      console.error('❌ Error message:', error.message);
+      
+      // Check for database permission errors
+      if (error.code === 'permission-denied' || error.code === 'PERMISSION_DENIED' || error.message?.includes('Permission denied')) {
+        console.error('⚠️ PERMISSION DENIED: Check database security rules');
+        throw new Error('Database permission denied. Please check Firebase Console → Realtime Database → Rules.');
+      }
+      
+      throw new Error(error.message || 'Failed to update username');
     }
   }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,15 +8,48 @@ import {
   ScrollView,
   SafeAreaView,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { AuthController } from '../controllers/AuthController';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 
 export default function EditProfilePage() {
-  const [username, setUsername] = useState('@Bowei_Gai');
-  const firstName = 'Bowei';
-  const lastName = 'Gai';
+  const [username, setUsername] = useState('@');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [showMenu, setShowMenu] = useState(false);
   const router = useRouter();
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+
+  // Load user data on mount
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const user = await AuthController.getCurrentUser();
+        if (user) {
+          // Add @ prefix if not present
+          const displayUsername = user.username.startsWith('@') 
+            ? user.username 
+            : `@${user.username}`;
+          setUsername(displayUsername);
+          setFirstName(user.firstName || '');
+          setLastName(user.lastName || '');
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error);
+        showToast('Failed to load user data');
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    loadUserData();
+  }, []);
 
   const handleUsernameChange = (text: string) => {
     // Ensure @ always stays at the beginning
@@ -31,11 +64,65 @@ export default function EditProfilePage() {
     }
   };
 
+  const handleSave = async () => {
+    try {
+      // Validate username
+      const cleanUsername = username.substring(1); // Remove @
+      if (!cleanUsername || cleanUsername.trim().length === 0) {
+        showToast('Username cannot be empty');
+        return;
+      }
+
+      setLoading(true);
+      
+      // Save username to database
+      await AuthController.updateUsername(username);
+      
+      showToast('Username updated successfully!');
+      
+      // Navigate back to profile after a short delay
+      setTimeout(() => {
+        router.push('/profile');
+      }, 1500);
+    } catch (error: any) {
+      console.error('Error saving username:', error);
+      showToast(error.message || 'Failed to update username');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await AuthController.logout();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const handleMessages = () => {
+    setShowMenu(false);
+    // TODO: Navigate to messages page
+    console.log('Navigate to messages');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         {/* Fixed Sidebar - always visible */}
         <View style={styles.sidebar}>
+          {/* Three dots icon at top */}
+          <TouchableOpacity 
+            style={styles.sidebarTopButton}
+            onPress={() => setShowMenu(true)}
+          >
+            <Image
+              source={require('../../assets/images/threedoticon.png')}
+              style={styles.threeDotIcon}
+            />
+          </TouchableOpacity>
+
           <View style={styles.sidebarIconsBottom}>
             <TouchableOpacity 
               style={[styles.sidebarButton, styles.sidebarActive]}
@@ -47,7 +134,10 @@ export default function EditProfilePage() {
               />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.sidebarButton}>
+            <TouchableOpacity 
+              style={styles.sidebarButton}
+              onPress={() => router.push('/trainer')}
+            >
               <Image
                 source={require('../../assets/images/trainericon.png')}
                 style={styles.iconImage}
@@ -138,13 +228,62 @@ export default function EditProfilePage() {
             </View>
 
             {/* Save Changes */}
-            <TouchableOpacity style={styles.saveButton}>
-              <Text style={styles.saveButtonText}>Save Changes</Text>
+            <TouchableOpacity 
+              style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+              onPress={handleSave}
+              disabled={loading || initialLoading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              )}
             </TouchableOpacity>
           </View>
           </ScrollView>
         </View>
       </View>
+
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={3000}
+      />
+
+      {/* Pop-up Menu */}
+      {showMenu && (
+        <TouchableOpacity 
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMenu(false)}
+        >
+          <View style={styles.menuContainer}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={handleMessages}
+            >
+              <Image
+                source={require('../../assets/images/messageicon.png')}
+                style={styles.menuIcon}
+              />
+              <Text style={styles.menuText}>Messages</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={handleLogout}
+            >
+              <Image
+                source={require('../../assets/images/logouticon.png')}
+                style={styles.menuIcon}
+              />
+              <Text style={styles.menuText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -161,7 +300,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 30,
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
   },
   sidebarIconsBottom: {
     flexDirection: 'column',
@@ -180,6 +319,14 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     tintColor: '#07bbc0',
+    resizeMode: 'contain',
+  },
+  sidebarTopButton: {
+    padding: 8,
+  },
+  threeDotIcon: {
+    width: 24,
+    height: 24,
     resizeMode: 'contain',
   },
   mainContent: {
@@ -299,5 +446,49 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 16,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  menuOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
+  menuContainer: {
+    position: 'absolute',
+    top: 20,
+    left: 90,
+    backgroundColor: '#011f36',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#6b8693',
+    paddingVertical: 10,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+  },
+  menuIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 12,
+    resizeMode: 'contain',
+  },
+  menuText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
