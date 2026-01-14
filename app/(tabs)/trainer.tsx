@@ -7,6 +7,7 @@ import {
   ScrollView,
   SafeAreaView,
   Image,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,8 +50,22 @@ const trainers = [
 export default function TrainerPage() {
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTrainer, setSelectedTrainer] = useState<number | null>(null);
+
+  // Get stats
+  const totalTrainers = trainers.length;
+  const specialties = [...new Set(trainers.map(t => t.title))].length;
+
+  // Filter trainers based on search
+  const filteredTrainers = trainers.filter(trainer =>
+    trainer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    trainer.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    trainer.academy.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleMessage = (trainerId: number) => {
+    setSelectedTrainer(trainerId);
     // TODO: Implement message functionality
     console.log('Message trainer:', trainerId);
   };
@@ -141,57 +156,117 @@ export default function TrainerPage() {
             </TouchableOpacity>
           </View>
 
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <Ionicons name="search-outline" size={20} color="#6b8693" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search trainers, specialties, or academies..."
+              placeholderTextColor="#6b8693"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color="#6b8693" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Stats Bar */}
+          <View style={styles.statsBar}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{totalTrainers}</Text>
+              <Text style={styles.statLabel}>Total Trainers</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{specialties}</Text>
+              <Text style={styles.statLabel}>Specialties</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{filteredTrainers.length}</Text>
+              <Text style={styles.statLabel}>Showing</Text>
+            </View>
+          </View>
+
+          {/* Results Count */}
+          <Text style={styles.resultsText}>
+            {filteredTrainers.length} {filteredTrainers.length === 1 ? 'Trainer' : 'Trainers'} Available
+          </Text>
+
           {/* Trainer List */}
           <ScrollView 
             style={styles.trainerList}
             contentContainerStyle={styles.trainerListContent}
             showsVerticalScrollIndicator={false}
           >
-            {trainers.map((trainer) => (
-              <View key={trainer.id} style={styles.trainerCard}>
-                {/* Avatar with checkmark */}
-                <View style={styles.avatarContainer}>
-                  <View style={styles.avatar}>
-                    <View style={styles.avatarPlaceholder} />
-                  </View>
-                  <View style={styles.checkmarkContainer}>
-                    <Ionicons name="checkmark-circle" size={24} color="#07bbc0" />
-                  </View>
-                </View>
-
-                {/* Trainer Information */}
-                <View style={styles.trainerInfo}>
-                  <Text style={styles.trainerName}>{trainer.name}</Text>
-                  <Text style={styles.trainerUsername}>
-                    {trainer.username} | {trainer.title}
-                  </Text>
-                  
-                  <View style={styles.trainerDetails}>
-                    <Text style={styles.detailText}>
-                      <Text style={styles.detailLabel}>Academy:</Text> {trainer.academy}
-                    </Text>
-                    <Text style={styles.detailText}>
-                      <Text style={styles.detailLabel}>Location:</Text> {trainer.location}
-                    </Text>
-                    <Text style={styles.detailText}>
-                      <Text style={styles.detailLabel}>Contact:</Text> {trainer.phone}
-                    </Text>
-                    <Text style={styles.detailText}>
-                      <Text style={styles.detailLabel}>Contact:</Text> {trainer.email}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Message Button */}
-                <TouchableOpacity 
-                  style={styles.messageButton}
-                  onPress={() => handleMessage(trainer.id)}
+            {filteredTrainers.length > 0 ? (
+              filteredTrainers.map((trainer) => (
+                <View 
+                  key={trainer.id} 
+                  style={[
+                    styles.trainerCard,
+                    selectedTrainer === trainer.id && styles.trainerCardSelected,
+                  ]}
                 >
-                  <Ionicons name="chatbubble-outline" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.messageButtonText}>Message</Text>
-                </TouchableOpacity>
+                  {/* Avatar with checkmark */}
+                  <View style={styles.avatarContainer}>
+                    <View style={styles.avatar}>
+                      <View style={styles.avatarPlaceholder} />
+                    </View>
+                    <View style={styles.checkmarkContainer}>
+                      <Ionicons name="checkmark-circle" size={24} color="#07bbc0" />
+                    </View>
+                  </View>
+
+                  {/* Trainer Information */}
+                  <View style={styles.trainerInfo}>
+                    <Text style={styles.trainerName}>{trainer.name}</Text>
+                    <Text style={styles.trainerUsername}>
+                      {trainer.username} | {trainer.title}
+                    </Text>
+                    
+                    <View style={styles.trainerDetails}>
+                      <View style={styles.detailRow}>
+                        <Ionicons name="business-outline" size={14} color="#6b8693" />
+                        <Text style={styles.detailText}>{trainer.academy}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Ionicons name="location-outline" size={14} color="#6b8693" />
+                        <Text style={styles.detailText}>{trainer.location}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Ionicons name="call-outline" size={14} color="#6b8693" />
+                        <Text style={styles.detailText}>{trainer.phone}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Ionicons name="mail-outline" size={14} color="#6b8693" />
+                        <Text style={styles.detailText}>{trainer.email}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Message Button */}
+                  <TouchableOpacity 
+                    style={styles.messageButton}
+                    onPress={() => handleMessage(trainer.id)}
+                  >
+                    <Ionicons name="chatbubble-outline" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.messageButtonText}>Message</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="search-outline" size={48} color="#6b8693" />
+                <Text style={styles.emptyStateText}>No trainers found</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  Try adjusting your search criteria
+                </Text>
               </View>
-            ))}
+            )}
           </ScrollView>
         </View>
       </View>
@@ -312,6 +387,60 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#011f36',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#0a3645',
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    padding: 0,
+  },
+  statsBar: {
+    flexDirection: 'row',
+    backgroundColor: '#011f36',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#07bbc0',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6b8693',
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#0a3645',
+  },
+  resultsText: {
+    fontSize: 14,
+    color: '#6b8693',
+    marginBottom: 16,
+    fontWeight: '600',
+  },
   trainerList: {
     flex: 1,
   },
@@ -326,6 +455,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     position: 'relative',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  trainerCardSelected: {
+    borderColor: '#07bbc0',
+    backgroundColor: '#062731',
   },
   avatarContainer: {
     position: 'relative',
@@ -369,12 +504,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   trainerDetails: {
-    gap: 6,
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   detailText: {
     fontSize: 14,
     color: '#FFFFFF',
     lineHeight: 20,
+    flex: 1,
   },
   detailLabel: {
     fontWeight: '600',
@@ -395,6 +536,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    color: '#6b8693',
+    fontSize: 14,
   },
   menuOverlay: {
     position: 'absolute',

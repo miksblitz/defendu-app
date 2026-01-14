@@ -18,20 +18,62 @@ const radius = (circleSize - strokeWidth) / 2;
 const circumference = 2 * Math.PI * radius;
 
 const trainingModules = [
-  { key: 'Module 1' },
-  { key: 'Module 2' },
-  { key: 'Module 3' },
-  { key: 'Module 4' },
-  { key: 'Module 5' },
+  { 
+    key: 'Module 1',
+    title: 'Basic Stance & Movement',
+    description: 'Learn fundamental footwork',
+    progress: 0.75,
+    duration: '15 min',
+    completed: false
+  },
+  { 
+    key: 'Module 2',
+    title: 'Striking Techniques',
+    description: 'Master basic strikes',
+    progress: 0.45,
+    duration: '20 min',
+    completed: false
+  },
+  { 
+    key: 'Module 3',
+    title: 'Defense & Blocks',
+    description: 'Defensive movements',
+    progress: 0.30,
+    duration: '18 min',
+    completed: false
+  },
+  { 
+    key: 'Module 4',
+    title: 'Ground Control',
+    description: 'Ground fighting basics',
+    progress: 0,
+    duration: '25 min',
+    completed: false
+  },
+  { 
+    key: 'Module 5',
+    title: 'Sparring Intro',
+    description: 'Applied techniques',
+    progress: 0,
+    duration: '30 min',
+    completed: false
+  },
 ];
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const progressValues = Array(days.length).fill(0); // 0% progress for each day
+// Realistic progress values - showing some completed days
+const progressValues = [1, 0.8, 0.6, 0.3, 0, 0, 0]; // Progress for each day
 
 export default function DashboardScreen() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
+  const [selectedModule, setSelectedModule] = useState<number | null>(null);
+  const [userName, setUserName] = useState('User');
   const router = useRouter();
+
+  // Get current day name
+  const currentDay = new Date().getDay();
+  const todayName = days[currentDay];
 
   const handleLogout = async () => {
     try {
@@ -47,6 +89,15 @@ export default function DashboardScreen() {
     // TODO: Navigate to messages page
     console.log('Navigate to messages');
   };
+
+  const handleModulePress = (index: number) => {
+    setSelectedModule(index);
+    // TODO: Navigate to module details or start training
+    console.log('Open module:', trainingModules[index].title);
+  };
+
+  // Calculate overall weekly progress
+  const weeklyProgress = progressValues.reduce((acc, val) => acc + val, 0) / days.length;
 
   const CircularProgress = ({ progress }: { progress: number }) => {
     const strokeDashoffset = circumference * (1 - progress);
@@ -125,19 +176,36 @@ export default function DashboardScreen() {
 
         {/* Main Content */}
         <View style={styles.mainContent}>
-          <Image
-            source={require('../../assets/images/defendudashboardlogo.png')}
-            style={styles.logoImage}
-          />
+          {/* Welcome Header */}
+          <View style={styles.welcomeSection}>
+            <Image
+              source={require('../../assets/images/defendudashboardlogo.png')}
+              style={styles.logoImage}
+            />
+            <View style={styles.welcomeTextContainer}>
+              <Text style={styles.welcomeText}>Welcome back, {userName}!</Text>
+              <Text style={styles.welcomeSubtext}>Today is {todayName} - Let's keep training</Text>
+            </View>
+          </View>
 
           {/* Weekly Goal */}
           <View style={styles.weeklyGoalContainer}>
-            <Text style={styles.weeklyGoalTitle}>Weekly Goal</Text>
-            <Text style={styles.weeklyGoalSubtitle}>
-              Track your training progress
-            </Text>
+            <View style={styles.weeklyGoalHeader}>
+              <View>
+                <Text style={styles.weeklyGoalTitle}>Weekly Goal</Text>
+                <Text style={styles.weeklyGoalSubtitle}>
+                  Track your training progress
+                </Text>
+              </View>
+              <View style={styles.weeklyGoalStats}>
+                <Text style={styles.weeklyGoalPercentage}>
+                  {Math.round(weeklyProgress * 100)}%
+                </Text>
+                <Text style={styles.weeklyGoalLabel}>Complete</Text>
+              </View>
+            </View>
             <View style={styles.progressBarBackground}>
-              <View style={[styles.progressBarFill, { width: '5%' }]} />
+              <View style={[styles.progressBarFill, { width: `${weeklyProgress * 100}%` }]} />
             </View>
             <View style={styles.weekDaysContainer}>
               {days.map((day, i) => (
@@ -171,24 +239,61 @@ export default function DashboardScreen() {
           </View>
 
           {/* Training Modules */}
-          <Text style={styles.trainingTitle}>TRAINING</Text>
+          <View style={styles.trainingHeader}>
+            <Text style={styles.trainingTitle}>TRAINING MODULES</Text>
+            <Text style={styles.trainingSubtitle}>
+              Continue your martial arts journey
+            </Text>
+          </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.modulesContainer}
           >
-            {trainingModules.map(({ key }) => (
+            {trainingModules.map((module, index) => (
               <TouchableOpacity
-                key={key}
-                style={styles.moduleCard}
+                key={module.key}
+                style={[
+                  styles.moduleCard,
+                  selectedModule === index && styles.moduleCardSelected,
+                ]}
+                onPress={() => handleModulePress(index)}
                 accessibilityRole="button"
-                accessibilityLabel={`Open training module ${key}`}
+                accessibilityLabel={`Open training module ${module.title}`}
               >
                 <View style={styles.moduleHeader}>
-                  <Text style={styles.moduleHeaderText}>{key}</Text>
+                  <Text style={styles.moduleHeaderText}>{module.key}</Text>
+                  {module.completed && (
+                    <View style={styles.moduleCompleteBadge}>
+                      <Text style={styles.moduleCompleteText}>✓</Text>
+                    </View>
+                  )}
                 </View>
-                <View style={styles.imagePlaceholder}>
-                  <Text style={styles.imagePlaceholderText}>Image Placeholder</Text>
+                <View style={styles.moduleContent}>
+                  <View style={styles.moduleThumbnail}>
+                    <Text style={styles.moduleThumbnailIcon}>🥋</Text>
+                  </View>
+                  <View style={styles.moduleInfo}>
+                    <Text style={styles.moduleTitle}>{module.title}</Text>
+                    <Text style={styles.moduleDescription}>{module.description}</Text>
+                    <Text style={styles.moduleDuration}>{module.duration}</Text>
+                  </View>
+                  {/* Progress bar for module */}
+                  {module.progress > 0 && (
+                    <View style={styles.moduleProgressContainer}>
+                      <View style={styles.moduleProgressBar}>
+                        <View 
+                          style={[
+                            styles.moduleProgressFill, 
+                            { width: `${module.progress * 100}%` }
+                          ]} 
+                        />
+                      </View>
+                      <Text style={styles.moduleProgressText}>
+                        {Math.round(module.progress * 100)}%
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </TouchableOpacity>
             ))}
@@ -279,8 +384,23 @@ const styles = StyleSheet.create({
     width: 180,
     height: 60,
     resizeMode: 'contain',
+    marginBottom: 10,
+  },
+  welcomeSection: {
     marginBottom: 30,
-    alignSelf: 'flex-start',
+  },
+  welcomeTextContainer: {
+    marginTop: 5,
+  },
+  welcomeText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  welcomeSubtext: {
+    fontSize: 14,
+    color: '#6b8693',
   },
   weeklyGoalContainer: {
     backgroundColor: '#041527',
@@ -289,6 +409,12 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     borderWidth: 1,
     borderColor: '#000E1C',
+  },
+  weeklyGoalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 15,
   },
   weeklyGoalTitle: {
     fontSize: 18,
@@ -299,23 +425,35 @@ const styles = StyleSheet.create({
   weeklyGoalSubtitle: {
     fontSize: 14,
     color: '#6b8693',
-    marginBottom: 10,
+  },
+  weeklyGoalStats: {
+    alignItems: 'flex-end',
+  },
+  weeklyGoalPercentage: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#07bbc0',
+  },
+  weeklyGoalLabel: {
+    fontSize: 12,
+    color: '#6b8693',
+    marginTop: -4,
   },
   progressBarBackground: {
     width: '100%',
-    height: 6,
+    height: 8,
     backgroundColor: '#0a3645',
-    borderRadius: 6,
+    borderRadius: 8,
+    marginBottom: 20,
   },
   progressBarFill: {
-    height: 6,
+    height: 8,
     backgroundColor: '#07bbc0',
-    borderRadius: 6,
+    borderRadius: 8,
   },
   weekDaysContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
   },
   dayProgressContainer: {
     alignItems: 'center',
@@ -336,47 +474,128 @@ const styles = StyleSheet.create({
   dayLabelActive: {
     color: '#041527',
   },
+  trainingHeader: {
+    marginBottom: 15,
+  },
   trainingTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#07bbc0',
     letterSpacing: 2,
-    marginBottom: 15,
+    marginBottom: 4,
+  },
+  trainingSubtitle: {
+    fontSize: 14,
+    color: '#6b8693',
   },
   modulesContainer: {
     paddingLeft: 12,
+    paddingBottom: 10,
   },
   moduleCard: {
-    width: 120,
-    height: 210,
-    borderRadius: 15,
+    width: 260,
+    minHeight: 240,
+    borderRadius: 20,
     backgroundColor: '#011f36',
     overflow: 'hidden',
-    marginRight: 15,
+    marginRight: 20,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  moduleCardSelected: {
+    borderColor: '#07bbc0',
+    shadowColor: '#07bbc0',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
   },
   moduleHeader: {
     backgroundColor: '#062731',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderTopLeftRadius: 15,
-    borderTopRightRadius: 15,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   moduleHeaderText: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  imagePlaceholder: {
-    flex: 1,
-    backgroundColor: '#0a3645',
+  moduleCompleteBadge: {
+    backgroundColor: '#4CAF50',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 10,
   },
-  imagePlaceholderText: {
+  moduleCompleteText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  moduleContent: {
+    padding: 16,
+  },
+  moduleThumbnail: {
+    width: '100%',
+    height: 90,
+    backgroundColor: '#0a3645',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  moduleThumbnailIcon: {
+    fontSize: 40,
+  },
+  moduleInfo: {
+    marginBottom: 12,
+  },
+  moduleTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  moduleDescription: {
     color: '#6b8693',
-    fontSize: 10,
-    textAlign: 'center',
+    fontSize: 12,
+    marginBottom: 6,
+  },
+  moduleDuration: {
+    color: '#07bbc0',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  moduleProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  moduleProgressBar: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#0a3645',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  moduleProgressFill: {
+    height: '100%',
+    backgroundColor: '#07bbc0',
+    borderRadius: 3,
+  },
+  moduleProgressText: {
+    color: '#6b8693',
+    fontSize: 11,
+    fontWeight: '600',
+    minWidth: 35,
+    textAlign: 'right',
   },
   menuOverlay: {
     position: 'absolute',
