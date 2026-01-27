@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Image,
     SafeAreaView,
@@ -10,69 +10,134 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    ActivityIndicator,
+    Modal,
 } from 'react-native';
 import { AuthController } from '../controllers/AuthController';
+import { User } from '../models/User';
+import { TrainerApplication } from '../models/TrainerApplication';
 
-// Sample trainer data - replace with actual data from database
-const trainers = [
-  {
-    id: 1,
-    name: 'Mike Robaniel',
-    username: '@Miksblitz',
-    title: 'jiu-jitsu Trainer',
-    academy: 'Elite BJJ Academy',
-    location: 'New York, NY',
-    phone: '+1 (555) 123-4567',
-    email: 'mike.robaniel@example.com',
-  },
-  {
-    id: 2,
-    name: 'Chris Evans',
-    username: '@ChrisTKD',
-    title: 'Taekwondo Instructor',
-    academy: 'Dynamic TKD Studio',
-    location: 'Los Angeles, CA',
-    phone: '+1 (555) 234-5678',
-    email: 'chris.evans@example.com',
-  },
-  {
-    id: 3,
-    name: 'James Bond',
-    username: '@JBond007',
-    title: 'Self-Defense Specialist',
-    academy: 'Defense Academy',
-    location: 'London, UK',
-    phone: '+44 20 7946 0958',
-    email: 'james.bond@example.com',
-  },
-];
+interface TrainerWithData extends User {
+  applicationData?: TrainerApplication | null;
+}
 
 export default function TrainerPage() {
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTrainer, setSelectedTrainer] = useState<number | null>(null);
+  const [trainers, setTrainers] = useState<TrainerWithData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedTrainer, setSelectedTrainer] = useState<TrainerWithData | null>(null);
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isCurrentUserTrainer, setIsCurrentUserTrainer] = useState(false);
+
+  useEffect(() => {
+    loadTrainers();
+    checkCurrentUserTrainerStatus();
+  }, []);
+
+  const checkCurrentUserTrainerStatus = async () => {
+    try {
+      const user = await AuthController.getCurrentUser();
+      setCurrentUser(user);
+      if (user && user.role === 'trainer' && user.trainerApproved === true) {
+        setIsCurrentUserTrainer(true);
+      }
+    } catch (error) {
+      console.error('Error checking user trainer status:', error);
+    }
+  };
+
+  const loadTrainers = async () => {
+    try {
+      setLoading(true);
+      console.log('🔵 Loading approved trainers...');
+      const approvedTrainers = await AuthController.getApprovedTrainers();
+      console.log('✅ Loaded approved trainers:', approvedTrainers.length);
+
+      // Fetch TrainerApplication data for each trainer
+      const trainersWithData: TrainerWithData[] = [];
+      for (const trainer of approvedTrainers) {
+        try {
+          const applicationData = await AuthController.getTrainerApplicationData(trainer.uid);
+          trainersWithData.push({
+            ...trainer,
+            applicationData: applicationData || null,
+          });
+        } catch (error) {
+          console.error(`❌ Error loading application data for trainer ${trainer.uid}:`, error);
+          // Still add the trainer even if application data fails to load
+          trainersWithData.push({
+            ...trainer,
+            applicationData: null,
+          });
+        }
+      }
+
+      console.log('✅ Processed trainers with data:', trainersWithData.length);
+      setTrainers(trainersWithData);
+    } catch (error: any) {
+      console.error('❌ Error loading trainers:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+      });
+      setTrainers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Get stats
   const totalTrainers = trainers.length;
-  const specialties = [...new Set(trainers.map(t => t.title))].length;
+  const specialties = useMemo(() => {
+    const allSpecialties = new Set<string>();
+    trainers.forEach(trainer => {
+      if (trainer.applicationData?.defenseStyles) {
+        trainer.applicationData.defenseStyles.forEach(style => allSpecialties.add(style));
+      } else if (trainer.preferredTechnique) {
+        trainer.preferredTechnique.forEach(tech => allSpecialties.add(tech));
+      }
+    });
+    return allSpecialties.size;
+  }, [trainers]);
 
   // Filter trainers based on search
-  const filteredTrainers = trainers.filter(trainer =>
-    trainer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    trainer.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    trainer.academy.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTrainers = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return trainers;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return trainers.filter(trainer => {
+      const name = `${trainer.firstName} ${trainer.lastName}`.toLowerCase();
+      const username = trainer.username?.toLowerCase() || '';
+      const email = trainer.email?.toLowerCase() || '';
+      const styles = trainer.applicationData?.defenseStyles?.join(' ') || 
+                     trainer.preferredTechnique?.join(' ') || '';
+      const location = trainer.applicationData?.physicalAddress?.toLowerCase() || '';
+      
+      return name.includes(query) || 
+             username.includes(query) || 
+             email.includes(query) ||
+             styles.toLowerCase().includes(query) ||
+             location.includes(query);
+    });
+  }, [trainers, searchQuery]);
 
-  const handleMessage = (trainerId: number) => {
-    setSelectedTrainer(trainerId);
-    // TODO: Implement message functionality
-    console.log('Message trainer:', trainerId);
+  const handleViewCredentials = (trainer: TrainerWithData) => {
+    setSelectedTrainer(trainer);
+    setShowCredentialsModal(true);
   };
 
   const handleRegisterTrainer = () => {
-    // TODO: Implement trainer registration
-    console.log('Register as trainer');
+    if (isCurrentUserTrainer) {
+      // If user is already a trainer, navigate to edit trainer profile
+      router.push('/edit-trainer-profile');
+    } else {
+      router.push('/trainer-registration');
+    }
   };
 
   const handleLogout = async () => {
@@ -88,6 +153,14 @@ export default function TrainerPage() {
     setShowMenu(false);
     // TODO: Navigate to messages page
     console.log('Navigate to messages');
+  };
+
+  const formatDate = (date: Date): string => {
+    return date.toLocaleDateString('en-US', { 
+      month: 'long', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
   };
 
   return (
@@ -147,20 +220,45 @@ export default function TrainerPage() {
               />
               <Text style={styles.pageTitle}>TRAINERS</Text>
             </View>
-            <TouchableOpacity 
-              style={styles.registerButton}
-              onPress={handleRegisterTrainer}
-            >
-              <Ionicons name="person-add-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.registerButtonText}>Register as a certified Trainer</Text>
-            </TouchableOpacity>
+            <View style={styles.headerButtons}>
+              {isCurrentUserTrainer && (
+                <TouchableOpacity 
+                  style={styles.publishModuleButton}
+                  onPress={() => router.push('/publish-module' as any)}
+                >
+                  <Ionicons 
+                    name="cloud-upload-outline" 
+                    size={18} 
+                    color="#FFFFFF" 
+                    style={{ marginRight: 6 }} 
+                  />
+                  <Text style={styles.publishModuleButtonText}>
+                    Publish Module
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity 
+                style={styles.registerButton}
+                onPress={handleRegisterTrainer}
+              >
+                <Ionicons 
+                  name={isCurrentUserTrainer ? "create-outline" : "person-add-outline"} 
+                  size={18} 
+                  color="#FFFFFF" 
+                  style={{ marginRight: 6 }} 
+                />
+                <Text style={styles.registerButtonText}>
+                  {isCurrentUserTrainer ? 'Edit Trainer Profile' : 'Register as a certified Trainer'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Search Bar */}
           <View style={styles.searchContainer}>
             <Ionicons name="search-outline" size={20} color="#6b8693" style={styles.searchIcon} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
               placeholder="Search trainers, specialties, or academies..."
               placeholderTextColor="#6b8693"
               value={searchQuery}
@@ -197,79 +295,281 @@ export default function TrainerPage() {
           </Text>
 
           {/* Trainer List */}
-          <ScrollView 
-            style={styles.trainerList}
-            contentContainerStyle={styles.trainerListContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {filteredTrainers.length > 0 ? (
-              filteredTrainers.map((trainer) => (
-                <View 
-                  key={trainer.id} 
-                  style={[
-                    styles.trainerCard,
-                    selectedTrainer === trainer.id && styles.trainerCardSelected,
-                  ]}
-                >
-                  {/* Avatar with checkmark */}
-                  <View style={styles.avatarContainer}>
-                    <View style={styles.avatar}>
-                      <View style={styles.avatarPlaceholder} />
-                    </View>
-                    <View style={styles.checkmarkContainer}>
-                      <Ionicons name="checkmark-circle" size={24} color="#07bbc0" />
-                    </View>
-                  </View>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#07bbc0" />
+              <Text style={styles.loadingText}>Loading trainers...</Text>
+            </View>
+          ) : (
+            <ScrollView 
+              style={styles.trainerList}
+              contentContainerStyle={styles.trainerListContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {filteredTrainers.length > 0 ? (
+                filteredTrainers.map((trainer) => {
+                  const appData = trainer.applicationData;
+                  const allStyles = appData?.defenseStyles || trainer.preferredTechnique || [];
+                  const displayedStyles = allStyles.slice(0, 3); // Get up to 3 martial arts
+                  const username = appData?.professionalAlias || trainer.username || '';
+                  const academyName = appData?.academyName || '';
+                  const location = appData?.physicalAddress || 'Location not provided';
+                  const phone = appData?.phone || 'Phone not provided';
+                  const email = trainer.email || 'Email not provided';
 
-                  {/* Trainer Information */}
-                  <View style={styles.trainerInfo}>
-                    <Text style={styles.trainerName}>{trainer.name}</Text>
-                    <Text style={styles.trainerUsername}>
-                      {trainer.username} | {trainer.title}
-                    </Text>
-                    
-                    <View style={styles.trainerDetails}>
-                      <View style={styles.detailRow}>
-                        <Ionicons name="business-outline" size={14} color="#6b8693" />
-                        <Text style={styles.detailText}>{trainer.academy}</Text>
+                  return (
+                    <View 
+                      key={trainer.uid} 
+                      style={styles.trainerCard}
+                    >
+                      {/* Avatar with checkmark */}
+                      <View style={styles.avatarContainer}>
+                        {trainer.profilePicture ? (
+                          <Image
+                            source={{ uri: trainer.profilePicture }}
+                            style={styles.avatar}
+                          />
+                        ) : (
+                          <View style={styles.avatar}>
+                            <Ionicons name="person" size={40} color="#FFFFFF" />
+                          </View>
+                        )}
+                        <View style={styles.checkmarkContainer}>
+                          <Ionicons name="checkmark-circle" size={24} color="#07bbc0" />
+                        </View>
                       </View>
-                      <View style={styles.detailRow}>
-                        <Ionicons name="location-outline" size={14} color="#6b8693" />
-                        <Text style={styles.detailText}>{trainer.location}</Text>
-                      </View>
-                      <View style={styles.detailRow}>
-                        <Ionicons name="call-outline" size={14} color="#6b8693" />
-                        <Text style={styles.detailText}>{trainer.phone}</Text>
-                      </View>
-                      <View style={styles.detailRow}>
-                        <Ionicons name="mail-outline" size={14} color="#6b8693" />
-                        <Text style={styles.detailText}>{trainer.email}</Text>
-                      </View>
-                    </View>
-                  </View>
 
-                  {/* Message Button */}
-                  <TouchableOpacity 
-                    style={styles.messageButton}
-                    onPress={() => handleMessage(trainer.id)}
-                  >
-                    <Ionicons name="chatbubble-outline" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                    <Text style={styles.messageButtonText}>Message</Text>
-                  </TouchableOpacity>
+                      {/* Trainer Information */}
+                      <View style={styles.trainerInfo}>
+                        <Text style={styles.trainerName}>
+                          {trainer.firstName} {trainer.lastName}
+                        </Text>
+                        {username && (
+                          <Text style={styles.trainerUsername}>
+                            @{username.replace('@', '')}
+                          </Text>
+                        )}
+                        {displayedStyles.length > 0 && (
+                          <View style={styles.martialArtsContainer}>
+                            {displayedStyles.map((style, index) => (
+                              <View key={index} style={styles.martialArtTag}>
+                                <Text style={styles.martialArtText}>{style}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                        
+                        <View style={styles.trainerDetails}>
+                          {academyName && (
+                            <View style={styles.detailRow}>
+                              <Ionicons name="school-outline" size={14} color="#6b8693" />
+                              <Text style={styles.detailText}>{academyName}</Text>
+                            </View>
+                          )}
+                          <View style={styles.detailRow}>
+                            <Ionicons name="location-outline" size={14} color="#6b8693" />
+                            <Text style={styles.detailText}>{location}</Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Ionicons name="call-outline" size={14} color="#6b8693" />
+                            <Text style={styles.detailText}>{phone}</Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Ionicons name="mail-outline" size={14} color="#6b8693" />
+                            <Text style={styles.detailText}>{email}</Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* View Button */}
+                      <TouchableOpacity 
+                        style={styles.viewButton}
+                        onPress={() => handleViewCredentials(trainer)}
+                      >
+                        <Ionicons name="eye-outline" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                        <Text style={styles.viewButtonText}>View</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })
+              ) : (
+                <View style={styles.emptyState}>
+                  <Ionicons name="search-outline" size={48} color="#6b8693" />
+                  <Text style={styles.emptyStateText}>No trainers found</Text>
+                  <Text style={styles.emptyStateSubtext}>
+                    {searchQuery ? 'Try adjusting your search criteria' : 'No approved trainers available yet'}
+                  </Text>
                 </View>
-              ))
-            ) : (
-              <View style={styles.emptyState}>
-                <Ionicons name="search-outline" size={48} color="#6b8693" />
-                <Text style={styles.emptyStateText}>No trainers found</Text>
-                <Text style={styles.emptyStateSubtext}>
-                  Try adjusting your search criteria
-                </Text>
-              </View>
-            )}
-          </ScrollView>
+              )}
+            </ScrollView>
+          )}
         </View>
       </View>
+
+      {/* Credentials Modal */}
+      {selectedTrainer && (
+        <Modal
+          visible={showCredentialsModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowCredentialsModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Trainer Credentials</Text>
+                <TouchableOpacity
+                  onPress={() => setShowCredentialsModal(false)}
+                  style={styles.closeButton}
+                >
+                  <Ionicons name="close" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+                {selectedTrainer.applicationData ? (
+                  <>
+                    {/* Profile Summary */}
+                    <View style={styles.credentialSection}>
+                      <View style={styles.credentialHeader}>
+                        {selectedTrainer.profilePicture ? (
+                          <Image
+                            source={{ uri: selectedTrainer.profilePicture }}
+                            style={styles.credentialAvatar}
+                          />
+                        ) : (
+                          <View style={styles.credentialAvatar}>
+                            <Ionicons name="person" size={40} color="#FFFFFF" />
+                          </View>
+                        )}
+                        <View style={styles.credentialHeaderInfo}>
+                          <Text style={styles.credentialName}>
+                            {selectedTrainer.applicationData.fullLegalName}
+                          </Text>
+                          {selectedTrainer.applicationData.professionalAlias && (
+                            <Text style={styles.credentialAlias}>
+                              @{selectedTrainer.applicationData.professionalAlias.replace('@', '')}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Personal Information */}
+                    <View style={styles.credentialSection}>
+                      <Text style={styles.credentialSectionTitle}>Personal Information</Text>
+                      <View style={styles.credentialInfoRow}>
+                        <Text style={styles.credentialLabel}>Email:</Text>
+                        <Text style={styles.credentialValue}>{selectedTrainer.email}</Text>
+                      </View>
+                      {selectedTrainer.applicationData.academyName && (
+                        <View style={styles.credentialInfoRow}>
+                          <Text style={styles.credentialLabel}>Academy Name:</Text>
+                          <Text style={styles.credentialValue}>{selectedTrainer.applicationData.academyName}</Text>
+                        </View>
+                      )}
+                      {selectedTrainer.applicationData.phone && (
+                        <View style={styles.credentialInfoRow}>
+                          <Text style={styles.credentialLabel}>Phone:</Text>
+                          <Text style={styles.credentialValue}>{selectedTrainer.applicationData.phone}</Text>
+                        </View>
+                      )}
+                      {selectedTrainer.applicationData.dateOfBirth && (
+                        <View style={styles.credentialInfoRow}>
+                          <Text style={styles.credentialLabel}>Date of Birth:</Text>
+                          <Text style={styles.credentialValue}>{selectedTrainer.applicationData.dateOfBirth}</Text>
+                        </View>
+                      )}
+                      {selectedTrainer.applicationData.physicalAddress && (
+                        <View style={styles.credentialInfoRow}>
+                          <Text style={styles.credentialLabel}>Address:</Text>
+                          <Text style={styles.credentialValue}>{selectedTrainer.applicationData.physicalAddress}</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Credentials & Certifications */}
+                    <View style={styles.credentialSection}>
+                      <Text style={styles.credentialSectionTitle}>Credentials & Certifications</Text>
+                      {selectedTrainer.applicationData.defenseStyles && selectedTrainer.applicationData.defenseStyles.length > 0 && (
+                        <View style={styles.credentialInfoRow}>
+                          <Text style={styles.credentialLabel}>Defense Styles:</Text>
+                          <Text style={styles.credentialValue}>
+                            {selectedTrainer.applicationData.defenseStyles.join(', ')}
+                          </Text>
+                        </View>
+                      )}
+                      {selectedTrainer.applicationData.yearsOfExperience && (
+                        <View style={styles.credentialInfoRow}>
+                          <Text style={styles.credentialLabel}>Years of Experience:</Text>
+                          <Text style={styles.credentialValue}>{selectedTrainer.applicationData.yearsOfExperience} years</Text>
+                        </View>
+                      )}
+                      {selectedTrainer.applicationData.yearsOfTeaching && (
+                        <View style={styles.credentialInfoRow}>
+                          <Text style={styles.credentialLabel}>Years of Teaching:</Text>
+                          <Text style={styles.credentialValue}>{selectedTrainer.applicationData.yearsOfTeaching} years</Text>
+                        </View>
+                      )}
+                      {selectedTrainer.applicationData.currentRank && (
+                        <View style={styles.credentialInfoRow}>
+                          <Text style={styles.credentialLabel}>Current Rank:</Text>
+                          <Text style={styles.credentialValue}>{selectedTrainer.applicationData.currentRank}</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Social Media Links */}
+                    {(selectedTrainer.applicationData.facebookLink || 
+                      selectedTrainer.applicationData.instagramLink || 
+                      selectedTrainer.applicationData.otherLink) && (
+                      <View style={styles.credentialSection}>
+                        <Text style={styles.credentialSectionTitle}>Social Media</Text>
+                        {selectedTrainer.applicationData.facebookLink && (
+                          <View style={styles.credentialInfoRow}>
+                            <Text style={styles.credentialLabel}>Facebook:</Text>
+                            <Text style={styles.credentialValue}>{selectedTrainer.applicationData.facebookLink}</Text>
+                          </View>
+                        )}
+                        {selectedTrainer.applicationData.instagramLink && (
+                          <View style={styles.credentialInfoRow}>
+                            <Text style={styles.credentialLabel}>Instagram:</Text>
+                            <Text style={styles.credentialValue}>{selectedTrainer.applicationData.instagramLink}</Text>
+                          </View>
+                        )}
+                        {selectedTrainer.applicationData.otherLink && (
+                          <View style={styles.credentialInfoRow}>
+                            <Text style={styles.credentialLabel}>Other:</Text>
+                            <Text style={styles.credentialValue}>{selectedTrainer.applicationData.otherLink}</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    {/* About Me */}
+                    {selectedTrainer.applicationData.aboutMe && (
+                      <View style={styles.credentialSection}>
+                        <Text style={styles.credentialSectionTitle}>About Me</Text>
+                        <View style={styles.credentialInfoRow}>
+                          <Text style={styles.credentialValue}>{selectedTrainer.applicationData.aboutMe}</Text>
+                        </View>
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <View style={styles.noDataContainer}>
+                    <Text style={styles.noDataText}>No application data available</Text>
+                    <Text style={styles.credentialName}>
+                      {selectedTrainer.firstName} {selectedTrainer.lastName}
+                    </Text>
+                    <Text style={styles.credentialValue}>{selectedTrainer.email}</Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Pop-up Menu */}
       {showMenu && (
@@ -314,7 +614,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   sidebar: {
-    backgroundColor: '#031A23',
+    backgroundColor: '#000E1C',
     width: 80,
     paddingTop: 20,
     paddingBottom: 30,
@@ -362,6 +662,11 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
   },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   logoImage: {
     width: 180,
     height: 60,
@@ -383,6 +688,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   registerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  publishModuleButton: {
+    backgroundColor: '#07bbc0',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  publishModuleButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
@@ -441,6 +759,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontWeight: '600',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    marginTop: 16,
+    fontSize: 16,
+  },
   trainerList: {
     flex: 1,
   },
@@ -458,10 +787,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  trainerCardSelected: {
-    borderColor: '#07bbc0',
-    backgroundColor: '#062731',
-  },
   avatarContainer: {
     position: 'relative',
     marginRight: 16,
@@ -470,16 +795,10 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#0a3645',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-  },
-  avatarPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#2E7D32',
   },
   checkmarkContainer: {
     position: 'absolute',
@@ -501,7 +820,27 @@ const styles = StyleSheet.create({
   trainerUsername: {
     fontSize: 14,
     color: '#6b8693',
+    marginBottom: 8,
+  },
+  martialArtsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     marginBottom: 12,
+  },
+  martialArtTag: {
+    backgroundColor: 'rgba(7, 187, 192, 0.15)',
+    borderWidth: 1,
+    borderColor: '#07bbc0',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  martialArtText: {
+    color: '#07bbc0',
+    fontSize: 12,
+    fontWeight: '600',
   },
   trainerDetails: {
     gap: 8,
@@ -517,11 +856,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     flex: 1,
   },
-  detailLabel: {
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  messageButton: {
+  viewButton: {
     backgroundColor: '#07bbc0',
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -532,7 +867,7 @@ const styles = StyleSheet.create({
     bottom: 20,
     right: 20,
   },
-  messageButtonText: {
+  viewButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
@@ -553,6 +888,123 @@ const styles = StyleSheet.create({
   emptyStateSubtext: {
     color: '#6b8693',
     fontSize: 14,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    backgroundColor: '#011f36',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 600,
+    maxHeight: '90%',
+    borderWidth: 1,
+    borderColor: '#07bbc0',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(107, 134, 147, 0.3)',
+  },
+  modalTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalContent: {
+    padding: 20,
+  },
+  credentialSection: {
+    marginBottom: 24,
+  },
+  credentialHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(107, 134, 147, 0.3)',
+  },
+  credentialAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#0a3645',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    overflow: 'hidden',
+  },
+  credentialHeaderInfo: {
+    flex: 1,
+  },
+  credentialName: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  credentialAlias: {
+    color: '#6b8693',
+    fontSize: 14,
+  },
+  credentialSectionTitle: {
+    color: '#07bbc0',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  credentialInfoRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    flexWrap: 'wrap',
+  },
+  credentialLabel: {
+    color: '#6b8693',
+    fontSize: 14,
+    fontWeight: '600',
+    width: 140,
+    marginRight: 12,
+  },
+  credentialValue: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    flex: 1,
+  },
+  fileItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(7, 187, 192, 0.1)',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  fileName: {
+    color: '#07bbc0',
+    fontSize: 14,
+    flex: 1,
+  },
+  noDataContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noDataText: {
+    color: '#6b8693',
+    fontSize: 16,
+    marginBottom: 16,
   },
   menuOverlay: {
     position: 'absolute',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,8 +22,19 @@ import { useToast } from '../../hooks/useToast';
 
 export default function FitnessCapabilitiesScreen() {
   const router = useRouter();
-  const { setFitnessCapabilities, fitnessCapabilities, physicalAttributes, preferences, pastExperience } = useSkillProfile();
+  const { setFitnessCapabilities, fitnessCapabilities, physicalAttributes, preferences, pastExperience, clearProfile } = useSkillProfile();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+
+  // Check if user is admin and redirect
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const currentUser = await AuthController.getCurrentUser();
+      if (currentUser && currentUser.role === 'admin') {
+        router.replace('/(admin)/adminDashboard');
+      }
+    };
+    checkAdmin();
+  }, [router]);
   const [selectedCurrentLevel, setSelectedCurrentLevel] = useState<string | null>(fitnessCapabilities?.currentFitnessLevel || null);
   const [selectedTrainingFrequency, setSelectedTrainingFrequency] = useState<string | null>(fitnessCapabilities?.trainingFrequency || null);
   const [injuries, setInjuries] = useState(fitnessCapabilities?.injuries || '');
@@ -60,8 +71,8 @@ export default function FitnessCapabilitiesScreen() {
         <View style={styles.progressBarFill} />
       </View>
 
-      {/* Back Arrow and Title */}
-      <TouchableOpacity style={styles.backRow} activeOpacity={0.7} onPress={() => router.back()}>
+      {/* Back Arrow and Title - Disabled during setup */}
+      <TouchableOpacity style={styles.backRow} activeOpacity={0.5} onPress={() => showToast('Cannot go back during profile setup')}>
         <Ionicons name="arrow-back" size={20} color="#09AEC3" />
         <Text style={styles.backText}>Fitness Capabilities</Text>
       </TouchableOpacity>
@@ -218,8 +229,20 @@ export default function FitnessCapabilitiesScreen() {
             // Save to database
             await AuthController.saveSkillProfile(completeProfile);
 
-            // Navigate to dashboard on success
+            // Clear the session to prevent user from going back to questions
+            clearProfile();
+
+            // Clear navigation history and prevent back navigation
+            router.dismissAll();
             router.replace('/(tabs)/dashboard');
+            
+            // Prevent back button navigation
+            if (typeof window !== 'undefined' && window.history) {
+              window.history.pushState(null, '', window.location.href);
+              window.onpopstate = () => {
+                window.history.pushState(null, '', window.location.href);
+              };
+            }
           } catch (error: any) {
             console.error('Error saving skill profile:', error);
             showToast(error.message || 'Failed to save skill profile. Please try again.');

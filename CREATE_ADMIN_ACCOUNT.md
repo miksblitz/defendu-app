@@ -85,9 +85,36 @@ After creating the account, you can verify it by:
 
 ### Permission Denied errors
 
-- Check Firebase Realtime Database rules
-- Ensure authenticated users can write to their own user data
-- For admin operations, you may need to temporarily allow writes
+If you're getting "Permission denied" errors when trying to fetch all users or perform admin operations, you need to configure Firebase Realtime Database security rules.
+
+#### Required Firebase Realtime Database Security Rules
+
+Go to [Firebase Console](https://console.firebase.google.com/) → Your Project → **Realtime Database** → **Rules** and set the following rules:
+
+```json
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      },
+      ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    }
+  }
+}
+```
+
+**What these rules do:**
+- Users can read/write their own user data (`users/{uid}`)
+- Admins can read/write all user data (entire `users/` path)
+- Only authenticated users with `role === 'admin'` can access the full users list
+
+**Important:** Make sure:
+1. The admin user is logged in via Firebase Authentication
+2. The admin user has `role: 'admin'` in the database at `users/{adminUID}/role`
+3. The security rules are published (click "Publish" after editing)
 
 ### User already exists
 

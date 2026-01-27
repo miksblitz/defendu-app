@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSkillProfile } from '../contexts/SkillProfileContext';
+import { AuthController } from '../controllers/AuthController';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 
@@ -10,6 +11,17 @@ export default function SelfDefensePreferencesScreen() {
   const router = useRouter();
   const { setPreferences, preferences } = useSkillProfile();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+
+  // Check if user is admin and redirect
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const currentUser = await AuthController.getCurrentUser();
+      if (currentUser && currentUser.role === 'admin') {
+        router.replace('/(admin)/adminDashboard');
+      }
+    };
+    checkAdmin();
+  }, [router]);
   // Handle both array and string formats for backward compatibility
   const [selectedTechniques, setSelectedTechniques] = useState<string[]>(
     preferences?.preferredTechnique 
@@ -31,6 +43,7 @@ export default function SelfDefensePreferencesScreen() {
     { key: 'Kicking', icon: <MaterialCommunityIcons name="human-handsup" size={16} color="#09AEC3" /> },
     { key: 'Palm Strikes', icon: <FontAwesome name="hand-paper-o" size={16} color="#09AEC3" /> },
     { key: 'Elbow Strikes', icon: <FontAwesome5 name="hands-helping" size={16} color="#09AEC3" /> },
+    { key: 'Knee Strikes', icon: <FontAwesome5 name="hand-rock" size={16} color="#09AEC3" /> },
     { key: 'Defensive Moves', icon: <FontAwesome5 name="shield-alt" size={16} color="#09AEC3" /> },
   ];
 
@@ -52,8 +65,8 @@ export default function SelfDefensePreferencesScreen() {
   <View style={styles.progressBarFill} />
 </View>
 
-      {/* Back Arrow */}
-      <TouchableOpacity style={styles.backRow} activeOpacity={0.7} onPress={() => router.back()}>
+      {/* Back Arrow - Disabled during setup */}
+      <TouchableOpacity style={styles.backRow} activeOpacity={0.5} onPress={() => showToast('Cannot go back during profile setup')}>
         <Ionicons name="arrow-back" size={20} color="#09AEC3" />
         <Text style={styles.backText}>Self-Defense Preferences</Text>
       </TouchableOpacity>

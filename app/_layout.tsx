@@ -1,11 +1,14 @@
 // app/_layout.tsx
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { SkillProfileProvider } from './contexts/SkillProfileContext';
+import { AuthController } from './controllers/AuthController';
+import BlockedUserModal from '../components/BlockedUserModal';
 
 export default function RootLayout() {
   const router = useRouter();
+  const [showBlockedModal, setShowBlockedModal] = useState(false);
 
   useEffect(() => {
     console.log('🚀 Root Layout Mounted - Setting up deep linking');
@@ -69,13 +72,49 @@ export default function RootLayout() {
     };
   }, []);
 
+  // Set up real-time listener for blocked status
+  useEffect(() => {
+    let cleanup: (() => void) | null = null;
+
+    const setupBlockedListener = async () => {
+      try {
+        const currentUser = await AuthController.getCurrentUser();
+        if (currentUser && currentUser.uid) {
+          // Set up real-time listener for blocked status
+          cleanup = AuthController.setupBlockedStatusListener(
+            currentUser.uid,
+            () => {
+              console.log('⚠️ User blocked - showing modal');
+              setShowBlockedModal(true);
+            }
+          );
+        }
+      } catch (error) {
+        console.error('Error setting up blocked listener:', error);
+      }
+    };
+
+    setupBlockedListener();
+
+    return () => {
+      if (cleanup) {
+        cleanup();
+      }
+    };
+  }, []);
+
   return (
     <SkillProfileProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(admin)" />
         <Stack.Screen name="+not-found" />
       </Stack>
+      <BlockedUserModal
+        visible={showBlockedModal}
+        onDismiss={() => setShowBlockedModal(false)}
+      />
     </SkillProfileProvider>
   );
 }

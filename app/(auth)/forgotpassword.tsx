@@ -89,7 +89,7 @@ export default function ForgotPasswordScreen() {
           style={styles.iconImage}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your email"
           placeholderTextColor="white"
           value={email}

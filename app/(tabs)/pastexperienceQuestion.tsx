@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSkillProfile } from '../contexts/SkillProfileContext';
+import { AuthController } from '../controllers/AuthController';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 
@@ -10,6 +11,17 @@ export default function PastExperienceScreen() {
   const router = useRouter();
   const { setPastExperience, pastExperience } = useSkillProfile();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+
+  // Check if user is admin and redirect
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const currentUser = await AuthController.getCurrentUser();
+      if (currentUser && currentUser.role === 'admin') {
+        router.replace('/(admin)/adminDashboard');
+      }
+    };
+    checkAdmin();
+  }, [router]);
   const [selectedExperience, setSelectedExperience] = useState<string | null>(pastExperience?.experienceLevel || null);
   // Handle both array and string formats for backward compatibility
   const [selectedMartialArts, setSelectedMartialArts] = useState<string[]>(
@@ -79,8 +91,8 @@ export default function PastExperienceScreen() {
         <View style={styles.progressBarFill} />
       </View>
 
-      {/* Back Arrow & Title */}
-      <TouchableOpacity style={styles.backRow} activeOpacity={0.7} onPress={() => router.back()}>
+      {/* Back Arrow & Title - Disabled during setup */}
+      <TouchableOpacity style={styles.backRow} activeOpacity={0.5} onPress={() => showToast('Cannot go back during profile setup')}>
         <Ionicons name="arrow-back" size={20} color="#09AEC3" />
         <Text style={styles.backText}>Past Experience</Text>
       </TouchableOpacity>
@@ -221,9 +233,9 @@ export default function PastExperienceScreen() {
           }
 
           setPastExperience({
-            experienceLevel: selectedExperience,
+            experienceLevel: selectedExperience!,
             martialArtsBackground: hasNoMartialArts ? [] : selectedMartialArts,
-            previousTrainingDetails: selectedDuration,
+            previousTrainingDetails: selectedDuration || undefined,
           });
           router.push('/(tabs)/fitnessCapabilitiesQuestion');
         }}

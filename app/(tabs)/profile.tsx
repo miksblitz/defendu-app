@@ -11,13 +11,18 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
+import OfflineModeModal from '../../components/OfflineModeModal';
+import { OfflineStorage } from '../utils/offlineStorage';
 
 export default function ProfilePage() {
   const router = useRouter();
   const [username, setUsername] = useState('@');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const [offlineEnabled, setOfflineEnabled] = useState(false);
 
   // Load user data on mount and when screen comes into focus
   const loadUserData = useCallback(async () => {
@@ -31,7 +36,12 @@ export default function ProfilePage() {
         setUsername(displayUsername);
         setFirstName(user.firstName || '');
         setLastName(user.lastName || '');
+        setProfilePicture(user.profilePicture || null);
       }
+      
+      // Check offline mode status
+      const isEnabled = await OfflineStorage.isOfflineEnabled();
+      setOfflineEnabled(isEnabled);
     } catch (error) {
       console.error('Error loading user data:', error);
     }
@@ -114,10 +124,17 @@ export default function ProfilePage() {
             {/* Avatar */}
             <View style={styles.avatarContainer}>
               <View style={styles.avatarLarge}>
-                <Image
-                  source={require('../../assets/images/profilepictureplaceholdericon.png')}
-                  style={styles.avatarLargeIcon}
-                />
+                {profilePicture ? (
+                  <Image
+                    source={{ uri: profilePicture }}
+                    style={styles.avatarImage}
+                  />
+                ) : (
+                  <Image
+                    source={require('../../assets/images/profilepictureplaceholdericon.png')}
+                    style={styles.avatarLargeIcon}
+                  />
+                )}
               </View>
             </View>
 
@@ -159,6 +176,19 @@ export default function ProfilePage() {
               <Text style={styles.menuOptionText}>Premium</Text>
               <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
             </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.menuOption}
+              onPress={() => setShowOfflineModal(true)}
+            >
+              <Ionicons name="cloud-download-outline" size={20} color="#07bbc0" />
+              <Text style={styles.menuOptionText}>Offline Mode</Text>
+              {offlineEnabled && (
+                <View style={styles.enabledBadge}>
+                  <Text style={styles.enabledBadgeText}>ON</Text>
+                </View>
+              )}
+              <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </View>
@@ -195,6 +225,19 @@ export default function ProfilePage() {
           </View>
         </TouchableOpacity>
       )}
+
+      {/* Offline Mode Modal */}
+      <OfflineModeModal
+        visible={showOfflineModal}
+        onClose={() => {
+          setShowOfflineModal(false);
+          // Refresh offline status when modal closes
+          loadUserData();
+        }}
+        onEnable={() => {
+          setOfflineEnabled(true);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -206,7 +249,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   sidebar: {
-    backgroundColor: '#031A23',
+    backgroundColor: '#000E1C',
     width: 80,
     paddingTop: 20,
     paddingBottom: 30,
@@ -264,6 +307,12 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     resizeMode: 'contain',
+  },
+  avatarImage: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    resizeMode: 'cover',
   },
   userName: {
     fontSize: 24,
@@ -352,5 +401,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '500',
+  },
+  enabledBadge: {
+    backgroundColor: '#07bbc0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginRight: 8,
+  },
+  enabledBadgeText: {
+    color: '#041527',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

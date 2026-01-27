@@ -24,11 +24,19 @@ export default function LoginScreen() {
     try {
       const user = await AuthController.login({ email, password });
       
+      // Log user data for debugging
+      console.log('🔵 Login - User role:', user.role);
+      console.log('🔵 Login - User email:', user.email);
+      console.log('🔵 Login - Full user object:', JSON.stringify(user, null, 2));
+      
       // Check if user is admin - redirect to admin dashboard
       if (user.role === 'admin') {
+        console.log('✅ Admin detected - redirecting to admin dashboard');
         router.replace('/(admin)/adminDashboard');
         return;
       }
+      
+      console.log('ℹ️ Non-admin user - checking skill profile status');
       
       // Check if user has completed skill profile
       if (!user.hasCompletedSkillProfile) {
@@ -43,7 +51,9 @@ export default function LoginScreen() {
       let errorMessage = 'Login failed. Please try again.';
       
       if (error.message) {
-        if (error.message.includes('user-not-found') || error.message.includes('No account found')) {
+        if (error.message.includes('blocked')) {
+          errorMessage = 'This account has been blocked. Please contact support for details.';
+        } else if (error.message.includes('user-not-found') || error.message.includes('No account found')) {
           errorMessage = 'Invalid credentials. No account found with this email.';
         } else if (error.message.includes('wrong-password') || error.message.includes('Incorrect password')) {
           errorMessage = 'Invalid credentials. Incorrect password.';
@@ -82,7 +92,7 @@ export default function LoginScreen() {
           style={styles.iconImage}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your email"
           placeholderTextColor="white"
           value={email}
@@ -100,7 +110,7 @@ export default function LoginScreen() {
           style={styles.iconImage}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your password"
           placeholderTextColor="white"
           value={password}

@@ -8,11 +8,13 @@ export interface User {
   firstName: string;
   lastName: string;
   createdAt: Date;
+  lastActive?: Date;
   profilePicture?: string;
   role: UserRole;
   hasCompletedSkillProfile: boolean;
   subscriptionStatus?: string;
   trainerApproved?: boolean;
+  blocked?: boolean;
   // Physical Attributes
   height?: number; // cm
   weight?: number; // kg

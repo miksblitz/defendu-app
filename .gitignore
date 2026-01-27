@@ -49,4 +49,8 @@ app-example
 # Firebase service account keys (NEVER commit these!)
 *-firebase-adminsdk-*.json
 *firebase-adminsdk*.json
+
+
+
+
 serviceAccountKey.json

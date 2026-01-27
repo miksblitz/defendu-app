@@ -46,8 +46,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Create deep link with custom token (not OOB code)
   const deepLink = `defenduapp://resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`;
   
-  // Web app URL for desktop/PC testing
-  const webAppUrl = process.env.WEB_APP_URL || 'http://localhost:8081';
+  // Web app URL for desktop/PC - use WEB_APP_URL if set, otherwise use API_BASE_URL, or default to localhost for dev
+  const apiBaseUrl = process.env.API_BASE_URL || 'https://defendu-app.vercel.app';
+  // Remove /api from API_BASE_URL if present to get the base domain
+  const baseUrl = apiBaseUrl.replace(/\/api\/?$/, '');
+  const webAppUrl = process.env.WEB_APP_URL || baseUrl || 'http://localhost:8081';
   const webAppLink = `${webAppUrl}/resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`;
   
   // HTML page that tries to open the app and shows fallback
@@ -58,6 +61,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <title>Opening Defendu App...</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta name="apple-mobile-web-app-capable" content="yes">
+        <script>
+          // Immediate redirect detection - run before DOM loads
+          (function() {
+            try {
+              const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+              const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+              const isAndroid = /android/i.test(userAgent);
+              const isMobile = isIOS || isAndroid;
+              const isWeb = !isMobile;
+              
+              if (isWeb) {
+                // For web, redirect immediately
+                const webLink = '${webAppLink}';
+                console.log('Web detected, redirecting to:', webLink);
+                // Use replace to prevent back navigation
+                if (window.location.replace) {
+                  window.location.replace(webLink);
+                } else {
+                  window.location.href = webLink;
+                }
+              }
+            } catch (e) {
+              console.error('Redirect error:', e);
+            }
+          })();
+        </script>
+        <noscript>
+          <meta http-equiv="refresh" content="0;url=${webAppLink}">
+        </noscript>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -135,12 +167,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <script>
           (function() {
             const deepLink = "${deepLink}";
+            const webLink = '${webAppLink}';
             const userAgent = navigator.userAgent || navigator.vendor || window.opera;
             const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
             const isAndroid = /android/i.test(userAgent);
             const isMobile = isIOS || isAndroid;
+            // Check if it's a web browser (not mobile)
+            const isWeb = !isMobile;
             
-            console.log('Device detected:', { isIOS, isAndroid, isMobile });
+            console.log('Device detected:', { isIOS, isAndroid, isMobile, isWeb });
             
             // Function to try opening the app
             function tryOpenApp() {
@@ -179,22 +214,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   showFallback();
                 }, 2000);
               }
-              // For desktop/web - redirect to web version of app
-              else {
-                // Redirect to web version of the app with token
-                const webLink = '${webAppLink}';
-                console.log('Desktop detected - redirecting to web app:', webLink);
-                
-                // Try to redirect to web version
-                setTimeout(function() {
-                  window.location.href = webLink;
-                }, 500);
-                
-                // Show fallback if web redirect doesn't work
-                setTimeout(function() {
-                  showFallback();
-                }, 2000);
-              }
             }
             
             function showFallback() {
@@ -204,26 +223,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               }
             }
             
-            // Try to open immediately on page load
-            if (isMobile) {
-              tryOpenApp();
+            // Handle web browsers - automatically redirect to web app
+            if (isWeb) {
+              console.log('Web browser detected - automatically redirecting to web app:', webLink);
+              // Use replace instead of href to prevent back navigation
+              window.location.replace(webLink);
             } else {
-              // For desktop, show instructions immediately
-              showFallback();
+              // For mobile, try to open the app
+              tryOpenApp();
             }
             
-            // Also handle button click
+            // Also handle button click for mobile fallback
             document.addEventListener('DOMContentLoaded', function() {
               const button = document.querySelector('.button');
               if (button) {
                 button.addEventListener('click', function(e) {
                   e.preventDefault();
-                  window.location.href = deepLink;
-                  
-                  // Show instructions after click
-                  setTimeout(function() {
-                    showFallback();
-                  }, 1000);
+                  if (isMobile) {
+                    window.location.href = deepLink;
+                    // Show instructions after click
+                    setTimeout(function() {
+                      showFallback();
+                    }, 1000);
+                  } else {
+                    // If somehow on web and button is clicked, redirect to web app
+                    window.location.href = webLink;
+                  }
                 });
               }
             });

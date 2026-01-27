@@ -216,7 +216,7 @@ export default function SignUpScreen() {
           style={styles.iconImage}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your username"
           placeholderTextColor="white"
           value={form.username}
@@ -234,7 +234,7 @@ export default function SignUpScreen() {
           style={styles.iconImage}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your First Name"
           placeholderTextColor="white"
           value={form.firstName}
@@ -258,7 +258,7 @@ export default function SignUpScreen() {
           style={styles.iconImage}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your Last Name"
           placeholderTextColor="white"
           value={form.lastName}
@@ -282,7 +282,7 @@ export default function SignUpScreen() {
           style={styles.iconImage}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your email"
           placeholderTextColor="white"
           value={form.email}
@@ -308,7 +308,7 @@ export default function SignUpScreen() {
           style={styles.iconImage}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your password"
           placeholderTextColor="white"
           value={form.password}
@@ -344,7 +344,7 @@ export default function SignUpScreen() {
           style={styles.iconImage}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Re-type your password"
           placeholderTextColor="white"
           value={form.confirmPassword}

@@ -15,6 +15,7 @@ import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ResetPasswordScreen() {
   const [password, setPassword] = useState('');
@@ -34,6 +35,57 @@ export default function ResetPasswordScreen() {
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
 
   useEffect(() => {
+    // Clear session data on mount to prevent back navigation
+    const clearSession = async () => {
+      try {
+        // Sign out from Firebase Auth first
+        try {
+          await signOut(auth);
+          console.log('✅ Signed out from Firebase Auth');
+        } catch (authError) {
+          console.log('⚠️ No active Firebase session to sign out');
+        }
+
+        // Clear AsyncStorage completely
+        await AsyncStorage.clear();
+        console.log('✅ Cleared AsyncStorage');
+
+        // Clear web storage if on web
+        if (typeof window !== 'undefined') {
+          // Clear localStorage
+          window.localStorage.clear();
+          console.log('✅ Cleared localStorage');
+          
+          // Clear sessionStorage
+          window.sessionStorage.clear();
+          console.log('✅ Cleared sessionStorage');
+          
+          // Clear all cookies
+          document.cookie.split(";").forEach((c) => {
+            const cookieName = c.split("=")[0].trim();
+            // Clear cookie for current domain
+            document.cookie = `${cookieName}=;expires=${new Date(0).toUTCString()};path=/`;
+            // Clear cookie for root domain
+            document.cookie = `${cookieName}=;expires=${new Date(0).toUTCString()};path=/;domain=${window.location.hostname}`;
+          });
+          console.log('✅ Cleared cookies');
+
+          // Replace current history entry to prevent back navigation
+          window.history.replaceState(null, '', window.location.href);
+          
+          // Push a new state to prevent going back further
+          window.history.pushState(null, '', window.location.href);
+          
+          console.log('✅ Reset browser history');
+        }
+      } catch (error) {
+        console.error('❌ Error clearing session:', error);
+      }
+    };
+    
+    // Clear session immediately on mount
+    clearSession();
+
     // Only check for token if params are loaded
     if (params && Object.keys(params).length > 0) {
       if (!token) {
@@ -53,7 +105,41 @@ export default function ResetPasswordScreen() {
         validateToken(token);
       }
     }
-  }, [params, token]);
+
+    // Set up aggressive back navigation prevention on web
+    let popstateHandler: ((e: PopStateEvent) => void) | null = null;
+    let hashChangeHandler: (() => void) | null = null;
+    
+    if (typeof window !== 'undefined') {
+      // Prevent back button navigation - redirect to login immediately
+      popstateHandler = (e: PopStateEvent) => {
+        // Push current state again to prevent navigation
+        window.history.pushState(null, '', window.location.href);
+        // Force redirect to login
+        router.replace('/(auth)/login');
+      };
+      window.addEventListener('popstate', popstateHandler);
+
+      // Also prevent hashchange (some browsers use this for navigation)
+      hashChangeHandler = () => {
+        window.history.pushState(null, '', window.location.href);
+        router.replace('/(auth)/login');
+      };
+      window.addEventListener('hashchange', hashChangeHandler);
+    }
+
+    // Cleanup function
+    return () => {
+      if (typeof window !== 'undefined') {
+        if (popstateHandler) {
+          window.removeEventListener('popstate', popstateHandler);
+        }
+        if (hashChangeHandler) {
+          window.removeEventListener('hashchange', hashChangeHandler);
+        }
+      }
+    };
+  }, [params, token, router]);
 
   // Validate token with backend API
   const validateToken = async (token: string) => {
@@ -269,13 +355,79 @@ export default function ResetPasswordScreen() {
         throw new Error(errorMessage);
       }
       
+      // Clear all session data comprehensively after password reset
+      try {
+        // Sign out from Firebase Auth first
+        try {
+          await signOut(auth);
+          console.log('✅ Signed out from Firebase Auth after password reset');
+        } catch (authError) {
+          console.log('⚠️ No active Firebase session to sign out');
+        }
+
+        // Clear AsyncStorage completely
+        await AsyncStorage.clear();
+        console.log('✅ Cleared AsyncStorage after password reset');
+
+        // Clear web storage if on web
+        if (typeof window !== 'undefined') {
+          // Clear localStorage
+          window.localStorage.clear();
+          console.log('✅ Cleared localStorage after password reset');
+          
+          // Clear sessionStorage
+          window.sessionStorage.clear();
+          console.log('✅ Cleared sessionStorage after password reset');
+          
+          // Clear all cookies comprehensively
+          document.cookie.split(";").forEach((c) => {
+            const cookieName = c.split("=")[0].trim();
+            // Clear cookie for current domain
+            document.cookie = `${cookieName}=;expires=${new Date(0).toUTCString()};path=/`;
+            // Clear cookie for root domain
+            document.cookie = `${cookieName}=;expires=${new Date(0).toUTCString()};path=/;domain=${window.location.hostname}`;
+          });
+          console.log('✅ Cleared cookies after password reset');
+
+          // Aggressively reset browser history
+          window.history.replaceState(null, '', window.location.href);
+          window.history.pushState(null, '', window.location.href);
+          console.log('✅ Reset browser history after password reset');
+        }
+      } catch (error) {
+        console.error('❌ Error clearing session after password reset:', error);
+      }
+
       // Show success toast
       showToast('Password reset successfully! Redirecting to login...');
       
-      // Navigate to login after a short delay
+      // Navigate to login after a short delay and prevent back navigation
       setTimeout(() => {
         setLoading(false);
-        router.replace('/login');
+        router.dismissAll();
+        
+        // Final history manipulation to prevent back navigation
+        if (typeof window !== 'undefined' && window.history) {
+          // Replace current history entry
+          window.history.replaceState(null, '', window.location.href);
+          // Push login page state
+          window.history.pushState(null, '', '/(auth)/login');
+          
+          // Set up popstate handler to prevent going back
+          const preventBack = () => {
+            window.history.pushState(null, '', '/(auth)/login');
+            router.replace('/(auth)/login');
+          };
+          window.addEventListener('popstate', preventBack);
+          
+          // Remove the handler after a short delay to avoid memory leaks
+          setTimeout(() => {
+            window.removeEventListener('popstate', preventBack);
+          }, 1000);
+        }
+        
+        // Use replace to prevent going back to reset password page
+        router.replace('/(auth)/login');
       }, 2000);
     } catch (error: any) {
       console.error('Password reset error:', error);
@@ -401,7 +553,7 @@ export default function ResetPasswordScreen() {
 
       <TouchableOpacity 
         style={{ marginTop: 24 }} 
-        onPress={() => router.push('/forgotpassword')}
+        onPress={() => router.replace('/forgotpassword')}
         disabled={loading}
       >
         <Text style={styles.backText}>← Request New Reset Link</Text>

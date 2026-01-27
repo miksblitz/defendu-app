@@ -3,6 +3,12 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 
+// Cloudinary Configuration
+export const cloudinaryConfig = {
+  cloudName: process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME ?? 'diii2xfo6',
+  uploadPreset: process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? 'defendu_uploads',
+};
+
 // Prefer environment variables so secrets aren’t hard-coded.
 // In Expo, you can define these as EXPO_PUBLIC_* in a .env / .env.local file
 // and access them via process.env at build time.

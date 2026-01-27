@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,34 +6,42 @@ import {
   StyleSheet,
   SafeAreaView,
   Image,
-  ImageBackground,
   ScrollView,
+  ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
+import { AnalyticsController, AnalyticsData } from '../controllers/AnalyticsController';
+import Svg, { Polyline, Line, Circle } from 'react-native-svg';
 
-const adminCards = [
-  {
-    id: 1,
-    label: 'Manage Trainer Applications',
-    route: '/trainer-applications', // You can add this route later
-  },
-  {
-    id: 2,
-    label: 'Manage Users',
-    route: '/manage-users', // You can add this route later
-  },
-  {
-    id: 3,
-    label: 'Modules',
-    route: '/modules', // You can add this route later
-  },
-];
+const { width: screenWidth } = Dimensions.get('window');
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadAnalytics();
+    // Refresh analytics every 30 seconds
+    const interval = setInterval(loadAnalytics, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadAnalytics = async () => {
+    try {
+      setLoading(true);
+      const data = await AnalyticsController.getAnalytics();
+      setAnalytics(data);
+    } catch (error) {
+      console.error('Error loading analytics:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -44,96 +52,261 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleMessages = () => {
-    setShowMenu(false);
-    // TODO: Navigate to messages page
-    console.log('Navigate to messages');
+  const formatNumber = (num: number): string => {
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'k';
+    }
+    return num.toString();
   };
 
-  const handleCardPress = (route: string) => {
-    // TODO: Navigate to the specific admin section
-    console.log('Navigate to:', route);
+  const formatCurrency = (amount: number): string => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
   };
+
+  // Mini Line Chart Component for Total Registrations
+  const MiniLineChart = () => {
+    // Sample data for the mini chart (12 weeks)
+    const chartData = [2, 4, 3, 6, 5, 8, 7, 9, 8, 10, 9, 12];
+    const maxValue = Math.max(...chartData);
+    const chartWidth = 80;
+    const chartHeight = 40;
+    const padding = 4;
+    const points = chartData.map((value, index) => {
+      const x = (index / (chartData.length - 1)) * (chartWidth - padding * 2) + padding;
+      const y = chartHeight - (value / maxValue) * (chartHeight - padding * 2) - padding;
+      return `${x},${y}`;
+    }).join(' ');
+
+    return (
+      <View style={styles.miniChartContainer}>
+        <Text style={styles.miniChartTitle}>Months vs Usage</Text>
+        <Svg width={chartWidth} height={chartHeight} style={styles.miniChartSvg}>
+          <Polyline
+            points={points}
+            fill="none"
+            stroke="#38a6de"
+            strokeWidth="2"
+          />
+        </Svg>
+      </View>
+    );
+  };
+
+  // Bar Chart Component with Y-axis
+  const BarChart = ({ data, maxValue }: { data: { technique: string; count: number }[]; maxValue: number }) => {
+    if (data.length === 0) {
+      return (
+        <View style={styles.chartContainer}>
+          <Text style={styles.noDataText}>No technique data available. Graph will populate once users perform techniques.</Text>
+        </View>
+      );
+    }
+
+    // Calculate rounded max for Y-axis (round up to nearest 5)
+    const roundedMax = Math.ceil(maxValue / 5) * 5 || 20;
+    const yAxisLabels = [0, 5, 10, 15, 20].filter(val => val <= roundedMax);
+    const chartHeight = 200;
+    const barWidth = 60;
+    const spacing = 40;
+
+    return (
+      <View style={styles.chartContainer}>
+        {/* Y-axis labels */}
+        <View style={styles.yAxisContainer}>
+          {yAxisLabels.map((label, index) => (
+            <Text key={index} style={styles.yAxisLabel}>{label}</Text>
+          ))}
+        </View>
+        
+        {/* Chart area */}
+        <View style={styles.barChartArea}>
+          {data.slice(0, 5).map((item, index) => {
+            const barHeight = maxValue > 0 ? (item.count / roundedMax) * chartHeight : 0;
+            return (
+              <View key={index} style={styles.barChartItem}>
+                <View style={styles.barWrapper}>
+                  <View style={[styles.bar, { height: Math.max(barHeight, 4) }]} />
+                  <Text style={styles.barCount}>{item.count}</Text>
+                </View>
+                <Text style={styles.barChartLabel} numberOfLines={2}>{item.technique}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  if (loading && !analytics) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#38a6de" />
+          <Text style={styles.loadingText}>Loading Analytics...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const data = analytics || AnalyticsController.getDefaultAnalytics();
+  const maxTechniqueCount = data.topPerformedTechniques.length > 0
+    ? Math.max(...data.topPerformedTechniques.map(t => t.count))
+    : 1;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Main Content */}
-        <View style={styles.mainContent}>
-          {/* Header Section */}
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.menuButton}
-              onPress={() => setShowMenu(true)}
-            >
-              <Ionicons name="menu" size={28} color="#FFFFFF" />
-            </TouchableOpacity>
-            
-            <View style={styles.headerContent}>
-              <Image
-                source={require('../../assets/images/defendudashboardlogo.png')}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-              <Text style={styles.pageTitle}>Admin</Text>
+        {/* Left Navigation Bar */}
+        <View style={styles.leftNavBar}>
+          {/* Hamburger Menu */}
+          <TouchableOpacity 
+            style={styles.navMenuButton}
+            onPress={() => setShowMenu(true)}
+          >
+            <Ionicons name="menu" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          
+          {/* Bottom Icons - One Box */}
+          <View style={styles.navBottomIcons}>
+            <View style={styles.navIconsBox}>
+              <TouchableOpacity 
+                onPress={() => router.push('/(admin)/adminManaging')}
+              >
+                <Image
+                  source={require('../../assets/images/adminmanageicon.png')}
+                  style={styles.navIconImage}
+                />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.navIconActiveButton}
+                onPress={() => {}}
+                disabled={true}
+              >
+                <Image
+                  source={require('../../assets/images/homeicon.png')}
+                  style={styles.navIconImage}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Header with DEFENDU Logo and Admin */}
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Image
+              source={require('../../assets/images/defendudashboardlogo.png')}
+              style={styles.headerLogoImage}
+              resizeMode="contain"
+            />
+            <Text style={styles.headerAdminText}>Admin</Text>
+          </View>
+        </View>
+
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Active Users and Trainers Boxes */}
+          <View style={styles.activeBoxesRow}>
+            <View style={styles.activeBox}>
+              <Text style={styles.activeBoxLabel}>Active Users</Text>
+              <Text style={styles.activeBoxSubLabel}>Individual</Text>
+              <Text style={styles.activeBoxValue}>{data.totalActiveUsers}</Text>
+              <Text style={styles.activeBoxOnline}>{data.activeUsersOnline} Online</Text>
+            </View>
+
+            <View style={styles.activeBox}>
+              <Text style={styles.activeBoxLabel}>Active Trainers</Text>
+              <Text style={styles.activeBoxSubLabel}>Verified</Text>
+              <Text style={styles.activeBoxValue}>{data.activeTrainers}</Text>
+              <Text style={styles.activeBoxOnline}>{data.activeTrainersOnline} Online</Text>
             </View>
           </View>
 
-          {/* Cards Section */}
-          <View style={styles.cardsWrapper}>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.cardsContainer}
-              style={styles.cardsScrollView}
-            >
-            {adminCards.map((card) => (
-              <TouchableOpacity
-                key={card.id}
-                style={styles.card}
-                onPress={() => handleCardPress(card.route)}
-                activeOpacity={0.8}
-              >
-                <ImageBackground
-                  source={require('../../assets/images/react-logo.png')} // Placeholder - replace with actual images
-                  style={styles.cardBackground}
-                  imageStyle={styles.cardBackgroundImage}
-                >
-                  <View style={styles.cardOverlay}>
-                    <View style={styles.cardLabelContainer}>
-                      <Text style={styles.cardLabel}>{card.label}</Text>
-                    </View>
-                  </View>
-                </ImageBackground>
-              </TouchableOpacity>
-            ))}
-            </ScrollView>
-          </View>
-        </View>
+          {/* KPI Cards Row - Horizontal */}
+          <View style={styles.kpiRow}>
+            {/* Total Registrations */}
+            <View style={styles.kpiCard}>
+              <View style={styles.kpiHeader}>
+                <Text style={styles.kpiTitle}>Total Registrations</Text>
+              </View>
+              <Text style={styles.kpiValue}>{formatNumber(data.totalRegistrations)}</Text>
+              <Text style={styles.kpiSubtext}>Online</Text>
+              <View style={styles.kpiTrend}>
+                <Ionicons name="trending-up" size={14} color="#4CAF50" />
+                <Text style={styles.kpiTrendText}>+15% this month</Text>
+              </View>
+              <View style={styles.kpiChartContainer}>
+                <MiniLineChart />
+              </View>
+            </View>
 
-        {/* Vertical Navigation Bar - Bottom Left */}
-        <View style={styles.bottomNavBar}>
-          <TouchableOpacity 
-            style={styles.navIconButton}
-            onPress={() => router.push('/(tabs)/profile')}
-          >
-            <Image
-              source={require('../../assets/images/blueprofileicon.png')}
-              style={styles.navIconImage}
-            />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.navIconButton, styles.navIconActive]}
-            onPress={() => {}} // Home icon - stay on admin dashboard
-            disabled={true}
-          >
-            <Image
-              source={require('../../assets/images/homeicon.png')}
-              style={styles.navIconImage}
-            />
-          </TouchableOpacity>
-        </View>
+            {/* Pending Trainer Verifications */}
+            <View style={styles.kpiCard}>
+              <View style={styles.kpiHeader}>
+                <Text style={styles.kpiTitle}>Pending Trainer</Text>
+                <Text style={styles.kpiTitle}>Verifications</Text>
+              </View>
+              <Text style={styles.kpiValue}>{data.pendingTrainerVerifications}</Text>
+              <Text style={styles.kpiSubtext}>Applications</Text>
+            </View>
+
+            {/* Pending Module Reviews */}
+            <View style={styles.kpiCard}>
+              <View style={styles.kpiHeader}>
+                <Text style={styles.kpiTitle}>Pending Module</Text>
+                <Text style={styles.kpiTitle}>Reviews</Text>
+              </View>
+              <Text style={styles.kpiValue}>{data.pendingModuleReviews}</Text>
+              <Text style={styles.kpiSubtext}>New Modules</Text>
+            </View>
+          </View>
+
+          {/* Top Performed Techniques Chart */}
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>Top Performed Techniques</Text>
+            <BarChart data={data.topPerformedTechniques} maxValue={maxTechniqueCount} />
+          </View>
+
+          {/* Revenue Card */}
+          <View style={styles.revenueCard}>
+            <View style={styles.revenueHeader}>
+              <Text style={styles.revenueTitle}>Revenue Overview</Text>
+              <View style={[styles.profitabilityBadge, data.revenue.isProfitable ? styles.profitable : styles.losing]}>
+                <Ionicons 
+                  name={data.revenue.isProfitable ? "trending-up" : "trending-down"} 
+                  size={16} 
+                  color="#FFFFFF" 
+                />
+                <Text style={styles.profitabilityText}>
+                  {data.revenue.isProfitable ? 'Profitable' : 'Losing Money'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.revenueGrid}>
+              <View style={styles.revenueItem}>
+                <Text style={styles.revenueLabel}>Total Revenue</Text>
+                <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.totalRevenue)}</Text>
+              </View>
+              <View style={styles.revenueItem}>
+                <Text style={styles.revenueLabel}>Monthly Revenue</Text>
+                <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.monthlyRevenue)}</Text>
+              </View>
+              <View style={styles.revenueItem}>
+                <Text style={styles.revenueLabel}>Subscription Revenue</Text>
+                <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.subscriptionRevenue)}</Text>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
       </View>
 
       {/* Pop-up Menu */}
@@ -144,17 +317,6 @@ export default function AdminDashboard() {
           onPress={() => setShowMenu(false)}
         >
           <View style={styles.menuContainer}>
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={handleMessages}
-            >
-              <Image
-                source={require('../../assets/images/messageicon.png')}
-                style={styles.menuIcon}
-              />
-              <Text style={styles.menuText}>Messages</Text>
-            </TouchableOpacity>
-            
             <TouchableOpacity 
               style={styles.menuItem}
               onPress={handleLogout}
@@ -181,114 +343,331 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
   },
-  mainContent: {
+  loadingContainer: {
     flex: 1,
-    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    marginTop: 16,
+    fontSize: 16,
+  },
+  leftNavBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 80,
+    backgroundColor: '#000E1C',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: 20,
+    paddingBottom: 30,
+    zIndex: 10,
+  },
+  navMenuButton: {
+    padding: 12,
+  },
+  navBottomIcons: {
+    alignItems: 'center',
+    paddingBottom: 20,
+  },
+  navIconsBox: {
+    backgroundColor: 'rgba(56, 166, 222, 0.1)',
+    borderRadius: 12,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.2)',
+    flexDirection: 'column',
+    gap: 12,
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 40,
-  },
-  menuButton: {
-    padding: 8,
-    marginRight: 16,
+    paddingLeft: 100,
+    paddingRight: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
   },
   headerContent: {
-    flex: 1,
+    flexDirection: 'column',
   },
-  logoImage: {
+  headerLogoImage: {
     width: 180,
     height: 60,
-    marginBottom: 10,
+    marginBottom: 4,
   },
-  pageTitle: {
-    fontSize: 24,
-    fontWeight: '600',
+  headerAdminText: {
     color: '#FFFFFF',
-    fontFamily: 'system-ui', // Clean sans-serif
-    letterSpacing: 0.5,
+    fontSize: 16,
+    fontWeight: '500',
   },
-  cardsWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardsScrollView: {
-    flexGrow: 0,
-  },
-  cardsContainer: {
-    flexDirection: 'row',
-    gap: 20,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  card: {
-    width: 300,
-    height: 220,
+  navIconButton: {
+    width: 48,
+    height: 48,
     borderRadius: 12,
-    overflow: 'hidden',
-    marginRight: 20,
-  },
-  cardBackground: {
-    width: '100%',
-    height: '100%',
-  },
-  cardBackgroundImage: {
-    resizeMode: 'cover',
-  },
-  cardOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(11, 22, 37, 0.7)',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-start',
-    padding: 12,
-  },
-  cardLabelContainer: {
-    backgroundColor: 'rgba(51, 51, 51, 0.9)',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    marginTop: 0,
-  },
-  cardLabel: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: 'system-ui',
-    letterSpacing: 0.3,
-  },
-  bottomNavBar: {
-    position: 'absolute',
-    bottom: 30,
-    left: 20,
-    backgroundColor: 'rgba(11, 22, 37, 0.95)',
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    flexDirection: 'column',
-    gap: 20,
+    backgroundColor: 'rgba(56, 166, 222, 0.1)',
+    justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(56, 166, 222, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  navIconButton: {
-    padding: 8,
-    borderRadius: 8,
   },
   navIconActive: {
-    backgroundColor: 'rgba(56, 166, 222, 0.15)',
+    backgroundColor: 'rgba(56, 166, 222, 0.2)',
+    borderColor: 'rgba(56, 166, 222, 0.4)',
   },
   navIconImage: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     tintColor: '#38a6de',
     resizeMode: 'contain',
+  },
+  navIconActiveButton: {
+    backgroundColor: '#024446',
+    borderRadius: 8,
+    padding: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingLeft: 100,
+    paddingRight: 20,
+    paddingBottom: 100,
+  },
+  activeBoxesRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 24,
+  },
+  activeBox: {
+    flex: 1,
+    backgroundColor: '#0D1C2C',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.2)',
+  },
+  activeBoxLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  activeBoxSubLabel: {
+    color: '#B0BEC5',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  activeBoxValue: {
+    color: '#38a6de',
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  activeBoxOnline: {
+    color: '#4CAF50',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  kpiRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 24,
+  },
+  kpiCard: {
+    flex: 1,
+    backgroundColor: '#0D1C2C',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.2)',
+    minHeight: 180,
+  },
+  kpiHeader: {
+    marginBottom: 12,
+  },
+  kpiTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  kpiValue: {
+    color: '#38a6de',
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  kpiSubtext: {
+    color: '#B0BEC5',
+    fontSize: 11,
+    marginBottom: 8,
+  },
+  kpiTrend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 8,
+  },
+  kpiTrendText: {
+    color: '#4CAF50',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  kpiChartContainer: {
+    marginTop: 8,
+    alignItems: 'flex-end',
+  },
+  miniChartContainer: {
+    alignItems: 'flex-end',
+  },
+  miniChartTitle: {
+    color: '#B0BEC5',
+    fontSize: 9,
+    marginBottom: 4,
+    textAlign: 'right',
+  },
+  miniChartSvg: {
+    alignSelf: 'flex-end',
+  },
+  chartCard: {
+    backgroundColor: 'rgba(30, 30, 30, 0.8)',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.2)',
+  },
+  chartTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 20,
+  },
+  chartContainer: {
+    flexDirection: 'row',
+    minHeight: 220,
+  },
+  yAxisContainer: {
+    justifyContent: 'space-between',
+    paddingRight: 12,
+    paddingBottom: 20,
+    paddingTop: 10,
+  },
+  yAxisLabel: {
+    color: '#B0BEC5',
+    fontSize: 12,
+    fontWeight: '500',
+    height: 40,
+    textAlign: 'right',
+  },
+  barChartArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    paddingBottom: 20,
+    paddingTop: 10,
+  },
+  barChartItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  barWrapper: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: 200,
+    marginBottom: 8,
+  },
+  bar: {
+    width: 40,
+    backgroundColor: '#38a6de',
+    borderRadius: 4,
+    minHeight: 4,
+  },
+  barCount: {
+    color: '#38a6de',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  barChartLabel: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+    maxWidth: 60,
+  },
+  noDataText: {
+    color: '#B0BEC5',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  revenueCard: {
+    backgroundColor: '#0D1C2C',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(156, 39, 176, 0.3)',
+  },
+  revenueHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  revenueTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  profitabilityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  profitable: {
+    backgroundColor: '#4CAF50',
+  },
+  losing: {
+    backgroundColor: '#F44336',
+  },
+  profitabilityText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  revenueGrid: {
+    gap: 12,
+  },
+  revenueItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  revenueLabel: {
+    color: '#B0BEC5',
+    fontSize: 14,
+  },
+  revenueAmount: {
+    color: '#9C27B0',
+    fontSize: 16,
+    fontWeight: '600',
   },
   menuOverlay: {
     position: 'absolute',

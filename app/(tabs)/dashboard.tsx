@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Image,
     SafeAreaView,
@@ -8,9 +8,12 @@ import {
     Text,
     TouchableOpacity,
     View,
+    Dimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import { AuthController } from '../controllers/AuthController';
+import { OfflineStorage } from '../utils/offlineStorage';
 
 const circleSize = 40;
 const strokeWidth = 4;
@@ -64,6 +67,17 @@ const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // Realistic progress values - showing some completed days
 const progressValues = [1, 0.8, 0.6, 0.3, 0, 0, 0]; // Progress for each day
 
+// Get screen width for horizontal scrolling
+const screenWidth = Dimensions.get('window').width;
+// Calculate module card width to fit exactly 4 in a row
+// Available width = screenWidth - sidebar(80) - mainContentContainer padding(60) - modulesContainer padding(24)
+// For 4 cards: 3 gaps of 12px between them (no gap after the 4th card)
+const availableWidth = screenWidth - 80 - 60 - 24;
+const gapBetweenCards = 12; // Gap between cards (not after last card in row)
+const totalGapsFor4Cards = gapBetweenCards * 3; // 3 gaps between 4 cards
+const moduleCardWidth = Math.floor((availableWidth - totalGapsFor4Cards) / 4); // Floor to ensure it fits
+const moduleCardMarginRight = gapBetweenCards;
+
 export default function DashboardScreen() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
@@ -77,8 +91,21 @@ export default function DashboardScreen() {
 
   const handleLogout = async () => {
     try {
+      // Clear all session data
       await AuthController.logout();
+      await OfflineStorage.clearOfflineData();
+      
+      // Clear navigation history and prevent back navigation
+      router.dismissAll();
       router.replace('/(auth)/login');
+      
+      // Prevent back button navigation
+      if (typeof window !== 'undefined' && window.history) {
+        window.history.pushState(null, '', window.location.href);
+        window.onpopstate = () => {
+          window.history.pushState(null, '', window.location.href);
+        };
+      }
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -175,130 +202,148 @@ export default function DashboardScreen() {
         </View>
 
         {/* Main Content */}
-        <View style={styles.mainContent}>
-          {/* Welcome Header */}
-          <View style={styles.welcomeSection}>
-            <Image
-              source={require('../../assets/images/defendudashboardlogo.png')}
-              style={styles.logoImage}
-            />
-            <View style={styles.welcomeTextContainer}>
-              <Text style={styles.welcomeText}>Welcome back, {userName}!</Text>
-              <Text style={styles.welcomeSubtext}>Today is {todayName} - Let's keep training</Text>
+        <ScrollView
+          horizontal
+          style={styles.mainContentScrollView}
+          contentContainerStyle={styles.mainContentHorizontalContainer}
+          showsHorizontalScrollIndicator={true}
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled={true}
+          bounces={true}
+          decelerationRate="fast"
+        >
+          <ScrollView
+            style={styles.mainContentVerticalScrollView}
+            contentContainerStyle={styles.mainContentContainer}
+            showsVerticalScrollIndicator={true}
+            showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled={true}
+          >
+            {/* Welcome Header */}
+            <View style={styles.welcomeSection}>
+              <Image
+                source={require('../../assets/images/defendudashboardlogo.png')}
+                style={styles.logoImage}
+              />
+              <View style={styles.welcomeTextContainer}>
+                <Text style={styles.welcomeText}>Welcome back, {userName}!</Text>
+                <Text style={styles.welcomeSubtext}>Today is {todayName} - Let's keep training</Text>
+              </View>
             </View>
-          </View>
 
-          {/* Weekly Goal */}
-          <View style={styles.weeklyGoalContainer}>
-            <View style={styles.weeklyGoalHeader}>
-              <View>
-                <Text style={styles.weeklyGoalTitle}>Weekly Goal</Text>
-                <Text style={styles.weeklyGoalSubtitle}>
-                  Track your training progress
-                </Text>
+            {/* Weekly Goal */}
+            <View style={styles.weeklyGoalContainer}>
+              <View style={styles.weeklyGoalHeader}>
+                <View>
+                  <Text style={styles.weeklyGoalTitle}>Weekly Goal</Text>
+                  <Text style={styles.weeklyGoalSubtitle}>
+                    Track your training progress
+                  </Text>
+                </View>
+                <View style={styles.weeklyGoalStats}>
+                  <Text style={styles.weeklyGoalPercentage}>
+                    {Math.round(weeklyProgress * 100)}%
+                  </Text>
+                  <Text style={styles.weeklyGoalLabel}>Complete</Text>
+                </View>
               </View>
-              <View style={styles.weeklyGoalStats}>
-                <Text style={styles.weeklyGoalPercentage}>
-                  {Math.round(weeklyProgress * 100)}%
-                </Text>
-                <Text style={styles.weeklyGoalLabel}>Complete</Text>
+              <View style={styles.progressBarBackground}>
+                <View style={[styles.progressBarFill, { width: `${weeklyProgress * 100}%` }]} />
               </View>
-            </View>
-            <View style={styles.progressBarBackground}>
-              <View style={[styles.progressBarFill, { width: `${weeklyProgress * 100}%` }]} />
-            </View>
-            <View style={styles.weekDaysContainer}>
-              {days.map((day, i) => (
-                <TouchableOpacity
-                  key={day}
-                  onPress={() => setSelectedDay(i)}
-                  style={styles.dayProgressContainer}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Select day ${day}`}
-                  accessibilityState={{ selected: selectedDay === i }}
-                >
-                  <CircularProgress progress={progressValues[i]} />
-                  <View
-                    style={[
-                      styles.dayLabelContainer,
-                      i === selectedDay && styles.dayLabelContainerSelected,
-                    ]}
+              <View style={styles.weekDaysContainer}>
+                {days.map((day, i) => (
+                  <TouchableOpacity
+                    key={day}
+                    onPress={() => setSelectedDay(i)}
+                    style={styles.dayProgressContainer}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select day ${day}`}
+                    accessibilityState={{ selected: selectedDay === i }}
                   >
-                    <Text
+                    <CircularProgress progress={progressValues[i]} />
+                    <View
                       style={[
-                        styles.dayLabel,
-                        i === selectedDay && styles.dayLabelActive,
+                        styles.dayLabelContainer,
+                        i === selectedDay && styles.dayLabelContainerSelected,
                       ]}
                     >
-                      {day}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Training Modules */}
-          <View style={styles.trainingHeader}>
-            <Text style={styles.trainingTitle}>TRAINING MODULES</Text>
-            <Text style={styles.trainingSubtitle}>
-              Continue your martial arts journey
-            </Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.modulesContainer}
-          >
-            {trainingModules.map((module, index) => (
-              <TouchableOpacity
-                key={module.key}
-                style={[
-                  styles.moduleCard,
-                  selectedModule === index && styles.moduleCardSelected,
-                ]}
-                onPress={() => handleModulePress(index)}
-                accessibilityRole="button"
-                accessibilityLabel={`Open training module ${module.title}`}
-              >
-                <View style={styles.moduleHeader}>
-                  <Text style={styles.moduleHeaderText}>{module.key}</Text>
-                  {module.completed && (
-                    <View style={styles.moduleCompleteBadge}>
-                      <Text style={styles.moduleCompleteText}>✓</Text>
-                    </View>
-                  )}
-                </View>
-                <View style={styles.moduleContent}>
-                  <View style={styles.moduleThumbnail}>
-                    <Text style={styles.moduleThumbnailIcon}>🥋</Text>
-                  </View>
-                  <View style={styles.moduleInfo}>
-                    <Text style={styles.moduleTitle}>{module.title}</Text>
-                    <Text style={styles.moduleDescription}>{module.description}</Text>
-                    <Text style={styles.moduleDuration}>{module.duration}</Text>
-                  </View>
-                  {/* Progress bar for module */}
-                  {module.progress > 0 && (
-                    <View style={styles.moduleProgressContainer}>
-                      <View style={styles.moduleProgressBar}>
-                        <View 
-                          style={[
-                            styles.moduleProgressFill, 
-                            { width: `${module.progress * 100}%` }
-                          ]} 
-                        />
-                      </View>
-                      <Text style={styles.moduleProgressText}>
-                        {Math.round(module.progress * 100)}%
+                      <Text
+                        style={[
+                          styles.dayLabel,
+                          i === selectedDay && styles.dayLabelActive,
+                        ]}
+                      >
+                        {day}
                       </Text>
                     </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Training Modules */}
+            <View style={styles.trainingHeader}>
+              <Text style={styles.trainingTitle}>TRAINING MODULES</Text>
+              <Text style={styles.trainingSubtitle}>
+                Continue your martial arts journey
+              </Text>
+            </View>
+            <View style={styles.modulesContainer}>
+              {trainingModules.map((module, index) => {
+                // Remove right margin from every 4th card (end of row)
+                const isEndOfRow = (index + 1) % 4 === 0;
+                return (
+                <TouchableOpacity
+                  key={module.key}
+                  style={[
+                    styles.moduleCard,
+                    selectedModule === index && styles.moduleCardSelected,
+                    isEndOfRow && styles.moduleCardEndOfRow,
+                  ]}
+                  onPress={() => handleModulePress(index)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open training module ${module.title}`}
+                >
+                  <View style={styles.moduleHeader}>
+                    <Text style={styles.moduleHeaderText}>{module.key}</Text>
+                    {module.completed && (
+                      <View style={styles.moduleCompleteBadge}>
+                        <Text style={styles.moduleCompleteText}>✓</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.moduleContent}>
+                    <View style={styles.moduleThumbnail}>
+                      <Text style={styles.moduleThumbnailIcon}>🥋</Text>
+                    </View>
+                    <View style={styles.moduleInfo}>
+                      <Text style={styles.moduleTitle}>{module.title}</Text>
+                      <Text style={styles.moduleDescription}>{module.description}</Text>
+                      <Text style={styles.moduleDuration}>{module.duration}</Text>
+                    </View>
+                    {/* Progress bar for module */}
+                    {module.progress > 0 && (
+                      <View style={styles.moduleProgressContainer}>
+                        <View style={styles.moduleProgressBar}>
+                          <View 
+                            style={[
+                              styles.moduleProgressFill, 
+                              { width: `${module.progress * 100}%` }
+                            ]} 
+                          />
+                        </View>
+                        <Text style={styles.moduleProgressText}>
+                          {Math.round(module.progress * 100)}%
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+                );
+              })}
+            </View>
           </ScrollView>
-        </View>
+        </ScrollView>
       </View>
 
       {/* Pop-up Menu */}
@@ -341,7 +386,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#041527' },
   container: { flex: 1, flexDirection: 'row' },
   sidebar: {
-    backgroundColor: '#031A23',
+    backgroundColor: '#000E1C',
     width: 80,
     paddingTop: 20,
     paddingBottom: 30,
@@ -375,10 +420,20 @@ const styles = StyleSheet.create({
     height: 24,
     resizeMode: 'contain',
   },
-  mainContent: {
+  mainContentScrollView: {
     flex: 1,
+  },
+  mainContentHorizontalContainer: {
+    minWidth: screenWidth - 80, // Screen width minus sidebar width
+  },
+  mainContentVerticalScrollView: {
+    width: screenWidth - 80, // Fixed width to enable horizontal scrolling
+  },
+  mainContentContainer: {
     paddingHorizontal: 30,
     paddingVertical: 25,
+    paddingBottom: 40,
+    width: screenWidth - 80, // Fixed width to enable horizontal scrolling
   },
   logoImage: {
     width: 180,
@@ -489,18 +544,26 @@ const styles = StyleSheet.create({
     color: '#6b8693',
   },
   modulesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingLeft: 12,
+    paddingRight: 12,
     paddingBottom: 10,
+    justifyContent: 'flex-start',
   },
   moduleCard: {
-    width: 260,
+    width: moduleCardWidth,
     minHeight: 240,
     borderRadius: 20,
     backgroundColor: '#011f36',
     overflow: 'hidden',
-    marginRight: 20,
+    marginRight: moduleCardMarginRight,
+    marginBottom: 20,
     borderWidth: 2,
     borderColor: 'transparent',
+  },
+  moduleCardEndOfRow: {
+    marginRight: 0, // Remove right margin from cards at the end of each row
   },
   moduleCardSelected: {
     borderColor: '#07bbc0',

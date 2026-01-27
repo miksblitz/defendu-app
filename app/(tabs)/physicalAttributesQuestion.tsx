@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSkillProfile } from '../contexts/SkillProfileContext';
+import { AuthController } from '../controllers/AuthController';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 
@@ -10,6 +11,17 @@ export default function SetupProfileScreen() {
   const router = useRouter();
   const { setPhysicalAttributes, physicalAttributes } = useSkillProfile();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+
+  // Check if user is admin and redirect
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const currentUser = await AuthController.getCurrentUser();
+      if (currentUser && currentUser.role === 'admin') {
+        router.replace('/(admin)/adminDashboard');
+      }
+    };
+    checkAdmin();
+  }, [router]);
   const [height, setHeight] = useState(physicalAttributes?.height?.toString() || '');
   const [weight, setWeight] = useState(physicalAttributes?.weight?.toString() || '');
   const [age, setAge] = useState(physicalAttributes?.age?.toString() || '');
@@ -76,7 +88,7 @@ export default function SetupProfileScreen() {
       height: Number(height),
       weight: Number(weight),
       age: Number(age),
-      gender,
+      gender: gender!,
       limitations: hasNoLimitations ? undefined : (limitations || undefined),
     });
 
