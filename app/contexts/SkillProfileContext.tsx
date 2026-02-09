@@ -6,7 +6,7 @@ import {
   PastExperience,
   FitnessCapabilities,
   SkillProfile,
-} from '../models/SkillProfile';
+} from '../_models/SkillProfile';
 import { AuthController } from '../controllers/AuthController';
 
 interface SkillProfileContextType {

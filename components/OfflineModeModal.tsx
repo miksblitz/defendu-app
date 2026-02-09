@@ -9,7 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { OfflineStorage } from '../app/utils/offlineStorage';
+import { OfflineStorage } from '../app/_utils/offlineStorage';
 import { AuthController } from '../app/controllers/AuthController';
 
 interface OfflineModeModalProps {

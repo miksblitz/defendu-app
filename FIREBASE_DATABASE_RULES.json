@@ -14,9 +14,21 @@
         ".write": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin')"
       }
     },
+    "userProgress": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "recommendations": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      }
+    },
     "TrainerApplication": {
       "$uid": {
-        ".read": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".read": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin') || (auth.uid !== null && root.child('users').child($uid).child('role').val() === 'trainer' && root.child('users').child($uid).child('trainerApproved').val() === true)",
         ".write": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin')"
       },
       ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
@@ -30,6 +42,21 @@
       ".read": "auth.uid !== null",
       ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
     },
+    "userChats": {
+      "$userId": {
+        ".read": "auth.uid === $userId",
+        "$chatId": {
+          ".read": "auth.uid === $userId",
+          ".write": "auth.uid !== null && (auth.uid === $userId || root.child('chats').child($chatId).child('participants').child(auth.uid).exists())"
+        }
+      }
+    },
+    "chats": {
+      "$chatId": {
+        ".read": "auth.uid !== null && (!data.exists() || data.child('participants').child(auth.uid).exists())",
+        ".write": "auth.uid !== null && (data.child('participants').child(auth.uid).exists() || (!data.exists() && newData.child('participants').child(auth.uid).exists()))"
+      }
+    },
     "trainerModules": {
       "$uid": {
         "$moduleId": {
@@ -41,6 +68,15 @@
       },
       ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
       ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+    "moduleReviews": {
+      "$moduleId": {
+        "$userId": {
+          ".read": "auth.uid !== null",
+          ".write": "auth.uid === $userId"
+        },
+        ".read": "auth.uid !== null"
+      }
     }
   }
 }

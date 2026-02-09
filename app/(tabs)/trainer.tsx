@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     Image,
@@ -14,8 +14,12 @@ import {
     Modal,
 } from 'react-native';
 import { AuthController } from '../controllers/AuthController';
-import { User } from '../models/User';
-import { TrainerApplication } from '../models/TrainerApplication';
+import { User } from '../_models/User';
+import { TrainerApplication } from '../_models/TrainerApplication';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
+import { useLogout } from '../../hooks/useLogout';
+import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 
 interface TrainerWithData extends User {
   applicationData?: TrainerApplication | null;
@@ -23,6 +27,9 @@ interface TrainerWithData extends User {
 
 export default function TrainerPage() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ moduleSubmitted?: string }>();
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  const handleLogout = useLogout();
   const [showMenu, setShowMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [trainers, setTrainers] = useState<TrainerWithData[]>([]);
@@ -37,15 +44,28 @@ export default function TrainerPage() {
     checkCurrentUserTrainerStatus();
   }, []);
 
+  // Show success toast when arriving after submitting a module
+  useEffect(() => {
+    if (params.moduleSubmitted === '1') {
+      showToast('Module has successfully been submitted. Please wait for the admins to accept.');
+      router.replace('/trainer');
+    }
+  }, [params.moduleSubmitted]);
+
   const checkCurrentUserTrainerStatus = async () => {
     try {
       const user = await AuthController.getCurrentUser();
+      if (!user) {
+        router.replace('/(auth)/login');
+        return;
+      }
       setCurrentUser(user);
-      if (user && user.role === 'trainer' && user.trainerApproved === true) {
+      if (user.role === 'trainer' && user.trainerApproved === true) {
         setIsCurrentUserTrainer(true);
       }
     } catch (error) {
       console.error('Error checking user trainer status:', error);
+      router.replace('/(auth)/login');
     }
   };
 
@@ -140,19 +160,12 @@ export default function TrainerPage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await AuthController.logout();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
 
   const handleMessages = () => {
+    clearUnread();
     setShowMenu(false);
-    // TODO: Navigate to messages page
-    console.log('Navigate to messages');
+    router.push('/messages');
   };
 
   const formatDate = (date: Date): string => {
@@ -169,15 +182,22 @@ export default function TrainerPage() {
         {/* Fixed Sidebar - always visible */}
         <View style={styles.sidebar}>
           {/* Three dots icon at top */}
-          <TouchableOpacity 
-            style={styles.sidebarTopButton}
-            onPress={() => setShowMenu(true)}
-          >
-            <Image
-              source={require('../../assets/images/threedoticon.png')}
-              style={styles.threeDotIcon}
-            />
-          </TouchableOpacity>
+          <View style={styles.sidebarTopButtonWrap}>
+            <TouchableOpacity 
+              style={styles.sidebarTopButton}
+              onPress={() => { clearUnread(); setShowMenu(true); }}
+            >
+              <Image
+                source={require('../../assets/images/threedoticon.png')}
+                style={styles.threeDotIcon}
+              />
+            </TouchableOpacity>
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+              </View>
+            )}
+          </View>
 
           <View style={styles.sidebarIconsBottom}>
             <TouchableOpacity 
@@ -264,11 +284,11 @@ export default function TrainerPage() {
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
-            {searchQuery.length > 0 && (
+            {searchQuery.length > 0 ? (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
                 <Ionicons name="close-circle" size={20} color="#6b8693" />
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
 
           {/* Stats Bar */}
@@ -349,7 +369,7 @@ export default function TrainerPage() {
                             @{username.replace('@', '')}
                           </Text>
                         )}
-                        {displayedStyles.length > 0 && (
+                        {displayedStyles.length > 0 ? (
                           <View style={styles.martialArtsContainer}>
                             {displayedStyles.map((style, index) => (
                               <View key={index} style={styles.martialArtTag}>
@@ -357,7 +377,7 @@ export default function TrainerPage() {
                               </View>
                             ))}
                           </View>
-                        )}
+                        ) : null}
                         
                         <View style={styles.trainerDetails}>
                           {academyName && (
@@ -443,15 +463,30 @@ export default function TrainerPage() {
                           </View>
                         )}
                         <View style={styles.credentialHeaderInfo}>
-                          <Text style={styles.credentialName}>
+                          <Text style={styles.credentialName} numberOfLines={2} ellipsizeMode="tail">
                             {selectedTrainer.applicationData.fullLegalName}
                           </Text>
                           {selectedTrainer.applicationData.professionalAlias && (
-                            <Text style={styles.credentialAlias}>
+                            <Text style={styles.credentialAlias} numberOfLines={1} ellipsizeMode="tail">
                               @{selectedTrainer.applicationData.professionalAlias.replace('@', '')}
                             </Text>
                           )}
                         </View>
+                        {currentUser?.uid !== selectedTrainer.uid && (
+                          <TouchableOpacity
+                            style={styles.contactTrainerButton}
+                            onPress={() => {
+                              setShowCredentialsModal(false);
+                              const name = selectedTrainer.applicationData?.fullLegalName || `${selectedTrainer.firstName} ${selectedTrainer.lastName}`.trim();
+                              const photo = selectedTrainer.profilePicture || '';
+                              router.push(`/messages?with=${selectedTrainer.uid}&name=${encodeURIComponent(name)}&photo=${encodeURIComponent(photo)}` as any);
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="chatbubble-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                            <Text style={styles.contactTrainerButtonText}>Contact Trainer</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     </View>
 
@@ -557,11 +592,29 @@ export default function TrainerPage() {
                     )}
                   </>
                 ) : (
-                  <View style={styles.noDataContainer}>
-                    <Text style={styles.noDataText}>No application data available</Text>
-                    <Text style={styles.credentialName}>
-                      {selectedTrainer.firstName} {selectedTrainer.lastName}
-                    </Text>
+                    <View style={styles.noDataContainer}>
+                    <View style={styles.credentialHeader}>
+                      <View style={styles.credentialHeaderInfo}>
+                        <Text style={styles.credentialName} numberOfLines={2} ellipsizeMode="tail">
+                          {selectedTrainer.firstName} {selectedTrainer.lastName}
+                        </Text>
+                      </View>
+                      {currentUser?.uid !== selectedTrainer.uid && (
+                        <TouchableOpacity
+                          style={styles.contactTrainerButton}
+                          onPress={() => {
+                            setShowCredentialsModal(false);
+                            const name = `${selectedTrainer.firstName} ${selectedTrainer.lastName}`.trim();
+                            const photo = selectedTrainer.profilePicture || '';
+                            router.push(`/messages?with=${selectedTrainer.uid}&name=${encodeURIComponent(name)}&photo=${encodeURIComponent(photo)}` as any);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="chatbubble-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                          <Text style={styles.contactTrainerButtonText}>Contact Trainer</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                     <Text style={styles.credentialValue}>{selectedTrainer.email}</Text>
                   </View>
                 )}
@@ -588,11 +641,16 @@ export default function TrainerPage() {
                 style={styles.menuIcon}
               />
               <Text style={styles.menuText}>Messages</Text>
+              {unreadCount > 0 && (
+                <View style={styles.menuUnreadBadge}>
+                  <Text style={styles.menuUnreadBadgeText}>{unreadDisplay}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={handleLogout}
+              onPress={() => { setShowMenu(false); handleLogout(); }}
             >
               <Image
                 source={require('../../assets/images/logouticon.png')}
@@ -603,6 +661,13 @@ export default function TrainerPage() {
           </View>
         </TouchableOpacity>
       )}
+
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={4000}
+      />
     </SafeAreaView>
   );
 }
@@ -621,8 +686,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  sidebarTopButtonWrap: {
+    position: 'relative',
+  },
   sidebarTopButton: {
     padding: 8,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  menuUnreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    paddingHorizontal: 6,
+  },
+  menuUnreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   sidebarIconsBottom: {
     flexDirection: 'column',
@@ -948,6 +1048,22 @@ const styles = StyleSheet.create({
   },
   credentialHeaderInfo: {
     flex: 1,
+    minWidth: 0,
+  },
+  contactTrainerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    marginLeft: 12,
+    backgroundColor: '#07bbc0',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  contactTrainerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   credentialName: {
     color: '#FFFFFF',
@@ -1013,12 +1129,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 20,
     left: 90,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',

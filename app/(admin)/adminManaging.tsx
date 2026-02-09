@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useLogout } from '../../hooks/useLogout';
 import { AuthController } from '../controllers/AuthController';
 
 const adminCards = [
@@ -36,16 +37,8 @@ const adminCards = [
 
 export default function AdminManaging() {
   const router = useRouter();
+  const handleLogout = useLogout();
   const [showMenu, setShowMenu] = useState(false);
-
-  const handleLogout = async () => {
-    try {
-      await AuthController.logout();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
 
   const handleCardPress = (route: string) => {
     if (route === '/manage-users') {
@@ -155,7 +148,7 @@ export default function AdminManaging() {
           <View style={styles.menuContainer}>
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={handleLogout}
+              onPress={() => { setShowMenu(false); handleLogout(); }}
             >
               <Image
                 source={require('../../assets/images/logouticon.png')}
@@ -305,13 +298,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 60,
     left: 20,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',

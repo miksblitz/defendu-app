@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useLogout } from '../../hooks/useLogout';
 import { AuthController } from '../controllers/AuthController';
 import { AnalyticsController, AnalyticsData } from '../controllers/AnalyticsController';
 import Svg, { Polyline, Line, Circle } from 'react-native-svg';
@@ -20,6 +21,7 @@ const { width: screenWidth } = Dimensions.get('window');
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const handleLogout = useLogout();
   const [showMenu, setShowMenu] = useState(false);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,15 +42,6 @@ export default function AdminDashboard() {
       console.error('Error loading analytics:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await AuthController.logout();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Logout error:', error);
     }
   };
 
@@ -319,7 +312,7 @@ export default function AdminDashboard() {
           <View style={styles.menuContainer}>
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={handleLogout}
+              onPress={() => { setShowMenu(false); handleLogout(); }}
             >
               <Image
                 source={require('../../assets/images/logouticon.png')}
@@ -676,13 +669,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 60,
     left: 20,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',

@@ -13,9 +13,11 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
-import { TrainerApplication } from '../models/TrainerApplication';
+import { TrainerApplication } from '../_models/TrainerApplication';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useLogout } from '../../hooks/useLogout';
+import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 
 // Belt-based martial arts
 const beltBasedMartialArts = [
@@ -49,6 +51,7 @@ export default function EditTrainerProfilePage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  const handleLogout = useLogout();
 
   // Form state
   const [fullName, setFullName] = useState('');
@@ -175,19 +178,12 @@ export default function EditTrainerProfilePage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await AuthController.logout();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
 
   const handleMessages = () => {
+    clearUnread();
     setShowMenu(false);
-    // TODO: Navigate to messages page
-    console.log('Navigate to messages');
+    router.push('/messages');
   };
 
   if (initialLoading) {
@@ -207,15 +203,22 @@ export default function EditTrainerProfilePage() {
         {/* Fixed Sidebar - always visible */}
         <View style={styles.sidebar}>
           {/* Three dots icon at top */}
-          <TouchableOpacity 
-            style={styles.sidebarTopButton}
-            onPress={() => setShowMenu(true)}
-          >
-            <Image
-              source={require('../../assets/images/threedoticon.png')}
-              style={styles.threeDotIcon}
-            />
-          </TouchableOpacity>
+          <View style={styles.sidebarTopButtonWrap}>
+            <TouchableOpacity 
+              style={styles.sidebarTopButton}
+              onPress={() => { clearUnread(); setShowMenu(true); }}
+            >
+              <Image
+                source={require('../../assets/images/threedoticon.png')}
+                style={styles.threeDotIcon}
+              />
+            </TouchableOpacity>
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+              </View>
+            )}
+          </View>
 
           <View style={styles.sidebarIconsBottom}>
             <TouchableOpacity 
@@ -252,18 +255,17 @@ export default function EditTrainerProfilePage() {
 
         {/* Main Content */}
         <View style={styles.mainContent}>
-          {/* Back Button */}
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.push('/trainer')}
-          >
-            <Image
-              source={require('../../assets/images/backbuttonicon.png')}
-              style={styles.backButtonIcon}
-            />
-          </TouchableOpacity>
-
-          <ScrollView contentContainerStyle={{ paddingBottom: 40, paddingTop: 60 }}>
+          <ScrollView contentContainerStyle={{ paddingBottom: 40, paddingTop: 20 }}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.push('/trainer')}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Image
+                source={require('../../assets/images/backbuttonicon.png')}
+                style={styles.backButtonIcon}
+              />
+            </TouchableOpacity>
             {/* Profile Form Section */}
             <View style={styles.profileFormSection}>
               <Text style={styles.formTitle}>Edit Trainer Profile</Text>
@@ -499,11 +501,16 @@ export default function EditTrainerProfilePage() {
                 style={styles.menuIcon}
               />
               <Text style={styles.menuText}>Messages</Text>
+              {unreadCount > 0 && (
+                <View style={styles.menuUnreadBadge}>
+                  <Text style={styles.menuUnreadBadgeText}>{unreadDisplay}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={handleLogout}
+              onPress={() => { setShowMenu(false); handleLogout(); }}
             >
               <Image
                 source={require('../../assets/images/logouticon.png')}
@@ -551,13 +558,48 @@ const styles = StyleSheet.create({
     tintColor: '#07bbc0',
     resizeMode: 'contain',
   },
+  sidebarTopButtonWrap: {
+    position: 'relative',
+  },
   sidebarTopButton: {
     padding: 8,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
   threeDotIcon: {
     width: 24,
     height: 24,
     resizeMode: 'contain',
+  },
+  menuUnreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    paddingHorizontal: 6,
+  },
+  menuUnreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   mainContent: {
     flex: 1,
@@ -565,11 +607,10 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   backButton: {
-    position: 'absolute',
-    top: 25,
-    left: 30,
-    zIndex: 10,
     padding: 8,
+    zIndex: 10,
+    alignSelf: 'flex-start',
+    marginBottom: 16,
   },
   backButtonIcon: {
     width: 24,
@@ -764,12 +805,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 20,
     left: 90,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',

@@ -7,10 +7,12 @@ import {
 } from 'firebase/auth';
 import { ref, set, get, update, remove, onValue, off } from 'firebase/database';
 import { auth, db, cloudinaryConfig } from '../config/firebaseConfig';
-import { User, RegisterData, LoginData, ForgotPasswordData } from '../models/User';
-import { SkillProfile } from '../models/SkillProfile';
-import { TrainerApplication } from '../models/TrainerApplication';
-import { Module } from '../models/Module';
+import { User, RegisterData, LoginData, ForgotPasswordData } from '../_models/User';
+import { SkillProfile } from '../_models/SkillProfile';
+import { TrainerApplication } from '../_models/TrainerApplication';
+import { Module } from '../_models/Module';
+import { ModuleReview } from '../_models/ModuleReview';
+import { MessageController } from './MessageController';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export class AuthController {
@@ -329,6 +331,35 @@ export class AuthController {
     }
   }
 
+  /** Get a user by UID (for viewing profiles). Returns null if not found or permission denied. */
+  static async getUserByUid(uid: string): Promise<User | null> {
+    try {
+      const userRef = ref(db, `users/${uid}`);
+      const userSnapshot = await get(userRef);
+      if (!userSnapshot.exists()) return null;
+      const userDataRaw = userSnapshot.val();
+      if (!userDataRaw || typeof userDataRaw !== 'object') return null;
+      const user: User = {
+        ...userDataRaw,
+        uid,
+        createdAt: userDataRaw.createdAt ? new Date(userDataRaw.createdAt) : new Date(),
+        lastActive: userDataRaw.lastActive ? new Date(userDataRaw.lastActive) : undefined,
+        role: (userDataRaw.role as User['role']) || 'individual',
+        hasCompletedSkillProfile: userDataRaw.hasCompletedSkillProfile ?? false,
+        trainerApproved: userDataRaw.trainerApproved ?? false,
+        blocked: userDataRaw.blocked ?? false,
+        preferredTechnique: this.normalizeArray(userDataRaw.preferredTechnique),
+        trainingGoal: this.normalizeArray(userDataRaw.trainingGoal),
+        martialArtsBackground: this.normalizeArray(userDataRaw.martialArtsBackground),
+      };
+      return user;
+    } catch (error: any) {
+      if (error?.code === 'PERMISSION_DENIED' || error?.message?.includes('Permission denied')) return null;
+      console.error('Error getting user by uid:', error);
+      return null;
+    }
+  }
+
   // Check if user is authenticated
   static async isAuthenticated(): Promise<boolean> {
     const user = await this.getCurrentUser();
@@ -615,6 +646,77 @@ export class AuthController {
     } catch (error: any) {
       console.error('❌ Error getting skill profile:', error);
       return null;
+    }
+  }
+
+  /** ML recommendations: similar users + recommended module IDs. Data from recommendations/{uid} (export_recommendations.py + upload). */
+  static async getRecommendations(): Promise<{
+    similarUserIds: string[];
+    recommendedModuleIds: string[];
+  } | null> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) return null;
+      const snap = await get(ref(db, `recommendations/${currentUser.uid}`));
+      if (!snap.exists()) return { similarUserIds: [], recommendedModuleIds: [] };
+      const data = snap.val();
+      const similarUserIds = Array.isArray(data?.similarUserIds) ? data.similarUserIds : [];
+      const recommendedModuleIds = Array.isArray(data?.recommendedModuleIds) ? data.recommendedModuleIds : [];
+      return { similarUserIds, recommendedModuleIds };
+    } catch (error: any) {
+      console.error('❌ Error getting recommendations:', error);
+      return null;
+    }
+  }
+
+  /** User progress: completed modules. Used for "Recommended for you" and refresh every 5 completions. */
+  static async getUserProgress(): Promise<{ completedModuleIds: string[]; completedCount: number }> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) return { completedModuleIds: [], completedCount: 0 };
+      const snap = await get(ref(db, `userProgress/${currentUser.uid}`));
+      if (!snap.exists()) return { completedModuleIds: [], completedCount: 0 };
+      const data = snap.val();
+      const completedModuleIds = Array.isArray(data?.completedModuleIds) ? data.completedModuleIds : [];
+      const completedCount = typeof data?.completedCount === 'number' ? data.completedCount : completedModuleIds.length;
+      return { completedModuleIds, completedCount };
+    } catch (error: any) {
+      console.error('❌ Error getting user progress:', error);
+      return { completedModuleIds: [], completedCount: 0 };
+    }
+  }
+
+  /** Record that the user completed a module. Call when they tap "Save Progress" on the complete step. Returns new completedCount (for "every 5" refresh). */
+  static async recordModuleCompletion(moduleId: string): Promise<number> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) throw new Error('User not authenticated');
+    const existing = await this.getUserProgress();
+    if (existing.completedModuleIds.includes(moduleId)) return existing.completedCount;
+    const completedModuleIds = [...existing.completedModuleIds, moduleId];
+    const completedCount = completedModuleIds.length;
+    await set(ref(db, `userProgress/${currentUser.uid}`), {
+      completedModuleIds,
+      completedCount,
+      updatedAt: Date.now(),
+    });
+    return completedCount;
+  }
+
+  /** Fetch approved modules by IDs (for recommended list). Returns only existing, approved modules. */
+  static async getModulesByIds(moduleIds: string[]): Promise<Module[]> {
+    if (!moduleIds.length) return [];
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) return [];
+      const modules: Module[] = [];
+      for (const moduleId of moduleIds) {
+        const m = await this.getModuleByIdForUser(moduleId);
+        if (m) modules.push(m);
+      }
+      return modules;
+    } catch (error: any) {
+      console.error('❌ Error getModulesByIds:', error);
+      return [];
     }
   }
 
@@ -1255,6 +1357,44 @@ export class AuthController {
     }
   }
 
+  /** Max file size for message attachments: 100 MB */
+  static readonly MAX_MESSAGE_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+
+  /**
+   * Upload a document (PDF, etc.) to Cloudinary as raw. Enforces 100 MB max.
+   */
+  static async uploadDocumentToCloudinary(fileUri: string, fileName: string): Promise<string> {
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+    if (blob.size > this.MAX_MESSAGE_FILE_SIZE_BYTES) {
+      throw new Error(`File exceeds the maximum size of 100 MB. Your file is ${(blob.size / (1024 * 1024)).toFixed(1)} MB.`);
+    }
+    const formData = new FormData();
+    formData.append('file', blob as any);
+    formData.append('upload_preset', cloudinaryConfig.uploadPreset);
+    formData.append('public_id', `doc_${Date.now()}_${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`);
+    const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/raw/upload`;
+    const uploadResponse = await fetch(cloudinaryUrl, { method: 'POST', body: formData });
+    if (!uploadResponse.ok) {
+      const errorData = await uploadResponse.json();
+      throw new Error(errorData.error?.message || 'Failed to upload document');
+    }
+    const uploadResult = await uploadResponse.json();
+    return uploadResult.secure_url;
+  }
+
+  /**
+   * Upload image for messaging. Enforces 100 MB max.
+   */
+  static async uploadMessageImage(fileUri: string, fileName: string): Promise<string> {
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+    if (blob.size > this.MAX_MESSAGE_FILE_SIZE_BYTES) {
+      throw new Error(`Image exceeds the maximum size of 100 MB. Your file is ${(blob.size / (1024 * 1024)).toFixed(1)} MB.`);
+    }
+    return this.uploadFileToCloudinary(fileUri, 'image', fileName);
+  }
+
   /**
    * Save module to database (publish or draft)
    */
@@ -1299,6 +1439,8 @@ export class AuthController {
         intensityLevel: moduleData.intensityLevel,
         spaceRequirements: moduleData.spaceRequirements || [],
         physicalDemandTags: moduleData.physicalDemandTags || [],
+        repRange: moduleData.repRange || null,
+        trainingDurationSeconds: moduleData.trainingDurationSeconds ?? null,
         status: isDraft ? 'draft' : 'pending review',
         createdAt: new Date().getTime(),
         updatedAt: new Date().getTime(),
@@ -1442,7 +1584,98 @@ export class AuthController {
     }
   }
 
-  // Get a single module by ID
+  // Get approved modules for user dashboard (any authenticated user)
+  static async getApprovedModules(): Promise<Module[]> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      const modulesRef = ref(db, 'modules');
+      const modulesSnapshot = await get(modulesRef);
+
+      if (!modulesSnapshot.exists()) {
+        return [];
+      }
+
+      const modulesData = modulesSnapshot.val();
+      const modules: Module[] = [];
+
+      for (const moduleId in modulesData) {
+        if (!modulesData.hasOwnProperty(moduleId)) continue;
+        const moduleDataRaw = modulesData[moduleId];
+        if (!moduleDataRaw || typeof moduleDataRaw !== 'object') continue;
+        if (moduleDataRaw.status !== 'approved') continue;
+
+        try {
+          const module: Module = {
+            ...moduleDataRaw,
+            moduleId,
+            createdAt: moduleDataRaw.createdAt ? new Date(moduleDataRaw.createdAt) : new Date(),
+            updatedAt: moduleDataRaw.updatedAt ? new Date(moduleDataRaw.updatedAt) : new Date(),
+            submittedAt: moduleDataRaw.submittedAt ? new Date(moduleDataRaw.submittedAt) : undefined,
+            reviewedAt: moduleDataRaw.reviewedAt ? new Date(moduleDataRaw.reviewedAt) : undefined,
+            status: moduleDataRaw.status || 'draft',
+            certificationChecked: moduleDataRaw.certificationChecked || false,
+            spaceRequirements: this.normalizeArray(moduleDataRaw.spaceRequirements) || [],
+            physicalDemandTags: this.normalizeArray(moduleDataRaw.physicalDemandTags) || [],
+          };
+          modules.push(module);
+        } catch (moduleError) {
+          console.error(`Error processing module ${moduleId}:`, moduleError);
+        }
+      }
+
+      modules.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      return modules;
+    } catch (error: any) {
+      console.error('Error fetching approved modules:', error);
+      throw new Error(error.message || 'Failed to fetch modules');
+    }
+  }
+
+  // Get a single module by ID for user viewing (returns only if approved)
+  static async getModuleByIdForUser(moduleId: string): Promise<Module | null> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      const moduleRef = ref(db, `modules/${moduleId}`);
+      const moduleSnapshot = await get(moduleRef);
+
+      if (!moduleSnapshot.exists()) {
+        return null;
+      }
+
+      const moduleDataRaw = moduleSnapshot.val();
+      if (moduleDataRaw.status !== 'approved') {
+        return null;
+      }
+
+      const module: Module = {
+        ...moduleDataRaw,
+        moduleId,
+        createdAt: moduleDataRaw.createdAt ? new Date(moduleDataRaw.createdAt) : new Date(),
+        updatedAt: moduleDataRaw.updatedAt ? new Date(moduleDataRaw.updatedAt) : new Date(),
+        submittedAt: moduleDataRaw.submittedAt ? new Date(moduleDataRaw.submittedAt) : undefined,
+        reviewedAt: moduleDataRaw.reviewedAt ? new Date(moduleDataRaw.reviewedAt) : undefined,
+        status: moduleDataRaw.status || 'draft',
+        certificationChecked: moduleDataRaw.certificationChecked || false,
+        spaceRequirements: this.normalizeArray(moduleDataRaw.spaceRequirements) || [],
+        physicalDemandTags: this.normalizeArray(moduleDataRaw.physicalDemandTags) || [],
+      };
+
+      return module;
+    } catch (error: any) {
+      console.error('Error fetching module:', error);
+      throw new Error(error.message || 'Failed to fetch module');
+    }
+  }
+
+  // Get a single module by ID (admin only)
   static async getModuleById(moduleId: string): Promise<Module | null> {
     try {
       const currentUser = await this.getCurrentUser();
@@ -1541,6 +1774,123 @@ export class AuthController {
     } catch (error: any) {
       console.error('❌ Error rejecting module:', error);
       throw new Error(error.message || 'Failed to reject module');
+    }
+  }
+
+  /** Delete module (admin only) and send deletion reason to trainer via messaging. */
+  static async deleteModule(moduleId: string, reason: string): Promise<void> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+      if (currentUser.role !== 'admin') {
+        throw new Error('Permission denied. Admin access required.');
+      }
+
+      const module = await this.getModuleById(moduleId);
+      if (!module) {
+        throw new Error('Module not found');
+      }
+
+      const trainerId = module.trainerId;
+      const trainerName = module.trainerName || 'Trainer';
+      const moduleTitle = module.moduleTitle;
+
+      const adminDisplayName =
+        currentUser.firstName && currentUser.lastName
+          ? `${currentUser.firstName} ${currentUser.lastName}`
+          : currentUser.username || 'DEFENDU Admin';
+      const adminPhoto = currentUser.profilePicture || null;
+
+      let trainerPhoto: string | null = null;
+      try {
+        const trainerUser = await this.getUserByUid(trainerId);
+        if (trainerUser?.profilePicture) trainerPhoto = trainerUser.profilePicture;
+      } catch {
+        // optional
+      }
+
+      const chatId = await MessageController.getOrCreateChat(
+        currentUser.uid,
+        trainerId,
+        adminDisplayName,
+        adminPhoto,
+        trainerName,
+        trainerPhoto
+      );
+
+      const messageText = `Your module "${moduleTitle}" has been removed from the platform. Reason: ${reason}`;
+      await MessageController.sendMessage(chatId, currentUser.uid, messageText);
+
+      await remove(ref(db, `modules/${moduleId}`));
+      await remove(ref(db, `trainerModules/${trainerId}/${moduleId}`));
+
+      console.log('✅ Module deleted and trainer notified');
+    } catch (error: any) {
+      console.error('❌ Error deleting module:', error);
+      throw new Error(error.message || 'Failed to delete module');
+    }
+  }
+
+  /** Submit or update a review (1-5 stars + optional comment) for a module. One review per user per module. */
+  static async submitModuleReview(moduleId: string, rating: number, comment?: string): Promise<void> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+      if (rating < 1 || rating > 5) {
+        throw new Error('Rating must be between 1 and 5');
+      }
+      const userName =
+        currentUser.firstName && currentUser.lastName
+          ? `${currentUser.firstName} ${currentUser.lastName}`
+          : currentUser.username || 'User';
+      const now = Date.now();
+      const reviewPath = `moduleReviews/${moduleId}/${currentUser.uid}`;
+      await set(ref(db, reviewPath), {
+        rating,
+        comment: comment?.trim() || null,
+        createdAt: now,
+        userName,
+      });
+    } catch (error: any) {
+      console.error('Error submitting module review:', error);
+      throw new Error(error.message || 'Failed to submit review');
+    }
+  }
+
+  /** Get all reviews for a module, sorted by createdAt descending. */
+  static async getModuleReviews(moduleId: string): Promise<ModuleReview[]> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+      const reviewsRef = ref(db, `moduleReviews/${moduleId}`);
+      const snapshot = await get(reviewsRef);
+      if (!snapshot.exists()) {
+        return [];
+      }
+      const data = snapshot.val();
+      const list: ModuleReview[] = [];
+      for (const uid of Object.keys(data)) {
+        const r = data[uid];
+        list.push({
+          moduleId,
+          userId: uid,
+          userName: r.userName || 'User',
+          rating: typeof r.rating === 'number' ? r.rating : 0,
+          comment: r.comment || undefined,
+          createdAt: r.createdAt ? new Date(r.createdAt) : new Date(),
+        });
+      }
+      list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      return list;
+    } catch (error: any) {
+      console.error('Error fetching module reviews:', error);
+      throw new Error(error.message || 'Failed to fetch reviews');
     }
   }
 }

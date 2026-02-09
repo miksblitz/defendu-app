@@ -19,6 +19,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { AuthController } from '../controllers/AuthController';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useLogout } from '../../hooks/useLogout';
+import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 
 export default function EditProfilePage() {
   const [username, setUsername] = useState('@');
@@ -33,6 +35,11 @@ export default function EditProfilePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  const handleLogout = useLogout();
+  const unreadMessages = useUnreadMessages();
+  const unreadCount = unreadMessages?.unreadCount ?? 0;
+  const unreadDisplay = unreadMessages?.unreadDisplay ?? '0';
+  const clearUnread = unreadMessages?.clearUnread ?? (async () => {});
 
   // Request permissions on mount
   useEffect(() => {
@@ -122,19 +129,10 @@ export default function EditProfilePage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await AuthController.logout();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-
   const handleMessages = () => {
+    clearUnread();
     setShowMenu(false);
-    // TODO: Navigate to messages page
-    console.log('Navigate to messages');
+    router.push('/messages');
   };
 
   const handleImagePickerPress = () => {
@@ -375,15 +373,23 @@ export default function EditProfilePage() {
         {/* Fixed Sidebar - always visible */}
         <View style={styles.sidebar}>
           {/* Three dots icon at top */}
-          <TouchableOpacity 
-            style={styles.sidebarTopButton}
-            onPress={() => setShowMenu(true)}
-          >
-            <Image
-              source={require('../../assets/images/threedoticon.png')}
-              style={styles.threeDotIcon}
-            />
-          </TouchableOpacity>
+          <View style={styles.sidebarTopButtonWrap}>
+            <TouchableOpacity 
+              style={styles.sidebarTopButton}
+              onPress={() => { clearUnread(); setShowMenu(true); }}
+            >
+              <Image
+                source={require('../../assets/images/threedoticon.png')}
+                style={styles.threeDotIcon}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+              </View>
+            )}
+          </View>
 
           <View style={styles.sidebarIconsBottom}>
             <TouchableOpacity 
@@ -393,6 +399,7 @@ export default function EditProfilePage() {
               <Image
                 source={require('../../assets/images/blueprofileicon.png')}
                 style={styles.iconImage}
+                resizeMode="contain"
               />
             </TouchableOpacity>
 
@@ -403,6 +410,7 @@ export default function EditProfilePage() {
               <Image
                 source={require('../../assets/images/trainericon.png')}
                 style={styles.iconImage}
+                resizeMode="contain"
               />
             </TouchableOpacity>
 
@@ -413,6 +421,7 @@ export default function EditProfilePage() {
               <Image
                 source={require('../../assets/images/homeicon.png')}
                 style={styles.iconImage}
+                resizeMode="contain"
               />
             </TouchableOpacity>
           </View>
@@ -428,6 +437,7 @@ export default function EditProfilePage() {
             <Image
               source={require('../../assets/images/backbuttonicon.png')}
               style={styles.backButtonIcon}
+              resizeMode="contain"
             />
           </TouchableOpacity>
 
@@ -452,11 +462,13 @@ export default function EditProfilePage() {
                   <Image
                     source={{ uri: profilePicture }}
                     style={styles.avatarImage}
+                    resizeMode="cover"
                   />
                 ) : (
                   <Image
                     source={require('../../assets/images/profilepictureplaceholdericon.png')}
                     style={styles.avatarLargeIcon}
+                    resizeMode="contain"
                   />
                 )}
                 {uploadingPicture && (
@@ -473,6 +485,7 @@ export default function EditProfilePage() {
                 <Image
                   source={require('../../assets/images/addprofilepictureicon.png')}
                   style={styles.cameraIconImage}
+                  resizeMode="contain"
                 />
               </TouchableOpacity>
             </View>
@@ -599,17 +612,24 @@ export default function EditProfilePage() {
               <Image
                 source={require('../../assets/images/messageicon.png')}
                 style={styles.menuIcon}
+                resizeMode="contain"
               />
               <Text style={styles.menuText}>Messages</Text>
+              {unreadCount > 0 && (
+                <View style={styles.menuUnreadBadge}>
+                  <Text style={styles.menuUnreadBadgeText}>{unreadDisplay}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={handleLogout}
+              onPress={() => { setShowMenu(false); handleLogout(); }}
             >
               <Image
                 source={require('../../assets/images/logouticon.png')}
                 style={styles.menuIcon}
+                resizeMode="contain"
               />
               <Text style={styles.menuText}>Logout</Text>
             </TouchableOpacity>
@@ -650,16 +670,48 @@ const styles = StyleSheet.create({
   iconImage: {
     width: 28,
     height: 28,
-    tintColor: '#07bbc0',
-    resizeMode: 'contain',
+  },
+  sidebarTopButtonWrap: {
+    position: 'relative',
   },
   sidebarTopButton: {
     padding: 8,
   },
+  unreadBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   threeDotIcon: {
     width: 24,
     height: 24,
-    resizeMode: 'contain',
+  },
+  menuUnreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    paddingHorizontal: 6,
+  },
+  menuUnreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   mainContent: {
     flex: 1,
@@ -676,7 +728,6 @@ const styles = StyleSheet.create({
   backButtonIcon: {
     width: 24,
     height: 24,
-    resizeMode: 'contain',
   },
   profileFormSection: {
     marginBottom: 40,
@@ -697,13 +748,11 @@ const styles = StyleSheet.create({
   avatarLargeIcon: {
     width: 90,
     height: 90,
-    resizeMode: 'contain',
   },
   avatarImage: {
     width: 140,
     height: 140,
     borderRadius: 70,
-    resizeMode: 'cover',
   },
   uploadingOverlay: {
     position: 'absolute',
@@ -730,7 +779,6 @@ const styles = StyleSheet.create({
   cameraIconImage: {
     width: 24,
     height: 24,
-    resizeMode: 'contain',
   },
   formTitle: {
     fontSize: 20,
@@ -806,12 +854,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 20,
     left: 90,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',
@@ -833,7 +882,6 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     marginRight: 12,
-    resizeMode: 'contain',
   },
   menuText: {
     color: '#FFFFFF',

@@ -15,11 +15,26 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
-import { Module } from '../models/Module';
+import { Module } from '../_models/Module';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
+import { useLogout } from '../../hooks/useLogout';
+
+/** Force Cloudinary video URLs to MP4 for reliable playback. */
+function getPlayableVideoUrl(url: string | undefined): string {
+  if (!url || typeof url !== 'string' || !url.trim()) return '';
+  const u = url.trim();
+  if (u.includes('res.cloudinary.com') && u.includes('/video/upload/') && !u.includes('f_mp4') && !u.includes('f_auto')) {
+    return u.replace('/video/upload/', '/video/upload/f_mp4/');
+  }
+  return u;
+}
 
 export default function ModuleDetailPage() {
   const router = useRouter();
   const { moduleId } = useLocalSearchParams<{ moduleId: string }>();
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  const handleLogout = useLogout();
   const [module, setModule] = useState<Module | null>(null);
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
@@ -38,6 +53,22 @@ export default function ModuleDetailPage() {
     'Other (specify below)',
   ];
 
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletionReason, setDeletionReason] = useState('');
+  const [customDeletionReason, setCustomDeletionReason] = useState('');
+
+  const deletionReasons = [
+    'Inappropriate content',
+    'Incomplete information',
+    'Poor video quality',
+    'Does not meet safety standards',
+    'Incorrect technique demonstration',
+    'Violates community guidelines',
+    'Duplicate module',
+    'No longer needed',
+    'Other (specify below)',
+  ];
+
   useEffect(() => {
     if (moduleId) {
       loadModule();
@@ -52,26 +83,17 @@ export default function ModuleDetailPage() {
       }
       const moduleData = await AuthController.getModuleById(moduleId);
       if (!moduleData) {
-        alert('Module not found');
+        showToast('Module not found');
         router.back();
         return;
       }
       setModule(moduleData);
     } catch (error: any) {
       console.error('❌ Error loading module:', error);
-      alert(`Failed to load module: ${error.message || 'Unknown error'}`);
+      showToast(error.message || 'Failed to load module');
       router.back();
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await AuthController.logout();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Logout error:', error);
     }
   };
 
@@ -81,11 +103,11 @@ export default function ModuleDetailPage() {
     try {
       setProcessing(true);
       await AuthController.approveModule(moduleId);
-      alert('Module approved successfully!');
+      showToast('Module accepted successfully!');
       router.back();
     } catch (error: any) {
       console.error('Error approving module:', error);
-      alert(`Failed to approve module: ${error.message || 'Unknown error'}`);
+      showToast(error.message || 'Failed to accept module');
     } finally {
       setProcessing(false);
     }
@@ -105,19 +127,53 @@ export default function ModuleDetailPage() {
       : rejectionReason;
 
     if (!finalReason) {
-      alert('Please select or provide a rejection reason');
+      showToast('Please select or provide a rejection reason');
       return;
     }
 
     try {
       setProcessing(true);
       await AuthController.rejectModule(moduleId, finalReason);
-      alert('Module rejected');
+      showToast('Module rejected');
       setShowRejectModal(false);
       router.back();
     } catch (error: any) {
       console.error('Error rejecting module:', error);
-      alert(`Failed to reject module: ${error.message || 'Unknown error'}`);
+      showToast(error.message || 'Failed to reject module');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const openDeleteModal = () => {
+    setDeletionReason('');
+    setCustomDeletionReason('');
+    setShowDeleteModal(true);
+  };
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false);
+    setDeletionReason('');
+    setCustomDeletionReason('');
+  };
+
+  const handleDeleteModule = async () => {
+    if (!module || !moduleId) return;
+    const custom = customDeletionReason.trim();
+    const finalReason =
+      custom || (deletionReason === 'Other (specify below)' ? custom : deletionReason);
+    if (!finalReason) {
+      showToast('Please select or type a reason for deletion');
+      return;
+    }
+    try {
+      setProcessing(true);
+      await AuthController.deleteModule(moduleId, finalReason);
+      showToast('Module deleted. Trainer has been notified.');
+      setShowDeleteModal(false);
+      router.back();
+    } catch (error: any) {
+      showToast(error.message || 'Failed to delete module');
     } finally {
       setProcessing(false);
     }
@@ -144,10 +200,11 @@ export default function ModuleDetailPage() {
     return `M${num}`;
   };
 
-  const openVideoUrl = (url: string) => {
-    Linking.openURL(url).catch((err) => {
+  const openVideoUrl = (url: string, isCloudinary = false) => {
+    const target = isCloudinary ? getPlayableVideoUrl(url) || url : url;
+    Linking.openURL(target).catch((err) => {
       console.error('Failed to open URL:', err);
-      alert('Failed to open video URL');
+      showToast('Failed to open video URL');
     });
   };
 
@@ -307,7 +364,7 @@ export default function ModuleDetailPage() {
                 {module.introductionVideoUrl ? (
                   <TouchableOpacity
                     style={styles.videoButton}
-                    onPress={() => openVideoUrl(module.introductionVideoUrl!)}
+                    onPress={() => openVideoUrl(module.introductionVideoUrl!, true)}
                   >
                     <Ionicons name="play-circle" size={24} color="#38a6de" />
                     <Text style={styles.videoButtonText}>View Introduction Video</Text>
@@ -325,7 +382,7 @@ export default function ModuleDetailPage() {
             {module.techniqueVideoUrl ? (
               <TouchableOpacity
                 style={styles.videoButton}
-                onPress={() => openVideoUrl(module.techniqueVideoUrl!)}
+                onPress={() => openVideoUrl(module.techniqueVideoUrl!, true)}
               >
                 <Ionicons name="play-circle" size={24} color="#38a6de" />
                 <Text style={styles.videoButtonText}>View Technique Video</Text>
@@ -449,10 +506,91 @@ export default function ModuleDetailPage() {
             </View>
           )}
 
+          {/* Delete module (all statuses) */}
+          <TouchableOpacity
+            style={styles.deleteModuleButton}
+            onPress={openDeleteModal}
+            disabled={processing}
+          >
+            <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.deleteModuleButtonText}>Delete module</Text>
+          </TouchableOpacity>
+
           {/* Spacing at bottom */}
           <View style={styles.bottomSpacing} />
         </ScrollView>
       </View>
+
+      {/* Delete Module Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="slide"
+        onRequestClose={closeDeleteModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Delete Module</Text>
+            <Text style={styles.modalSubtitle}>
+              Remove "{module?.moduleTitle}"? The trainer will receive a message with your reason.
+            </Text>
+            <Text style={styles.modalSubtitle}>Reason for deletion (select or type):</Text>
+            <ScrollView style={styles.reasonsList}>
+              {deletionReasons.map((reason, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.reasonOption,
+                    deletionReason === reason && styles.reasonOptionSelected,
+                  ]}
+                  onPress={() => setDeletionReason(reason)}
+                >
+                  <View style={styles.radioButton}>
+                    {deletionReason === reason && <View style={styles.radioButtonInner} />}
+                  </View>
+                  <Text style={styles.reasonText}>{reason}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TextInput
+              style={styles.customReasonInput}
+              placeholder="Or type a custom reason..."
+              placeholderTextColor="#6b8693"
+              value={customDeletionReason}
+              onChangeText={setCustomDeletionReason}
+              multiline
+              numberOfLines={3}
+            />
+            {(deletionReason || customDeletionReason.trim()) && (
+              <>
+                <Text style={styles.modalSubtitle}>Reason for deletion:</Text>
+                <Text style={styles.selectedReasonText}>
+                  {customDeletionReason.trim() || deletionReason}
+                </Text>
+              </>
+            )}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={closeDeleteModal}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmDeleteButton]}
+                onPress={handleDeleteModule}
+                disabled={processing}
+              >
+                {processing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmDeleteButtonText}>Delete & notify trainer</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Rejection Modal */}
       <Modal
@@ -532,7 +670,7 @@ export default function ModuleDetailPage() {
           onPress={() => setShowMenu(false)}
         >
           <View style={styles.menuContainer}>
-            <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); handleLogout(); }}>
               <Image
                 source={require('../../assets/images/logouticon.png')}
                 style={styles.menuIcon}
@@ -542,6 +680,13 @@ export default function ModuleDetailPage() {
           </View>
         </TouchableOpacity>
       )}
+
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={3000}
+      />
     </SafeAreaView>
   );
 }
@@ -800,6 +945,38 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
+  deleteModuleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#c62828',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  deleteModuleButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  confirmDeleteButton: {
+    backgroundColor: '#c62828',
+  },
+  confirmDeleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  selectedReasonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    marginBottom: 16,
+    padding: 8,
+    backgroundColor: 'rgba(56, 166, 222, 0.15)',
+    borderRadius: 8,
+  },
   backButton: {
     backgroundColor: '#38a6de',
     paddingVertical: 12,
@@ -922,13 +1099,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 60,
     left: 20,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',

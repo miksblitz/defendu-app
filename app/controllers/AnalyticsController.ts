@@ -1,7 +1,7 @@
 // controllers/AnalyticsController.ts
 import { ref, get } from 'firebase/database';
 import { db } from '../config/firebaseConfig';
-import { User } from '../models/User';
+import { User } from '../_models/User';
 
 export interface AnalyticsData {
   totalActiveUsers: number;

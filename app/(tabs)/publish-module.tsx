@@ -13,15 +13,18 @@ import {
   Modal,
   PanResponder,
   Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
-import { Module } from '../models/Module';
+import { Module } from '../_models/Module';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useLogout } from '../../hooks/useLogout';
+import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 
 interface UploadedFile {
   name: string;
@@ -50,11 +53,38 @@ const physicalDemandTags = [
   'Power',
 ];
 
+const repRangeOptions = ['4-6 reps', '8-10 reps', '12 reps', '15 reps'];
+
+// 30 sec, 1–15 min in seconds
+const trainingDurationOptions: { label: string; value: number }[] = [
+  { label: '30 seconds', value: 30 },
+  { label: '1 min', value: 60 },
+  { label: '2 min', value: 120 },
+  { label: '3 min', value: 180 },
+  { label: '4 min', value: 240 },
+  { label: '5 min', value: 300 },
+  { label: '6 min', value: 360 },
+  { label: '7 min', value: 420 },
+  { label: '8 min', value: 480 },
+  { label: '9 min', value: 540 },
+  { label: '10 min', value: 600 },
+  { label: '11 min', value: 660 },
+  { label: '12 min', value: 720 },
+  { label: '13 min', value: 780 },
+  { label: '14 min', value: 840 },
+  { label: '15 min', value: 900 },
+];
+
+const MOBILE_BREAKPOINT = 768;
+
 export default function PublishModulePage() {
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+  const isMobile = screenWidth < MOBILE_BREAKPOINT;
   const [loading, setLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  const handleLogout = useLogout();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
@@ -72,6 +102,7 @@ export default function PublishModulePage() {
   const [introduction, setIntroduction] = useState('');
   const [introductionType, setIntroductionType] = useState<'text' | 'video'>('text');
   const [introductionVideo, setIntroductionVideo] = useState<UploadedFile | null>(null);
+  const [introductionVideoDuration, setIntroductionVideoDuration] = useState<number | null>(null);
   const [videoLink, setVideoLink] = useState('');
   const [videoFile, setVideoFile] = useState<UploadedFile | null>(null);
   const [thumbnail, setThumbnail] = useState<string | null>(null);
@@ -82,13 +113,17 @@ export default function PublishModulePage() {
   const [spaceRequirements, setSpaceRequirements] = useState<string[]>([]);
   const [selectedPhysicalDemandTags, setSelectedPhysicalDemandTags] = useState<string[]>([]);
   const [showPhysicalDemandDropdown, setShowPhysicalDemandDropdown] = useState(false);
+  const [repRange, setRepRange] = useState<string>('');
+  const [trainingDurationSeconds, setTrainingDurationSeconds] = useState<number | ''>('');
   const [certificationChecked, setCertificationChecked] = useState(false);
   const [errors, setErrors] = useState({
     moduleTitle: '',
     description: '',
     category: '',
+    introduction: '',
     video: '',
     thumbnail: '',
+    certification: '',
   });
   // Slider refs and state
   const sliderTrackRef = useRef<View>(null);
@@ -423,13 +458,21 @@ export default function PublishModulePage() {
         
         if (videoFile) {
           const uri = URL.createObjectURL(videoFile);
+          const duration = await getIntroductionVideoDuration(uri);
+          if (duration !== null && duration > INTRODUCTION_VIDEO_MAX_SECONDS) {
+            URL.revokeObjectURL(uri);
+            showToast('Introduction video must be 30 minutes or less.');
+            return;
+          }
           setIntroductionVideo({
             name: videoFile.name,
             uri: uri,
             type: videoFile.type,
             size: videoFile.size,
           });
-          showToast('Introduction video uploaded');
+          setIntroductionVideoDuration(duration);
+          setErrors(prev => ({ ...prev, introduction: '' }));
+          showToast(duration !== null ? `Introduction video uploaded (${Math.round(duration / 60)} min)` : 'Introduction video uploaded');
         } else if (files.length > 0) {
           showToast('Please drop a video file');
         }
@@ -535,6 +578,43 @@ export default function PublishModulePage() {
     video.src = uri;
   };
 
+  const INTRODUCTION_VIDEO_MAX_SECONDS = 30 * 60; // 30 minutes
+
+  /**
+   * Check introduction video duration (web). Returns duration in seconds or null on error.
+   * Rejects videos over 30 minutes.
+   */
+  const getIntroductionVideoDuration = (uri: string): Promise<number | null> => {
+    return new Promise((resolve) => {
+      if (Platform.OS !== 'web' || typeof document === 'undefined') {
+        resolve(null);
+        return;
+      }
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      const timeout = setTimeout(() => {
+        video.src = '';
+        video.remove();
+        resolve(null);
+      }, 10000);
+      video.onloadedmetadata = () => {
+        clearTimeout(timeout);
+        const duration = video.duration;
+        video.src = '';
+        video.remove();
+        resolve(isNaN(duration) || duration <= 0 ? null : duration);
+      };
+      video.onerror = () => {
+        clearTimeout(timeout);
+        video.src = '';
+        video.remove();
+        resolve(null);
+      };
+      video.src = uri;
+    });
+  };
+
   /**
    * REMOVED: Client-side video trimming function
    * 
@@ -598,6 +678,7 @@ export default function PublishModulePage() {
             type: asset.mimeType || 'video/mp4',
             size: asset.size || 0,
           });
+          setErrors(prev => ({ ...prev, introduction: '' }));
         }
       }
     } catch (error: any) {
@@ -610,13 +691,22 @@ export default function PublishModulePage() {
     const file = event.target.files?.[0];
     if (file) {
       const uri = URL.createObjectURL(file);
+      const duration = await getIntroductionVideoDuration(uri);
+      if (duration !== null && duration > INTRODUCTION_VIDEO_MAX_SECONDS) {
+        URL.revokeObjectURL(uri);
+        showToast('Introduction video must be 30 minutes or less.');
+        if (introductionVideoInputRef.current) introductionVideoInputRef.current.value = '';
+        return;
+      }
       setIntroductionVideo({
         name: file.name,
         uri: uri,
         type: file.type,
         size: file.size,
       });
-      showToast('Introduction video uploaded');
+      setIntroductionVideoDuration(duration);
+      setErrors(prev => ({ ...prev, introduction: '' }));
+      showToast(duration !== null ? `Introduction video uploaded (${Math.round(duration / 60)} min)` : 'Introduction video uploaded');
     }
     if (introductionVideoInputRef.current) {
       introductionVideoInputRef.current.value = '';
@@ -698,7 +788,7 @@ export default function PublishModulePage() {
    */
   const validateModuleTitle = (title: string): string => {
     if (!title.trim()) {
-      return 'Module title is required';
+      return 'Please fill this in';
     }
     if (title.length > 50) {
       return 'Module title must be 50 characters or less';
@@ -711,7 +801,7 @@ export default function PublishModulePage() {
    */
   const validateDescription = (desc: string): string => {
     if (!desc.trim()) {
-      return 'Description is required';
+      return 'Please fill this in';
     }
     if (desc.length > 600) {
       return 'Description must be 600 characters or less';
@@ -724,9 +814,19 @@ export default function PublishModulePage() {
    */
   const validateCategory = (cat: string): string => {
     if (!cat) {
-      return 'Category is required';
+      return 'Please select a category';
     }
     return '';
+  };
+
+  /**
+   * Validate introduction (text or video)
+   */
+  const validateIntroduction = (): string => {
+    if (introductionType === 'text') {
+      return !introduction.trim() ? 'Please fill this in or upload an introduction video' : '';
+    }
+    return !introductionVideo ? 'Please upload an introduction video or add text' : '';
   };
 
   const handlePublish = async () => {
@@ -737,25 +837,36 @@ export default function PublishModulePage() {
       const titleError = validateModuleTitle(moduleTitle);
       const descError = validateDescription(description);
       const categoryError = validateCategory(category);
-      const videoError = (!videoFile && !videoLink.trim()) ? 'Please upload a video or provide a video link' : '';
+      const introductionError = validateIntroduction();
+      const videoError = ''; // Technique video is optional
       const thumbnailError = !thumbnail ? 'Please upload a thumbnail' : '';
+      const certificationError = !certificationChecked ? 'Please check this box to certify' : '';
 
       setErrors({
         moduleTitle: titleError,
         description: descError,
         category: categoryError,
+        introduction: introductionError,
         video: videoError,
         thumbnail: thumbnailError,
+        certification: certificationError,
       });
 
-      if (titleError || descError || categoryError || videoError || thumbnailError) {
-        showToast('Please fix the errors before submitting');
-        setLoading(false);
-        return;
-      }
-
-      if (!certificationChecked) {
-        showToast('Please certify that this technique is appropriate and valid for self defense');
+      const hasFieldErrors = titleError || descError || categoryError || introductionError || videoError || thumbnailError;
+      if (hasFieldErrors || certificationError) {
+        // Build a guiding toast listing what's missing
+        const missing: string[] = [];
+        if (titleError) missing.push('Module title');
+        if (descError) missing.push('Description');
+        if (categoryError) missing.push('Category');
+        if (introductionError) missing.push('Introduction');
+        if (videoError) missing.push('Technique video or link');
+        if (thumbnailError) missing.push('Thumbnail');
+        if (certificationError) missing.push('Certification box (check "I certify...")');
+        const message = missing.length === 1
+          ? `Please fill in: ${missing[0]}`
+          : `Please complete: ${missing.join(', ')}`;
+        showToast(message);
         setLoading(false);
         return;
       }
@@ -767,65 +878,62 @@ export default function PublishModulePage() {
         return;
       }
 
-      showToast('Uploading files and saving module...');
+      showToast('Uploading files...');
 
-      // Upload files to Cloudinary
+      // Upload all files to Cloudinary in parallel for speed (no quality reduction)
       let techniqueVideoUrl: string | undefined;
       let introductionVideoUrl: string | undefined;
       let thumbnailUrl: string | undefined;
 
-      // Upload technique video
+      type UploadResult = { kind: 'technique' | 'intro' | 'thumbnail'; url: string };
+      const uploadTasks: Promise<UploadResult>[] = [];
       if (videoFile) {
-        try {
-          showToast('Uploading technique video...');
-          techniqueVideoUrl = await AuthController.uploadFileToCloudinary(
-            videoFile.uri,
-            'video',
-            videoFile.name
-          );
-          console.log('✅ Technique video uploaded:', techniqueVideoUrl);
-        } catch (error: any) {
-          console.error('Error uploading technique video:', error);
-          showToast('Failed to upload video. Please try again.');
-          setLoading(false);
-          return;
-        }
+        uploadTasks.push(
+          AuthController.uploadFileToCloudinary(videoFile.uri, 'video', videoFile.name)
+            .then((url) => {
+              console.log('✅ Technique video uploaded:', url);
+              return { kind: 'technique' as const, url };
+            })
+        );
       }
-
-      // Upload introduction video if present
       if (introductionType === 'video' && introductionVideo) {
-        try {
-          showToast('Uploading introduction video...');
-          introductionVideoUrl = await AuthController.uploadFileToCloudinary(
-            introductionVideo.uri,
-            'video',
-            introductionVideo.name
-          );
-          console.log('✅ Introduction video uploaded:', introductionVideoUrl);
-        } catch (error: any) {
-          console.error('Error uploading introduction video:', error);
-          showToast('Failed to upload introduction video. Please try again.');
-          setLoading(false);
-          return;
-        }
+        uploadTasks.push(
+          AuthController.uploadFileToCloudinary(introductionVideo.uri, 'video', introductionVideo.name)
+            .then((url) => {
+              console.log('✅ Introduction video uploaded:', url);
+              return { kind: 'intro' as const, url };
+            })
+        );
+      }
+      if (thumbnail) {
+        uploadTasks.push(
+          AuthController.uploadFileToCloudinary(thumbnail, 'image', 'thumbnail')
+            .then((url) => {
+              console.log('✅ Thumbnail uploaded:', url);
+              return { kind: 'thumbnail' as const, url };
+            })
+        );
       }
 
-      // Upload thumbnail
-      if (thumbnail) {
-        try {
-          showToast('Uploading thumbnail...');
-          thumbnailUrl = await AuthController.uploadFileToCloudinary(
-            thumbnail,
-            'image',
-            'thumbnail'
-          );
-          console.log('✅ Thumbnail uploaded:', thumbnailUrl);
-        } catch (error: any) {
-          console.error('Error uploading thumbnail:', error);
+      try {
+        const results = await Promise.all(uploadTasks);
+        results.forEach((r) => {
+          if (r.kind === 'technique') techniqueVideoUrl = r.url;
+          else if (r.kind === 'intro') introductionVideoUrl = r.url;
+          else if (r.kind === 'thumbnail') thumbnailUrl = r.url;
+        });
+      } catch (error: any) {
+        console.error('Error uploading files:', error);
+        const msg = error?.message || '';
+        if (msg.toLowerCase().includes('video')) {
+          showToast('Failed to upload video. Please try again.');
+        } else if (msg.toLowerCase().includes('image') || msg.toLowerCase().includes('thumbnail')) {
           showToast('Failed to upload thumbnail. Please try again.');
-          setLoading(false);
-          return;
+        } else {
+          showToast('Failed to upload files. Please try again.');
         }
+        setLoading(false);
+        return;
       }
 
       // Prepare module data
@@ -844,6 +952,8 @@ export default function PublishModulePage() {
         intensityLevel: intensityLevel,
         spaceRequirements: spaceRequirements,
         physicalDemandTags: selectedPhysicalDemandTags,
+        repRange: repRange || undefined,
+        trainingDurationSeconds: typeof trainingDurationSeconds === 'number' ? trainingDurationSeconds : undefined,
         status: 'pending review',
         certificationChecked: certificationChecked,
       };
@@ -853,8 +963,6 @@ export default function PublishModulePage() {
       const moduleId = await AuthController.saveModule(moduleData, false);
       console.log('✅ Module saved with ID:', moduleId);
 
-      showToast('Module uploaded successfully! Please wait for admin approval. You will be notified once your module is reviewed.');
-      
       // Clear form
       setModuleTitle('');
       setDescription('');
@@ -862,6 +970,7 @@ export default function PublishModulePage() {
       setIntroduction('');
       setIntroductionType('text');
       setIntroductionVideo(null);
+      setIntroductionVideoDuration(null);
       setVideoLink('');
       setVideoFile(null);
       setThumbnail(null);
@@ -869,12 +978,14 @@ export default function PublishModulePage() {
       setIntensityLevel(2);
       setSpaceRequirements([]);
       setSelectedPhysicalDemandTags([]);
+      setRepRange('');
+      setTrainingDurationSeconds('');
       setCertificationChecked(false);
       
-      // Navigate back after a short delay
+      showToast('Module successfully submitted. Please wait for approval.');
       setTimeout(() => {
-        router.push('/trainer');
-      }, 1500);
+        router.replace('/dashboard');
+      }, 500);
     } catch (error: any) {
       console.error('Error publishing module:', error);
       showToast(error.message || 'Failed to publish module');
@@ -884,81 +995,395 @@ export default function PublishModulePage() {
   };
 
 
-  const handleLogout = async () => {
-    try {
-      await AuthController.logout();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
 
   const handleMessages = () => {
+    clearUnread();
     setShowMenu(false);
-    // TODO: Navigate to messages page
-    console.log('Navigate to messages');
+    router.push('/messages');
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Fixed Sidebar */}
-        <View style={styles.sidebar}>
-          <TouchableOpacity 
-            style={styles.sidebarTopButton}
-            onPress={() => setShowMenu(true)}
-          >
-            <Image
-              source={require('../../assets/images/threedoticon.png')}
-              style={styles.threeDotIcon}
-            />
-          </TouchableOpacity>
+        {/* Sidebar: hidden on mobile so content is full-width, single column */}
+        {!isMobile && (
+          <View style={styles.sidebar}>
+            <View style={styles.sidebarTopButtonWrap}>
+              <TouchableOpacity 
+                style={styles.sidebarTopButton}
+                onPress={() => { clearUnread(); setShowMenu(true); }}
+              >
+                <Image
+                  source={require('../../assets/images/threedoticon.png')}
+                  style={styles.threeDotIcon}
+                />
+              </TouchableOpacity>
+              {unreadCount > 0 ? (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+                </View>
+              ) : null}
+            </View>
 
-          <View style={styles.sidebarIconsBottom}>
-            <TouchableOpacity 
-              style={styles.sidebarButton}
-              onPress={() => router.push('/profile')}
-            >
-              <Image
-                source={require('../../assets/images/blueprofileicon.png')}
-                style={styles.iconImage}
-              />
-            </TouchableOpacity>
+            <View style={styles.sidebarIconsBottom}>
+              <TouchableOpacity 
+                style={styles.sidebarButton}
+                onPress={() => router.push('/profile')}
+              >
+                <Image
+                  source={require('../../assets/images/blueprofileicon.png')}
+                  style={styles.iconImage}
+                />
+              </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.sidebarButton, styles.sidebarActive]}
-              onPress={() => router.push('/trainer')}
-            >
-              <Image
-                source={require('../../assets/images/trainericon.png')}
-                style={styles.iconImage}
-              />
-            </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.sidebarButton, styles.sidebarActive]}
+                onPress={() => router.push('/trainer')}
+              >
+                <Image
+                  source={require('../../assets/images/trainericon.png')}
+                  style={styles.iconImage}
+                />
+              </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.sidebarButton}
-              onPress={() => router.push('/dashboard')}
-            >
-              <Image
-                source={require('../../assets/images/homeicon.png')}
-                style={styles.iconImage}
-              />
-            </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.sidebarButton}
+                onPress={() => router.push('/dashboard')}
+              >
+                <Image
+                  source={require('../../assets/images/homeicon.png')}
+                  style={styles.iconImage}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
 
-        {/* Main Content */}
-        <View style={styles.mainContent}>
-          <ScrollView contentContainerStyle={{ paddingBottom: 20, paddingTop: 20 }}>
-            <View style={styles.twoColumnLayout}>
-              {/* Left Column */}
-              <View style={styles.leftColumn}>
-                {/* Module Content Upload */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Technique Video</Text>
+        {/* Main Content - single column, scroll to bottom */}
+        <View style={[styles.mainContent, isMobile && styles.mainContentMobile]}>
+          {/* Top bar: Back + optional menu on mobile */}
+          <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => router.push('/trainer')}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Image
+                source={require('../../assets/images/backbuttonicon.png')}
+                style={styles.backButtonIcon}
+              />
+            </TouchableOpacity>
+            {isMobile && (
+              <View style={styles.mobileMenuButtonWrap}>
+                <TouchableOpacity 
+                  style={styles.mobileMenuButton}
+                  onPress={() => { clearUnread(); setShowMenu(true); }}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Image
+                    source={require('../../assets/images/threedoticon.png')}
+                    style={styles.threeDotIcon}
+                  />
+                </TouchableOpacity>
+                {unreadCount > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+
+          <ScrollView 
+            contentContainerStyle={[
+              styles.scrollContent,
+              isMobile && styles.scrollContentMobile
+            ]}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+          >
+            {isMobile && (
+              <Text style={styles.pageTitleMobile}>Publish a module</Text>
+            )}
+            {/* Single column: one scroll, step-by-step (easy for everyone, including on mobile) */}
+            <View style={[styles.singleColumn, isMobile && styles.singleColumnMobile]}>
+              {/* Step 1: What is this module? */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Module Information</Text>
                   
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Module Title</Text>
+                    <View style={[styles.inputWrapper, errors.moduleTitle ? styles.inputError : null]}>
+                      <TextInput
+                        style={[styles.input, styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                        value={moduleTitle}
+                        placeholder="(e.g, Basic Palm Strike)"
+                        placeholderTextColor="#6b8693"
+                        onChangeText={(text) => {
+                          if (text.length <= 50) {
+                            setModuleTitle(text);
+                            if (errors.moduleTitle) {
+                              setErrors(prev => ({ ...prev, moduleTitle: validateModuleTitle(text) }));
+                            }
+                          }
+                        }}
+                        maxLength={50}
+                      />
+                    </View>
+                    <View style={styles.charCounterContainer}>
+                      <Text style={styles.charCounterText}>
+                        {moduleTitle.length}/50
+                      </Text>
+                    </View>
+                    {errors.moduleTitle ? <Text style={styles.errorText}>{errors.moduleTitle}</Text> : null}
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Description</Text>
+                    <View style={[styles.inputWrapper, styles.textAreaWrapper, errors.description ? styles.inputError : null]}>
+                      <TextInput
+                        style={[styles.input, styles.textArea, styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                        value={description}
+                        placeholder="Brief description..."
+                        placeholderTextColor="#6b8693"
+                        onChangeText={(text) => {
+                          if (text.length <= 600) {
+                            setDescription(text);
+                            if (errors.description) {
+                              setErrors(prev => ({ ...prev, description: validateDescription(text) }));
+                            }
+                          }
+                        }}
+                        multiline
+                        numberOfLines={6}
+                        textAlignVertical="top"
+                        maxLength={600}
+                      />
+                      <View style={styles.charCounterBottomRight}>
+                        <Text style={styles.charCounterText}>
+                          {description.length}/600
+                        </Text>
+                      </View>
+                    </View>
+                    {errors.description ? <Text style={styles.errorText}>{errors.description}</Text> : null}
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Category</Text>
+                    <TouchableOpacity
+                      style={[styles.selectInput, errors.category ? styles.inputError : null, isMobile && styles.selectInputMobile]}
+                      onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                    >
+                      <Text style={category ? styles.selectedText : styles.placeholderText}>
+                        {category || 'Select category...'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={20} color="#07bbc0" />
+                    </TouchableOpacity>
+                    {showCategoryDropdown && (
+                      <>
+                        <TouchableOpacity
+                          style={styles.dropdownOverlay}
+                          activeOpacity={1}
+                          onPress={() => setShowCategoryDropdown(false)}
+                        />
+                        <View style={styles.dropdown}>
+                          <ScrollView style={styles.dropdownScroll}>
+                            {categories.map((cat) => (
+                              <TouchableOpacity
+                                key={cat}
+                                style={[styles.dropdownItem, isMobile && styles.dropdownItemMobile]}
+                                onPress={() => {
+                                  setCategory(cat);
+                                  setShowCategoryDropdown(false);
+                                  if (errors.category) {
+                                    setErrors(prev => ({ ...prev, category: validateCategory(cat) }));
+                                  }
+                                }}
+                              >
+                                <Text style={styles.dropdownItemText}>{cat}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      </>
+                    )}
+                    {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Introduction</Text>
+                    
+                    <View style={[styles.toggleContainer, isMobile && styles.toggleContainerMobile]}>
+                      <TouchableOpacity
+                        style={[
+                          styles.toggleOption,
+                          introductionType === 'text' && styles.toggleOptionActive,
+                          isMobile && styles.toggleOptionMobile
+                        ]}
+                        onPress={() => {
+                          setIntroductionType('text');
+                          if (errors.introduction) setErrors(prev => ({ ...prev, introduction: '' }));
+                        }}
+                      >
+                        <Ionicons 
+                          name="text-outline" 
+                          size={18} 
+                          color={introductionType === 'text' ? '#FFFFFF' : '#6b8693'} 
+                          style={{ marginRight: 6 }}
+                        />
+                        <Text style={[
+                          styles.toggleOptionText,
+                          introductionType === 'text' && styles.toggleOptionTextActive
+                        ]}>
+                          Write Text
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.toggleOption,
+                          introductionType === 'video' && styles.toggleOptionActive,
+                          isMobile && styles.toggleOptionMobile
+                        ]}
+                        onPress={() => {
+                          setIntroductionType('video');
+                          if (errors.introduction) setErrors(prev => ({ ...prev, introduction: '' }));
+                        }}
+                      >
+                        <Ionicons 
+                          name="videocam-outline" 
+                          size={18} 
+                          color={introductionType === 'video' ? '#FFFFFF' : '#6b8693'} 
+                          style={{ marginRight: 6 }}
+                        />
+                        <Text style={[
+                          styles.toggleOptionText,
+                          introductionType === 'video' && styles.toggleOptionTextActive
+                        ]}>
+                          Upload Video
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {introductionType === 'text' ? (
+                      <View style={[styles.inputWrapper, styles.textAreaWrapper, errors.introduction ? styles.inputError : null]}>
+                        <TextInput
+                          style={[styles.input, styles.textArea, styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                          value={introduction}
+                          placeholder="Detailed introduction..."
+                          placeholderTextColor="#6b8693"
+                          onChangeText={(text) => {
+                            setIntroduction(text);
+                            if (errors.introduction) {
+                              setErrors(prev => ({ ...prev, introduction: text.trim() ? '' : 'Please fill this in or upload an introduction video' }));
+                            }
+                          }}
+                          multiline
+                          numberOfLines={6}
+                          textAlignVertical="top"
+                        />
+                      </View>
+                    ) : (
+                      <View>
+                        <View style={[styles.videoLimitNotice, isMobile && styles.videoLimitNoticeMobile, { marginBottom: 12 }]}>
+                          <Ionicons name="information-circle-outline" size={16} color="#07bbc0" style={{ marginRight: 6 }} />
+                          <Text style={styles.videoLimitText}>
+                            Introduction video: maximum length 30 minutes.
+                          </Text>
+                        </View>
+                        {!introductionVideo ? (
+                          <View
+                            ref={introductionVideoDropZoneRef}
+                            style={[
+                              styles.dropZone,
+                              isDraggingIntroductionVideo && styles.dropZoneDragging,
+                              isMobile && styles.dropZoneMobile
+                            ]}
+                          >
+                            <TouchableOpacity 
+                              style={styles.dropZoneContent}
+                              onPress={() => {
+                                if (Platform.OS === 'web' && introductionVideoInputRef.current) {
+                                  introductionVideoInputRef.current.click();
+                                } else {
+                                  handleIntroductionVideoUpload();
+                                }
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <Ionicons name="cloud-upload-outline" size={32} color="#07bbc0" />
+                              <Text style={styles.dropZoneText}>Drop or tap to upload video</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <View style={styles.videoPlayerContainer}>
+                            <TouchableOpacity
+                              style={styles.videoDeleteButton}
+                              onPress={() => {
+                                setIntroductionVideo(null);
+                                setIntroductionVideoDuration(null);
+                                if (introductionVideoPlayerRef.current) {
+                                  introductionVideoPlayerRef.current.pause();
+                                  introductionVideoPlayerRef.current.src = '';
+                                }
+                                showToast('Introduction video removed');
+                              }}
+                            >
+                              <Ionicons name="close-circle" size={28} color="#FF6B6B" />
+                            </TouchableOpacity>
+                            
+                            {Platform.OS === 'web' ? (
+                              <video
+                                ref={(ref) => { introductionVideoPlayerRef.current = ref; }}
+                                src={introductionVideo.uri}
+                                controls
+                                style={styles.videoPlayer as any}
+                                playsInline
+                              />
+                            ) : (
+                              <View style={styles.videoPlayer}>
+                                <Text style={styles.videoPlayerText}>Video: {introductionVideo.name}</Text>
+                                <Text style={styles.videoPlayerSubtext}>Video playback available on web</Text>
+                              </View>
+                            )}
+                          </View>
+                        )}
+                        {introductionVideoDuration !== null && (
+                          <View style={styles.videoInfoContainer}>
+                            <Ionicons name="checkmark-circle" size={16} color="#4CAF50" style={{ marginRight: 6 }} />
+                            <Text style={styles.videoInfoText}>
+                              Duration: {introductionVideoDuration < 60
+                                ? `${Math.round(introductionVideoDuration)}s`
+                                : `${(introductionVideoDuration / 60).toFixed(1)} min`} ✓
+                            </Text>
+                          </View>
+                        )}
+                        {Platform.OS === 'web' && (
+                          <input
+                            ref={introductionVideoInputRef}
+                            type="file"
+                            accept="video/*"
+                            style={{ display: 'none' }}
+                            onChange={handleIntroductionVideoChange}
+                          />
+                        )}
+                      </View>
+                    )}
+                    {errors.introduction ? <Text style={styles.errorText}>{errors.introduction}</Text> : null}
+                  </View>
+                </View>
+
+              {/* Step 2: Technique Video */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Technique Video (optional)</Text>
+                  <View style={[styles.videoLimitNotice, isMobile && styles.videoLimitNoticeMobile]}>
+                    <Ionicons name="information-circle-outline" size={16} color="#6b8693" style={{ marginRight: 6 }} />
+                    <Text style={styles.videoLimitText}>
+                      If there is no technique video, there will be no motion capture and pose estimation.
+                    </Text>
+                  </View>
                   {/* Video duration limit notice */}
-                  <View style={styles.videoLimitNotice}>
+                  <View style={[styles.videoLimitNotice, isMobile && styles.videoLimitNoticeMobile]}>
                     <Ionicons name="information-circle-outline" size={16} color="#07bbc0" style={{ marginRight: 6 }} />
                     <Text style={styles.videoLimitText}>
                       Maximum video length: 30 seconds. Longer videos will be automatically trimmed.
@@ -987,7 +1412,9 @@ export default function PublishModulePage() {
                     ref={videoDropZoneRef}
                     style={[
                       styles.dropZone,
-                      isDraggingVideo && styles.dropZoneDragging
+                      isDraggingVideo && styles.dropZoneDragging,
+                      errors.video ? styles.dropZoneError : null,
+                      isMobile && styles.dropZoneMobile
                     ]}
                   >
                     <TouchableOpacity 
@@ -995,8 +1422,10 @@ export default function PublishModulePage() {
                       onPress={handleVideoUpload}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="cloud-upload-outline" size={32} color="#07bbc0" />
-                      <Text style={styles.dropZoneText}>Drop or Paste Link Here</Text>
+                      <Ionicons name="cloud-upload-outline" size={isMobile ? 40 : 32} color="#07bbc0" />
+                      <Text style={styles.dropZoneText}>
+                        {isMobile ? 'Tap to upload video or paste link below' : 'Drop or paste link here'}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                   <View style={styles.orContainer}>
@@ -1005,7 +1434,7 @@ export default function PublishModulePage() {
                     <View style={styles.orLine} />
                   </View>
                   <TouchableOpacity 
-                    style={styles.browseButton}
+                    style={[styles.browseButton, isMobile && styles.browseButtonMobile]}
                     onPress={handleVideoUpload}
                   >
                     <Ionicons name="folder-outline" size={18} color="#07bbc0" style={{ marginRight: 6 }} />
@@ -1020,11 +1449,11 @@ export default function PublishModulePage() {
                       onChange={handleWebVideoChange}
                     />
                   )}
-                  {videoLink && (
+                  {(videoLink || isMobile) && (
                     <TextInput
-                      style={styles.linkInput}
+                      style={[styles.linkInput, isMobile && styles.linkInputMobile]}
                       value={videoLink}
-                      placeholder="Paste video link here..."
+                      placeholder="Or paste video link here..."
                       placeholderTextColor="#6b8693"
                       onChangeText={(text) => {
                         setVideoLink(text);
@@ -1098,13 +1527,13 @@ export default function PublishModulePage() {
                   </View>
                 )}
 
-                {/* AI Training Specifications */}
+                {/* Step 5: AI Training Specifications */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>AI Training Specifications</Text>
+                  <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>AI Training Specifications</Text>
                   
                   {/* Intensity Level */}
                   <View style={styles.intensityContainer}>
-                    <Text style={styles.intensityLabel}>Intensity Level</Text>
+                    <Text style={[styles.intensityLabel, isMobile && styles.inputLabelMobile]}>Intensity Level</Text>
                     <View style={styles.sliderContainer}>
                       <TouchableOpacity
                         ref={sliderTrackRef}
@@ -1255,7 +1684,7 @@ export default function PublishModulePage() {
                         </View>
                       </>
                     )}
-                    {selectedPhysicalDemandTags.length > 0 && (
+                    {selectedPhysicalDemandTags.length > 0 ? (
                       <View style={styles.selectedTagsContainer}>
                         {selectedPhysicalDemandTags.map((tag) => (
                           <View key={tag} style={styles.tag}>
@@ -1267,15 +1696,63 @@ export default function PublishModulePage() {
                           </View>
                         ))}
                       </View>
-                    )}
+                    ) : null}
+                  </View>
+
+                  {/* Rep Range */}
+                  <View style={styles.repRangeContainer}>
+                    <Text style={styles.repRangeLabel}>Rep Range</Text>
+                    <View style={styles.repRangeOptionsRow}>
+                      {repRangeOptions.map((opt) => (
+                        <TouchableOpacity
+                          key={opt}
+                          style={[
+                            styles.repRangeChip,
+                            repRange === opt && styles.repRangeChipSelected,
+                          ]}
+                          onPress={() => setRepRange(opt)}
+                        >
+                          <Text style={[
+                            styles.repRangeChipText,
+                            repRange === opt && styles.repRangeChipTextSelected,
+                          ]}>
+                            {opt}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Training Duration (minutes user will train) */}
+                  <View style={styles.trainingDurationContainer}>
+                    <Text style={styles.trainingDurationLabel}>Training duration (how long to practice)</Text>
+                    <View style={styles.trainingDurationGrid}>
+                      {trainingDurationOptions.map((opt) => (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={[
+                            styles.trainingDurationChip,
+                            trainingDurationSeconds === opt.value && styles.trainingDurationChipSelected,
+                          ]}
+                          onPress={() => setTrainingDurationSeconds(opt.value)}
+                        >
+                          <Text style={[
+                            styles.trainingDurationChipText,
+                            trainingDurationSeconds === opt.value && styles.trainingDurationChipTextSelected,
+                          ]}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </View>
                 </View>
 
-                {/* Thumbnail Upload */}
+                {/* Step 4: Thumbnail */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Thumbnail</Text>
+                  <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Thumbnail</Text>
                   <TouchableOpacity 
-                    style={styles.thumbnailUpload}
+                    style={[styles.thumbnailUpload, errors.thumbnail ? styles.thumbnailUploadError : null, isMobile && styles.thumbnailUploadMobile]}
                     onPress={handleThumbnailUpload}
                   >
                     {thumbnail ? (
@@ -1303,272 +1780,39 @@ export default function PublishModulePage() {
                   )}
                   {errors.thumbnail ? <Text style={styles.errorText}>{errors.thumbnail}</Text> : null}
                 </View>
-              </View>
-
-              {/* Right Column */}
-              <View style={styles.rightColumn}>
-                {/* Module Information */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Module Information</Text>
-                  
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Module Title</Text>
-                    <View style={styles.inputWrapper}>
-                      <TextInput
-                        style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                        value={moduleTitle}
-                        placeholder="(e.g, Basic Palm Strike)"
-                        placeholderTextColor="#6b8693"
-                        onChangeText={(text) => {
-                          if (text.length <= 50) {
-                            setModuleTitle(text);
-                            if (errors.moduleTitle) {
-                              setErrors(prev => ({ ...prev, moduleTitle: validateModuleTitle(text) }));
-                            }
-                          }
-                        }}
-                        maxLength={50}
-                      />
-                    </View>
-                    <View style={styles.charCounterContainer}>
-                      <Text style={styles.charCounterText}>
-                        {moduleTitle.length}/50
-                      </Text>
-                    </View>
-                    {errors.moduleTitle ? <Text style={styles.errorText}>{errors.moduleTitle}</Text> : null}
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Description</Text>
-                    <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
-                      <TextInput
-                        style={[styles.input, styles.textArea, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                        value={description}
-                        placeholder="Brief description..."
-                        placeholderTextColor="#6b8693"
-                        onChangeText={(text) => {
-                          if (text.length <= 600) {
-                            setDescription(text);
-                            if (errors.description) {
-                              setErrors(prev => ({ ...prev, description: validateDescription(text) }));
-                            }
-                          }
-                        }}
-                        multiline
-                        numberOfLines={6}
-                        textAlignVertical="top"
-                        maxLength={600}
-                      />
-                      <View style={styles.charCounterBottomRight}>
-                        <Text style={styles.charCounterText}>
-                          {description.length}/600
-                        </Text>
-                      </View>
-                    </View>
-                    {errors.description ? <Text style={styles.errorText}>{errors.description}</Text> : null}
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Category</Text>
-                    <TouchableOpacity
-                      style={styles.selectInput}
-                      onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                    >
-                      <Text style={category ? styles.selectedText : styles.placeholderText}>
-                        {category || 'Select category...'}
-                      </Text>
-                      <Ionicons name="chevron-down" size={20} color="#07bbc0" />
-                    </TouchableOpacity>
-                    {showCategoryDropdown && (
-                      <>
-                        <TouchableOpacity
-                          style={styles.dropdownOverlay}
-                          activeOpacity={1}
-                          onPress={() => setShowCategoryDropdown(false)}
-                        />
-                        <View style={styles.dropdown}>
-                          <ScrollView style={styles.dropdownScroll}>
-                            {categories.map((cat) => (
-                              <TouchableOpacity
-                                key={cat}
-                                style={styles.dropdownItem}
-                                onPress={() => {
-                                  setCategory(cat);
-                                  setShowCategoryDropdown(false);
-                                  if (errors.category) {
-                                    setErrors(prev => ({ ...prev, category: validateCategory(cat) }));
-                                  }
-                                }}
-                              >
-                                <Text style={styles.dropdownItemText}>{cat}</Text>
-                              </TouchableOpacity>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      </>
-                    )}
-                    {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Introduction</Text>
-                    
-                    {/* Toggle between text and video */}
-                    <View style={styles.toggleContainer}>
-                      <TouchableOpacity
-                        style={[
-                          styles.toggleOption,
-                          introductionType === 'text' && styles.toggleOptionActive
-                        ]}
-                        onPress={() => setIntroductionType('text')}
-                      >
-                        <Ionicons 
-                          name="text-outline" 
-                          size={18} 
-                          color={introductionType === 'text' ? '#FFFFFF' : '#6b8693'} 
-                          style={{ marginRight: 6 }}
-                        />
-                        <Text style={[
-                          styles.toggleOptionText,
-                          introductionType === 'text' && styles.toggleOptionTextActive
-                        ]}>
-                          Write Text
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.toggleOption,
-                          introductionType === 'video' && styles.toggleOptionActive
-                        ]}
-                        onPress={() => setIntroductionType('video')}
-                      >
-                        <Ionicons 
-                          name="videocam-outline" 
-                          size={18} 
-                          color={introductionType === 'video' ? '#FFFFFF' : '#6b8693'} 
-                          style={{ marginRight: 6 }}
-                        />
-                        <Text style={[
-                          styles.toggleOptionText,
-                          introductionType === 'video' && styles.toggleOptionTextActive
-                        ]}>
-                          Upload Video
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {introductionType === 'text' ? (
-                      <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
-                        <TextInput
-                          style={[styles.input, styles.textArea, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                          value={introduction}
-                          placeholder="Detailed introduction..."
-                          placeholderTextColor="#6b8693"
-                          onChangeText={setIntroduction}
-                          multiline
-                          numberOfLines={6}
-                          textAlignVertical="top"
-                        />
-                      </View>
-                    ) : (
-                      <View>
-                        {!introductionVideo ? (
-                          <View
-                            ref={introductionVideoDropZoneRef}
-                            style={[
-                              styles.dropZone,
-                              isDraggingIntroductionVideo && styles.dropZoneDragging
-                            ]}
-                          >
-                            <TouchableOpacity 
-                              style={styles.dropZoneContent}
-                              onPress={() => {
-                                if (Platform.OS === 'web' && introductionVideoInputRef.current) {
-                                  introductionVideoInputRef.current.click();
-                                } else {
-                                  handleIntroductionVideoUpload();
-                                }
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <Ionicons name="cloud-upload-outline" size={32} color="#07bbc0" />
-                              <Text style={styles.dropZoneText}>Drop or Click to Upload Video</Text>
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          <View style={styles.videoPlayerContainer}>
-                            {/* Delete Button */}
-                            <TouchableOpacity
-                              style={styles.videoDeleteButton}
-                              onPress={() => {
-                                setIntroductionVideo(null);
-                                if (introductionVideoPlayerRef.current) {
-                                  introductionVideoPlayerRef.current.pause();
-                                  introductionVideoPlayerRef.current.src = '';
-                                }
-                                showToast('Introduction video removed');
-                              }}
-                            >
-                              <Ionicons name="close-circle" size={28} color="#FF6B6B" />
-                            </TouchableOpacity>
-                            
-                            {/* Video Element */}
-                            {Platform.OS === 'web' ? (
-                              <video
-                                ref={(ref) => { introductionVideoPlayerRef.current = ref; }}
-                                src={introductionVideo.uri}
-                                controls
-                                style={styles.videoPlayer as any}
-                                playsInline
-                              />
-                            ) : (
-                              <View style={styles.videoPlayer}>
-                                <Text style={styles.videoPlayerText}>Video: {introductionVideo.name}</Text>
-                                <Text style={styles.videoPlayerSubtext}>Video playback available on web</Text>
-                              </View>
-                            )}
-                          </View>
-                        )}
-                        {Platform.OS === 'web' && (
-                          <input
-                            ref={introductionVideoInputRef}
-                            type="file"
-                            accept="video/*"
-                            style={{ display: 'none' }}
-                            onChange={handleIntroductionVideoChange}
-                          />
-                        )}
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-              </View>
             </View>
             
-            {/* Certification & Publishing - Bottom Center */}
-            <View style={styles.bottomSection}>
+            {/* Step 6: Certify & Submit */}
+            <View style={[styles.bottomSection, isMobile && styles.bottomSectionMobile]}>
               <TouchableOpacity
-                style={styles.certificationCheckbox}
-                onPress={() => setCertificationChecked(!certificationChecked)}
+                style={[styles.certificationCheckbox, isMobile && styles.certificationCheckboxMobile]}
+                onPress={() => {
+                  setCertificationChecked(!certificationChecked);
+                  if (errors.certification) {
+                    setErrors(prev => ({ ...prev, certification: '' }));
+                  }
+                }}
+                activeOpacity={0.7}
               >
                 <View style={[
                   styles.checkbox,
                   styles.checkboxLarge,
-                  certificationChecked && styles.checkboxChecked
+                  certificationChecked && styles.checkboxChecked,
+                  isMobile && styles.checkboxLargeMobile
                 ]}>
                   {certificationChecked && (
                     <Ionicons name="checkmark" size={20} color="#FFFFFF" />
                   )}
                 </View>
-                <Text style={styles.certificationText}>
+                <Text style={[styles.certificationText, isMobile && styles.certificationTextMobile]}>
                   I certify this technique is appropriate and valid for self defense
                 </Text>
               </TouchableOpacity>
+              {errors.certification ? <Text style={styles.errorText}>{errors.certification}</Text> : null}
 
               <View style={styles.actionButtons}>
                 <TouchableOpacity 
-                  style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                  style={[styles.submitButton, loading && styles.submitButtonDisabled, isMobile && styles.submitButtonMobile]}
                   onPress={handlePublish}
                   disabled={loading}
                 >
@@ -1599,7 +1843,7 @@ export default function PublishModulePage() {
           activeOpacity={1}
           onPress={() => setShowMenu(false)}
         >
-          <View style={styles.menuContainer}>
+          <View style={[styles.menuContainer, isMobile && styles.menuContainerMobile]}>
             <TouchableOpacity 
               style={styles.menuItem}
               onPress={handleMessages}
@@ -1609,11 +1853,16 @@ export default function PublishModulePage() {
                 style={styles.menuIcon}
               />
               <Text style={styles.menuText}>Messages</Text>
+{unreadCount > 0 ? (
+                  <View style={styles.menuUnreadBadge}>
+                    <Text style={styles.menuUnreadBadgeText}>{unreadDisplay}</Text>
+                  </View>
+                ) : null}
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={handleLogout}
+              onPress={() => { setShowMenu(false); handleLogout(); }}
             >
               <Image
                 source={require('../../assets/images/logouticon.png')}
@@ -1661,31 +1910,114 @@ const styles = StyleSheet.create({
     tintColor: '#07bbc0',
     resizeMode: 'contain',
   },
+  sidebarTopButtonWrap: {
+    position: 'relative',
+  },
   sidebarTopButton: {
     padding: 8,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  mobileMenuButtonWrap: {
+    position: 'relative',
   },
   threeDotIcon: {
     width: 24,
     height: 24,
     resizeMode: 'contain',
   },
+  menuUnreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    paddingHorizontal: 6,
+  },
+  menuUnreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   mainContent: {
     flex: 1,
-    paddingHorizontal: 30,
-    paddingTop: 20,
+    paddingHorizontal: 24,
+    paddingTop: 0,
   },
-  twoColumnLayout: {
+  mainContentMobile: {
+    paddingHorizontal: 0,
+  },
+  topBar: {
     flexDirection: 'row',
-    gap: 24,
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    paddingTop: 20,
+    minHeight: 56,
   },
-  leftColumn: {
-    flex: 1,
-    minWidth: 400,
+  topBarMobile: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    minHeight: 52,
   },
-  rightColumn: {
-    flex: 1,
-    minWidth: 400,
+  backButton: {
+    padding: 8,
+    zIndex: 10,
+  },
+  backButtonIcon: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
+  },
+  mobileMenuButton: {
+    padding: 12,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scrollContent: {
+    paddingBottom: 32,
+    paddingTop: 8,
+    paddingHorizontal: 0,
+  },
+  scrollContentMobile: {
+    paddingBottom: 48,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  pageTitleMobile: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 24,
+    paddingHorizontal: 4,
+  },
+  singleColumn: {
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+  },
+  singleColumnMobile: {
+    maxWidth: '100%',
   },
   section: {
     marginBottom: 24,
@@ -1696,6 +2028,10 @@ const styles = StyleSheet.create({
     color: '#07bbc0',
     marginBottom: 16,
     textTransform: 'uppercase',
+  },
+  sectionTitleMobile: {
+    fontSize: 17,
+    marginBottom: 20,
   },
   videoLimitNotice: {
     flexDirection: 'row',
@@ -1712,6 +2048,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     flex: 1,
     lineHeight: 16,
+  },
+  videoLimitNoticeMobile: {
+    padding: 14,
   },
   videoInfoContainer: {
     flexDirection: 'row',
@@ -1735,10 +2074,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     minHeight: 120,
   },
+  dropZoneError: {
+    borderColor: '#FF6B6B',
+  },
   dropZoneDragging: {
     borderColor: '#09AEC3',
     backgroundColor: 'rgba(7, 187, 192, 0.15)',
     borderWidth: 3,
+  },
+  dropZoneMobile: {
+    minHeight: 140,
   },
   dropZoneContent: {
     width: '100%',
@@ -1783,6 +2128,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  browseButtonMobile: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    minHeight: 48,
+  },
   linkInput: {
     backgroundColor: '#011f36',
     borderRadius: 8,
@@ -1792,6 +2142,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     borderWidth: 1,
     borderColor: '#0a3645',
+  },
+  linkInputMobile: {
+    padding: 14,
+    fontSize: 16,
+    minHeight: 48,
   },
   videoPlayerContainer: {
     position: 'relative',
@@ -2016,6 +2371,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#0a3645',
   },
+  dropdownItemMobile: {
+    paddingVertical: 14,
+    minHeight: 48,
+  },
   dropdownItemText: {
     color: '#FFFFFF',
     fontSize: 14,
@@ -2048,6 +2407,74 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
   },
+  repRangeContainer: {
+    marginBottom: 24,
+  },
+  repRangeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  repRangeOptionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  repRangeChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#0a3645',
+    backgroundColor: '#011f36',
+  },
+  repRangeChipSelected: {
+    borderColor: '#07bbc0',
+    backgroundColor: 'rgba(7, 187, 192, 0.15)',
+  },
+  repRangeChipText: {
+    color: '#6b8693',
+    fontSize: 14,
+  },
+  repRangeChipTextSelected: {
+    color: '#07bbc0',
+    fontWeight: '600',
+  },
+  trainingDurationContainer: {
+    marginBottom: 24,
+  },
+  trainingDurationLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  trainingDurationGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  trainingDurationChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#0a3645',
+    backgroundColor: '#011f36',
+  },
+  trainingDurationChipSelected: {
+    borderColor: '#07bbc0',
+    backgroundColor: 'rgba(7, 187, 192, 0.15)',
+  },
+  trainingDurationChipText: {
+    color: '#6b8693',
+    fontSize: 13,
+  },
+  trainingDurationChipTextSelected: {
+    color: '#07bbc0',
+    fontWeight: '600',
+  },
   thumbnailUpload: {
     borderWidth: 2,
     borderColor: '#07bbc0',
@@ -2059,6 +2486,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#011f36',
     aspectRatio: 16 / 9,
   },
+  thumbnailUploadError: {
+    borderColor: '#FF6B6B',
+  },
   thumbnailImage: {
     width: '100%',
     height: '100%',
@@ -2069,6 +2499,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 12,
   },
+  thumbnailUploadMobile: {
+    minHeight: 120,
+  },
   inputGroup: {
     marginBottom: 20,
   },
@@ -2077,6 +2510,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     marginBottom: 8,
+  },
+  inputLabelMobile: {
+    fontSize: 15,
+    marginBottom: 10,
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -2098,6 +2535,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     padding: 0,
+  },
+  inputMobile: {
+    fontSize: 16,
+    minHeight: 48,
   },
   textArea: {
     minHeight: 180,
@@ -2123,10 +2564,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 4,
   },
+  inputError: {
+    borderColor: '#FF6B6B',
+  },
   toggleContainer: {
     flexDirection: 'row',
     gap: 12,
     marginBottom: 16,
+  },
+  toggleContainerMobile: {
+    gap: 10,
+    marginBottom: 18,
   },
   toggleOption: {
     flex: 1,
@@ -2143,6 +2591,10 @@ const styles = StyleSheet.create({
   toggleOptionActive: {
     borderColor: '#07bbc0',
     backgroundColor: '#024446',
+  },
+  toggleOptionMobile: {
+    paddingVertical: 14,
+    minHeight: 48,
   },
   toggleOptionText: {
     color: '#6b8693',
@@ -2172,6 +2624,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
+  selectInputMobile: {
+    paddingVertical: 14,
+    minHeight: 48,
+  },
   selectedText: {
     color: '#FFFFFF',
     fontSize: 14,
@@ -2181,11 +2637,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   bottomSection: {
-    paddingHorizontal: 30,
+    paddingHorizontal: 24,
     paddingTop: 40,
     paddingBottom: 40,
     alignItems: 'center',
     marginTop: 20,
+  },
+  bottomSectionMobile: {
+    paddingHorizontal: 16,
+    paddingTop: 32,
+    paddingBottom: 48,
   },
   certificationCheckbox: {
     flexDirection: 'row',
@@ -2194,12 +2655,24 @@ const styles = StyleSheet.create({
     maxWidth: 600,
     width: '100%',
   },
+  certificationCheckboxMobile: {
+    marginBottom: 28,
+  },
+  checkboxLargeMobile: {
+    width: 28,
+    height: 28,
+    marginTop: 2,
+  },
   certificationText: {
     color: '#FFFFFF',
     fontSize: 14,
     flex: 1,
     marginLeft: 12,
     lineHeight: 20,
+  },
+  certificationTextMobile: {
+    fontSize: 15,
+    lineHeight: 22,
   },
   actionButtons: {
     gap: 12,
@@ -2216,6 +2689,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
   },
+  submitButtonMobile: {
+    paddingVertical: 18,
+    minHeight: 56,
+  },
   submitButtonDisabled: {
     opacity: 0.6,
   },
@@ -2231,12 +2708,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 20,
     left: 90,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',
@@ -2247,6 +2725,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  menuContainerMobile: {
+    left: 16,
+    right: 16,
+    top: 60,
   },
   menuItem: {
     flexDirection: 'row',

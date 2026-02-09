@@ -10,21 +10,55 @@ import {
   Image,
   TextInput,
   FlatList,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
-import { Module } from '../models/Module';
+import { Module } from '../_models/Module';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
+import { useLogout } from '../../hooks/useLogout';
+
+const MODULE_CATEGORIES = [
+  'All',
+  'Punching',
+  'Kicking',
+  'Palm Strikes',
+  'Elbow Strikes',
+  'Knee Strikes',
+  'Defensive Moves',
+];
+
+const DELETION_REASONS = [
+  'Inappropriate content',
+  'Incomplete information',
+  'Poor video quality',
+  'Does not meet safety standards',
+  'Incorrect technique demonstration',
+  'Violates community guidelines',
+  'Duplicate module',
+  'No longer needed',
+  'Other (specify below)',
+];
 
 type FilterType = 'active' | 'pending';
 
 export default function ManageModulesPage() {
   const router = useRouter();
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  const handleLogout = useLogout();
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('active');
+  const [categoryFilter, setCategoryFilter] = useState<string>('All');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [moduleToDelete, setModuleToDelete] = useState<Module | null>(null);
+  const [deletionReason, setDeletionReason] = useState('');
+  const [customDeletionReason, setCustomDeletionReason] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadModules();
@@ -44,23 +78,14 @@ export default function ManageModulesPage() {
       setModules(allModules);
     } catch (error: any) {
       console.error('❌ Error loading modules:', error);
-      alert(`Failed to load modules: ${error.message || 'Unknown error'}`);
+      showToast(error.message || 'Failed to load modules');
       setModules([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await AuthController.logout();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-
-  // Filter modules based on status and search query
+  // Filter modules based on status, category, and search query
   const filteredModules = useMemo(() => {
     let filtered = modules;
 
@@ -69,6 +94,11 @@ export default function ManageModulesPage() {
       filtered = filtered.filter((module) => module.status === 'approved');
     } else if (filterType === 'pending') {
       filtered = filtered.filter((module) => module.status === 'pending review');
+    }
+
+    // Filter by category
+    if (categoryFilter && categoryFilter !== 'All') {
+      filtered = filtered.filter((module) => module.category === categoryFilter);
     }
 
     // Filter by search query
@@ -87,7 +117,7 @@ export default function ManageModulesPage() {
     }
 
     return filtered;
-  }, [modules, filterType, searchQuery]);
+  }, [modules, filterType, searchQuery, categoryFilter]);
 
   const formatDate = (date: Date | undefined): string => {
     if (!date) return 'N/A';
@@ -110,6 +140,42 @@ export default function ManageModulesPage() {
       pathname: '/(admin)/module-detail',
       params: { moduleId: module.moduleId },
     });
+  };
+
+  const openDeleteModal = (module: Module) => {
+    setModuleToDelete(module);
+    setDeletionReason('');
+    setCustomDeletionReason('');
+    setShowDeleteModal(true);
+  };
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false);
+    setModuleToDelete(null);
+    setDeletionReason('');
+    setCustomDeletionReason('');
+  };
+
+  const handleDeleteModule = async () => {
+    if (!moduleToDelete) return;
+    const custom = customDeletionReason.trim();
+    const finalReason =
+      custom || (deletionReason === 'Other (specify below)' ? custom : deletionReason);
+    if (!finalReason) {
+      showToast('Please select or type a reason for deletion');
+      return;
+    }
+    try {
+      setDeleting(true);
+      await AuthController.deleteModule(moduleToDelete.moduleId, finalReason);
+      showToast('Module deleted. Trainer has been notified.');
+      closeDeleteModal();
+      loadModules();
+    } catch (error: any) {
+      showToast(error.message || 'Failed to delete module');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const activeCount = modules.filter((m) => m.status === 'approved').length;
@@ -151,8 +217,18 @@ export default function ManageModulesPage() {
           </View>
         </View>
 
-        {/* Header with DEFENDU Logo and Admin */}
+        {/* Header with Back button, DEFENDU Logo and Admin */}
         <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push('/(admin)/adminManaging')}
+          >
+            <Image
+              source={require('../../assets/images/backbuttonicon.png')}
+              style={styles.backButtonIcon}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
           <View style={styles.headerContent}>
             <Image
               source={require('../../assets/images/defendudashboardlogo.png')}
@@ -216,6 +292,36 @@ export default function ManageModulesPage() {
             </View>
           </View>
 
+          {/* Category Filter */}
+          <View style={styles.categoryFilterWrap}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoryScroll}
+              contentContainerStyle={styles.categoryScrollContent}
+            >
+              {MODULE_CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[
+                    styles.categoryChip,
+                    (cat === 'All' ? !categoryFilter || categoryFilter === 'All' : categoryFilter === cat) && styles.categoryChipActive,
+                  ]}
+                  onPress={() => setCategoryFilter(cat === 'All' ? 'All' : cat)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      (cat === 'All' ? !categoryFilter || categoryFilter === 'All' : categoryFilter === cat) && styles.categoryChipTextActive,
+                    ]}
+                  >
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
           {/* Modules Grid */}
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -227,6 +333,8 @@ export default function ManageModulesPage() {
               <Text style={styles.emptyText}>
                 {searchQuery
                   ? 'No modules found matching your search'
+                  : categoryFilter && categoryFilter !== 'All'
+                  ? `No ${filterType === 'active' ? 'active' : 'pending'} modules in ${categoryFilter}`
                   : filterType === 'active'
                   ? 'No active modules found'
                   : 'No pending modules found'}
@@ -280,12 +388,23 @@ export default function ManageModulesPage() {
                       </Text>
                     </View>
 
-                    <TouchableOpacity
-                      style={styles.viewButton}
-                      onPress={() => handleViewModule(item)}
-                    >
-                      <Text style={styles.viewButtonText}>View full application</Text>
-                    </TouchableOpacity>
+                    <View style={styles.cardActions}>
+                      <TouchableOpacity
+                        style={styles.viewButton}
+                        onPress={() => handleViewModule(item)}
+                      >
+                        <Text style={styles.viewButtonText}>
+                          {item.status === 'approved' ? 'View full module' : 'View full application'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => openDeleteModal(item)}
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
+                        <Text style={styles.deleteButtonText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               )}
@@ -293,6 +412,79 @@ export default function ManageModulesPage() {
           )}
         </View>
       </View>
+
+      {/* Delete Module Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="slide"
+        onRequestClose={closeDeleteModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Delete Module</Text>
+            {moduleToDelete && (
+              <Text style={styles.modalSubtitle} numberOfLines={2}>
+                Remove "{moduleToDelete.moduleTitle}"? The trainer will receive a message with your reason.
+              </Text>
+            )}
+            <Text style={styles.reasonLabel}>Reason for deletion (select or type):</Text>
+            <ScrollView style={styles.reasonsList}>
+              {DELETION_REASONS.map((reason) => (
+                <TouchableOpacity
+                  key={reason}
+                  style={[
+                    styles.reasonOption,
+                    deletionReason === reason && styles.reasonOptionSelected,
+                  ]}
+                  onPress={() => setDeletionReason(reason)}
+                >
+                  <View style={styles.radioButton}>
+                    {deletionReason === reason && <View style={styles.radioButtonInner} />}
+                  </View>
+                  <Text style={styles.reasonText}>{reason}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TextInput
+              style={styles.customReasonInput}
+              placeholder="Or type a custom reason..."
+              placeholderTextColor="#6b8693"
+              value={customDeletionReason}
+              onChangeText={setCustomDeletionReason}
+              multiline
+              numberOfLines={3}
+            />
+            {(deletionReason || customDeletionReason.trim()) && (
+              <>
+                <Text style={styles.selectedReasonLabel}>Reason for deletion:</Text>
+                <Text style={styles.selectedReasonText}>
+                  {customDeletionReason.trim() || deletionReason}
+                </Text>
+              </>
+            )}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={closeDeleteModal}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmDeleteButton]}
+                onPress={handleDeleteModule}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmDeleteButtonText}>Delete & notify trainer</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Pop-up Menu */}
       {showMenu && (
@@ -302,7 +494,7 @@ export default function ManageModulesPage() {
           onPress={() => setShowMenu(false)}
         >
           <View style={styles.menuContainer}>
-            <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); handleLogout(); }}>
               <Image
                 source={require('../../assets/images/logouticon.png')}
                 style={styles.menuIcon}
@@ -312,6 +504,13 @@ export default function ManageModulesPage() {
           </View>
         </TouchableOpacity>
       )}
+
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={hideToast}
+        duration={3000}
+      />
     </SafeAreaView>
   );
 }
@@ -376,6 +575,16 @@ const styles = StyleSheet.create({
     paddingRight: 20,
     paddingTop: 20,
     paddingBottom: 12,
+  },
+  backButton: {
+    marginRight: 16,
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backButtonIcon: {
+    width: 24,
+    height: 24,
   },
   headerContent: {
     flexDirection: 'column',
@@ -445,6 +654,179 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#FFFFFF',
     fontSize: 14,
+  },
+  categoryFilterWrap: {
+    height: 40,
+    marginBottom: 16,
+  },
+  categoryScroll: {
+    flexGrow: 0,
+  },
+  categoryScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 0,
+  },
+  categoryChip: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#6b8693',
+    backgroundColor: 'transparent',
+  },
+  categoryChipActive: {
+    backgroundColor: '#38a6de',
+    borderColor: '#38a6de',
+  },
+  categoryChipText: {
+    color: '#6b8693',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  categoryChipTextActive: {
+    color: '#FFFFFF',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#c62828',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: '#1a2332',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxHeight: '85%',
+  },
+  modalTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    color: '#6b8693',
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  reasonLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  reasonsList: {
+    maxHeight: 220,
+    marginBottom: 12,
+  },
+  reasonOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    marginBottom: 6,
+    backgroundColor: 'rgba(56, 166, 222, 0.1)',
+  },
+  reasonOptionSelected: {
+    backgroundColor: 'rgba(56, 166, 222, 0.3)',
+  },
+  radioButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#38a6de',
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioButtonInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#38a6de',
+  },
+  reasonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    flex: 1,
+  },
+  customReasonInput: {
+    backgroundColor: 'rgba(107, 134, 147, 0.2)',
+    borderRadius: 8,
+    padding: 12,
+    color: '#FFFFFF',
+    fontSize: 14,
+    marginBottom: 12,
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
+  selectedReasonLabel: {
+    color: '#38a6de',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  selectedReasonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    marginBottom: 16,
+    padding: 8,
+    backgroundColor: 'rgba(56, 166, 222, 0.15)',
+    borderRadius: 8,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(107, 134, 147, 0.3)',
+  },
+  confirmDeleteButton: {
+    backgroundColor: '#c62828',
+  },
+  cancelButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  confirmDeleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
@@ -522,12 +904,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   viewButton: {
+    flex: 1,
     backgroundColor: '#38a6de',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 16,
-    marginTop: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   viewButtonText: {
     color: '#FFFFFF',
@@ -541,13 +924,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 60,
     left: 20,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',

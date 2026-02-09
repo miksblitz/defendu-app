@@ -26,6 +26,8 @@ export interface Module {
   intensityLevel: number; // 1-5
   spaceRequirements: string[]; // Selected space requirements
   physicalDemandTags: string[]; // Selected physical demand tags
+  repRange?: string; // e.g. "4-6", "8-10", "12", "15"
+  trainingDurationSeconds?: number; // e.g. 30, 60, 120, ... 900 (15 min)
   
   // Status & Metadata
   status: 'draft' | 'pending review' | 'approved' | 'rejected';

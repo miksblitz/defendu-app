@@ -9,59 +9,19 @@ import {
     TouchableOpacity,
     View,
     Dimensions,
+    ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import { AuthController } from '../controllers/AuthController';
-import { OfflineStorage } from '../utils/offlineStorage';
+import { Module } from '../_models/Module';
+import { useLogout } from '../../hooks/useLogout';
+import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 
 const circleSize = 40;
 const strokeWidth = 4;
 const radius = (circleSize - strokeWidth) / 2;
 const circumference = 2 * Math.PI * radius;
-
-const trainingModules = [
-  { 
-    key: 'Module 1',
-    title: 'Basic Stance & Movement',
-    description: 'Learn fundamental footwork',
-    progress: 0.75,
-    duration: '15 min',
-    completed: false
-  },
-  { 
-    key: 'Module 2',
-    title: 'Striking Techniques',
-    description: 'Master basic strikes',
-    progress: 0.45,
-    duration: '20 min',
-    completed: false
-  },
-  { 
-    key: 'Module 3',
-    title: 'Defense & Blocks',
-    description: 'Defensive movements',
-    progress: 0.30,
-    duration: '18 min',
-    completed: false
-  },
-  { 
-    key: 'Module 4',
-    title: 'Ground Control',
-    description: 'Ground fighting basics',
-    progress: 0,
-    duration: '25 min',
-    completed: false
-  },
-  { 
-    key: 'Module 5',
-    title: 'Sparring Intro',
-    description: 'Applied techniques',
-    progress: 0,
-    duration: '30 min',
-    completed: false
-  },
-];
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // Realistic progress values - showing some completed days
@@ -81,46 +41,67 @@ const moduleCardMarginRight = gapBetweenCards;
 export default function DashboardScreen() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
-  const [selectedModule, setSelectedModule] = useState<number | null>(null);
+  const [selectedModule, setSelectedModule] = useState<string | null>(null);
   const [userName, setUserName] = useState('User');
+  const [modules, setModules] = useState<Module[]>([]);
+  const [modulesLoading, setModulesLoading] = useState(true);
+  const [recommendations, setRecommendations] = useState<{
+    similarUserIds: string[];
+    recommendedModuleIds: string[];
+  } | null>(null);
+  const [recommendedModules, setRecommendedModules] = useState<Module[]>([]);
+  const [completedModuleIds, setCompletedModuleIds] = useState<string[]>([]);
   const router = useRouter();
+  const handleLogout = useLogout();
+  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
+
+  useEffect(() => {
+    const init = async () => {
+      const user = await AuthController.getCurrentUser();
+      if (!user) {
+        router.replace('/(auth)/login');
+        return;
+      }
+      try {
+        setModulesLoading(true);
+        const [approved, recs, progress] = await Promise.all([
+          AuthController.getApprovedModules(),
+          AuthController.getRecommendations(),
+          AuthController.getUserProgress(),
+        ]);
+        setModules(approved);
+        setRecommendations(recs);
+        setCompletedModuleIds(progress.completedModuleIds);
+        if (recs?.recommendedModuleIds?.length) {
+          const recommended = await AuthController.getModulesByIds(recs.recommendedModuleIds);
+          const notCompleted = recommended.filter((m) => !progress.completedModuleIds.includes(m.moduleId));
+          setRecommendedModules(notCompleted);
+        } else {
+          setRecommendedModules([]);
+        }
+      } catch (error) {
+        console.error('Error loading dashboard:', error);
+        setModules([]);
+      } finally {
+        setModulesLoading(false);
+      }
+    };
+    init();
+  }, [router]);
 
   // Get current day name
   const currentDay = new Date().getDay();
   const todayName = days[currentDay];
 
-  const handleLogout = async () => {
-    try {
-      // Clear all session data
-      await AuthController.logout();
-      await OfflineStorage.clearOfflineData();
-      
-      // Clear navigation history and prevent back navigation
-      router.dismissAll();
-      router.replace('/(auth)/login');
-      
-      // Prevent back button navigation
-      if (typeof window !== 'undefined' && window.history) {
-        window.history.pushState(null, '', window.location.href);
-        window.onpopstate = () => {
-          window.history.pushState(null, '', window.location.href);
-        };
-      }
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-
   const handleMessages = () => {
+    clearUnread();
     setShowMenu(false);
-    // TODO: Navigate to messages page
-    console.log('Navigate to messages');
+    router.push('/messages');
   };
 
-  const handleModulePress = (index: number) => {
-    setSelectedModule(index);
-    // TODO: Navigate to module details or start training
-    console.log('Open module:', trainingModules[index].title);
+  const handleModulePress = (module: Module) => {
+    setSelectedModule(module.moduleId);
+    router.push(`/view-module?moduleId=${module.moduleId}` as any);
   };
 
   // Calculate overall weekly progress
@@ -161,15 +142,22 @@ export default function DashboardScreen() {
         {/* Fixed Sidebar - always visible */}
         <View style={styles.sidebar}>
           {/* Three dots icon at top */}
-          <TouchableOpacity 
-            style={styles.sidebarTopButton}
-            onPress={() => setShowMenu(true)}
-          >
-            <Image
-              source={require('../../assets/images/threedoticon.png')}
-              style={styles.threeDotIcon}
-            />
-          </TouchableOpacity>
+          <View style={styles.sidebarTopButtonWrap}>
+            <TouchableOpacity 
+              style={styles.sidebarTopButton}
+              onPress={() => { clearUnread(); setShowMenu(true); }}
+            >
+              <Image
+                source={require('../../assets/images/threedoticon.png')}
+                style={styles.threeDotIcon}
+              />
+            </TouchableOpacity>
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+              </View>
+            )}
+          </View>
 
           <View style={styles.sidebarIconsBottom}>
             <TouchableOpacity 
@@ -231,6 +219,55 @@ export default function DashboardScreen() {
               </View>
             </View>
 
+            {/* Recommended for you: best-suited modules (refreshes every 5 completed modules) */}
+            {recommendedModules.length > 0 && (
+              <View style={styles.recommendationsSection}>
+                <View style={styles.recommendationsSectionHeader}>
+                  <Text style={styles.recommendationsTitle}>Recommended for you</Text>
+                  <Text style={styles.recommendationsSubtext}>
+                    Best suited to your profile. Updates every 5 modules you complete.
+                  </Text>
+                </View>
+                <View style={styles.recommendedModulesRow}>
+                  {recommendedModules.slice(0, 8).map((module, index) => {
+                    const isEndOfRow = (index + 1) % 4 === 0;
+                    const durationMin = module.videoDuration ? `${Math.ceil(module.videoDuration / 60)} min` : '';
+                    return (
+                      <TouchableOpacity
+                        key={module.moduleId}
+                        style={[
+                          styles.moduleCard,
+                          selectedModule === module.moduleId && styles.moduleCardSelected,
+                          isEndOfRow && styles.moduleCardEndOfRow,
+                        ]}
+                        onPress={() => handleModulePress(module)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open recommended module ${module.moduleTitle}`}
+                      >
+                        <View style={styles.moduleHeader}>
+                          <Text style={styles.moduleHeaderText} numberOfLines={1}>{module.category}</Text>
+                        </View>
+                        <View style={styles.moduleContent}>
+                          <View style={styles.moduleThumbnail}>
+                            {module.thumbnailUrl ? (
+                              <Image source={{ uri: module.thumbnailUrl }} style={styles.moduleThumbnailImage} />
+                            ) : (
+                              <Text style={styles.moduleThumbnailIcon}>🥋</Text>
+                            )}
+                          </View>
+                          <View style={styles.moduleInfo}>
+                            <Text style={styles.moduleTitle} numberOfLines={2}>{module.moduleTitle}</Text>
+                            <Text style={styles.moduleDescription} numberOfLines={2}>{module.description}</Text>
+                            {durationMin ? <Text style={styles.moduleDuration}>{durationMin}</Text> : null}
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
             {/* Weekly Goal */}
             <View style={styles.weeklyGoalContainer}>
               <View style={styles.weeklyGoalHeader}>
@@ -289,58 +326,53 @@ export default function DashboardScreen() {
               </Text>
             </View>
             <View style={styles.modulesContainer}>
-              {trainingModules.map((module, index) => {
-                // Remove right margin from every 4th card (end of row)
-                const isEndOfRow = (index + 1) % 4 === 0;
-                return (
-                <TouchableOpacity
-                  key={module.key}
-                  style={[
-                    styles.moduleCard,
-                    selectedModule === index && styles.moduleCardSelected,
-                    isEndOfRow && styles.moduleCardEndOfRow,
-                  ]}
-                  onPress={() => handleModulePress(index)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open training module ${module.title}`}
-                >
-                  <View style={styles.moduleHeader}>
-                    <Text style={styles.moduleHeaderText}>{module.key}</Text>
-                    {module.completed && (
-                      <View style={styles.moduleCompleteBadge}>
-                        <Text style={styles.moduleCompleteText}>✓</Text>
+              {modulesLoading ? (
+                <View style={styles.modulesLoadingContainer}>
+                  <ActivityIndicator size="large" color="#07bbc0" />
+                  <Text style={styles.modulesLoadingText}>Loading modules...</Text>
+                </View>
+              ) : modules.length === 0 ? (
+                <View style={styles.modulesEmptyContainer}>
+                  <Text style={styles.modulesEmptyText}>No modules available yet.</Text>
+                  <Text style={styles.modulesEmptySubtext}>Check back later for new training content.</Text>
+                </View>
+              ) : (
+                modules.map((module, index) => {
+                  const isEndOfRow = (index + 1) % 4 === 0;
+                  const durationMin = module.videoDuration ? `${Math.ceil(module.videoDuration / 60)} min` : '';
+                  return (
+                    <TouchableOpacity
+                      key={module.moduleId}
+                      style={[
+                        styles.moduleCard,
+                        selectedModule === module.moduleId && styles.moduleCardSelected,
+                        isEndOfRow && styles.moduleCardEndOfRow,
+                      ]}
+                      onPress={() => handleModulePress(module)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open training module ${module.moduleTitle}`}
+                    >
+                      <View style={styles.moduleHeader}>
+                        <Text style={styles.moduleHeaderText} numberOfLines={1}>{module.category}</Text>
                       </View>
-                    )}
-                  </View>
-                  <View style={styles.moduleContent}>
-                    <View style={styles.moduleThumbnail}>
-                      <Text style={styles.moduleThumbnailIcon}>🥋</Text>
-                    </View>
-                    <View style={styles.moduleInfo}>
-                      <Text style={styles.moduleTitle}>{module.title}</Text>
-                      <Text style={styles.moduleDescription}>{module.description}</Text>
-                      <Text style={styles.moduleDuration}>{module.duration}</Text>
-                    </View>
-                    {/* Progress bar for module */}
-                    {module.progress > 0 && (
-                      <View style={styles.moduleProgressContainer}>
-                        <View style={styles.moduleProgressBar}>
-                          <View 
-                            style={[
-                              styles.moduleProgressFill, 
-                              { width: `${module.progress * 100}%` }
-                            ]} 
-                          />
+                      <View style={styles.moduleContent}>
+                        <View style={styles.moduleThumbnail}>
+                          {module.thumbnailUrl ? (
+                            <Image source={{ uri: module.thumbnailUrl }} style={styles.moduleThumbnailImage} />
+                          ) : (
+                            <Text style={styles.moduleThumbnailIcon}>🥋</Text>
+                          )}
                         </View>
-                        <Text style={styles.moduleProgressText}>
-                          {Math.round(module.progress * 100)}%
-                        </Text>
+                        <View style={styles.moduleInfo}>
+                          <Text style={styles.moduleTitle} numberOfLines={2}>{module.moduleTitle}</Text>
+                          <Text style={styles.moduleDescription} numberOfLines={2}>{module.description}</Text>
+                          {durationMin ? <Text style={styles.moduleDuration}>{durationMin}</Text> : null}
+                        </View>
                       </View>
-                    )}
-                  </View>
-                </TouchableOpacity>
-                );
-              })}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
             </View>
           </ScrollView>
         </ScrollView>
@@ -363,11 +395,16 @@ export default function DashboardScreen() {
                 style={styles.menuIcon}
               />
               <Text style={styles.menuText}>Messages</Text>
+              {unreadCount > 0 && (
+                <View style={styles.menuUnreadBadge}>
+                  <Text style={styles.menuUnreadBadgeText}>{unreadDisplay}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={handleLogout}
+              onPress={() => { setShowMenu(false); handleLogout(); }}
             >
               <Image
                 source={require('../../assets/images/logouticon.png')}
@@ -412,8 +449,28 @@ const styles = StyleSheet.create({
     tintColor: '#07bbc0',
     resizeMode: 'contain',
   },
+  sidebarTopButtonWrap: {
+    position: 'relative',
+  },
   sidebarTopButton: {
     padding: 8,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
   threeDotIcon: {
     width: 24,
@@ -456,6 +513,26 @@ const styles = StyleSheet.create({
   welcomeSubtext: {
     fontSize: 14,
     color: '#6b8693',
+  },
+  recommendationsSection: {
+    marginBottom: 24,
+  },
+  recommendationsSectionHeader: {
+    marginBottom: 12,
+  },
+  recommendationsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#07bbc0',
+    marginBottom: 4,
+  },
+  recommendationsSubtext: {
+    fontSize: 13,
+    color: '#6b8693',
+  },
+  recommendedModulesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   weeklyGoalContainer: {
     backgroundColor: '#041527',
@@ -551,6 +628,31 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     justifyContent: 'flex-start',
   },
+  modulesLoadingContainer: {
+    width: '100%',
+    paddingVertical: 48,
+    alignItems: 'center',
+    gap: 12,
+  },
+  modulesLoadingText: {
+    color: '#6b8693',
+    fontSize: 14,
+  },
+  modulesEmptyContainer: {
+    width: '100%',
+    paddingVertical: 48,
+    alignItems: 'center',
+    gap: 8,
+  },
+  modulesEmptyText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modulesEmptySubtext: {
+    color: '#6b8693',
+    fontSize: 14,
+  },
   moduleCard: {
     width: moduleCardWidth,
     minHeight: 240,
@@ -613,6 +715,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
+    overflow: 'hidden',
+  },
+  moduleThumbnailImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   moduleThumbnailIcon: {
     fontSize: 40,
@@ -667,12 +775,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 20,
     left: 90,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',
@@ -683,6 +792,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  menuUnreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    paddingHorizontal: 6,
+  },
+  menuUnreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   menuItem: {
     flexDirection: 'row',

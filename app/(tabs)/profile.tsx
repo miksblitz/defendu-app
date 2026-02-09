@@ -12,10 +12,14 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
 import OfflineModeModal from '../../components/OfflineModeModal';
-import { OfflineStorage } from '../utils/offlineStorage';
+import { OfflineStorage } from '../_utils/offlineStorage';
+import { useLogout } from '../../hooks/useLogout';
+import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 
 export default function ProfilePage() {
   const router = useRouter();
+  const handleLogout = useLogout();
+  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
   const [username, setUsername] = useState('@');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -28,24 +32,27 @@ export default function ProfilePage() {
   const loadUserData = useCallback(async () => {
     try {
       const user = await AuthController.getCurrentUser();
-      if (user) {
-        // Add @ prefix if not present
-        const displayUsername = user.username.startsWith('@') 
-          ? user.username 
-          : `@${user.username}`;
-        setUsername(displayUsername);
-        setFirstName(user.firstName || '');
-        setLastName(user.lastName || '');
-        setProfilePicture(user.profilePicture || null);
+      if (!user) {
+        router.replace('/(auth)/login');
+        return;
       }
-      
+      // Add @ prefix if not present
+      const displayUsername = user.username.startsWith('@') 
+        ? user.username 
+        : `@${user.username}`;
+      setUsername(displayUsername);
+      setFirstName(user.firstName || '');
+      setLastName(user.lastName || '');
+      setProfilePicture(user.profilePicture || null);
+
       // Check offline mode status
       const isEnabled = await OfflineStorage.isOfflineEnabled();
       setOfflineEnabled(isEnabled);
     } catch (error) {
       console.error('Error loading user data:', error);
+      router.replace('/(auth)/login');
     }
-  }, []);
+  }, [router]);
 
   // Load data when screen comes into focus (e.g., when returning from edit profile)
   useFocusEffect(
@@ -54,19 +61,10 @@ export default function ProfilePage() {
     }, [loadUserData])
   );
 
-  const handleLogout = async () => {
-    try {
-      await AuthController.logout();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-
   const handleMessages = () => {
+    clearUnread();
     setShowMenu(false);
-    // TODO: Navigate to messages page
-    console.log('Navigate to messages');
+    router.push('/messages');
   };
 
   const fullName = `${firstName} ${lastName}`.trim() || 'User';
@@ -77,15 +75,22 @@ export default function ProfilePage() {
         {/* Fixed Sidebar - always visible */}
         <View style={styles.sidebar}>
           {/* Three dots icon at top */}
-          <TouchableOpacity 
-            style={styles.sidebarTopButton}
-            onPress={() => setShowMenu(true)}
-          >
-            <Image
-              source={require('../../assets/images/threedoticon.png')}
-              style={styles.threeDotIcon}
-            />
-          </TouchableOpacity>
+          <View style={styles.sidebarTopButtonWrap}>
+            <TouchableOpacity 
+              style={styles.sidebarTopButton}
+              onPress={() => { clearUnread(); setShowMenu(true); }}
+            >
+              <Image
+                source={require('../../assets/images/threedoticon.png')}
+                style={styles.threeDotIcon}
+              />
+            </TouchableOpacity>
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+              </View>
+            )}
+          </View>
 
           <View style={styles.sidebarIconsBottom}>
             <TouchableOpacity style={[styles.sidebarButton, styles.sidebarActive]}>
@@ -210,11 +215,16 @@ export default function ProfilePage() {
                 style={styles.menuIcon}
               />
               <Text style={styles.menuText}>Messages</Text>
+              {unreadCount > 0 && (
+                <View style={styles.menuUnreadBadge}>
+                  <Text style={styles.menuUnreadBadgeText}>{unreadDisplay}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={handleLogout}
+              onPress={() => { setShowMenu(false); handleLogout(); }}
             >
               <Image
                 source={require('../../assets/images/logouticon.png')}
@@ -275,13 +285,48 @@ const styles = StyleSheet.create({
     tintColor: '#07bbc0',
     resizeMode: 'contain',
   },
+  sidebarTopButtonWrap: {
+    position: 'relative',
+  },
   sidebarTopButton: {
     padding: 8,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
   threeDotIcon: {
     width: 24,
     height: 24,
     resizeMode: 'contain',
+  },
+  menuUnreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    paddingHorizontal: 6,
+  },
+  menuUnreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   mainContent: {
     flex: 1,
@@ -368,12 +413,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 20,
     left: 90,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',

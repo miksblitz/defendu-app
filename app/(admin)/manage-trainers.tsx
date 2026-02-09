@@ -14,10 +14,11 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
-import { User } from '../models/User';
-import { TrainerApplication } from '../models/TrainerApplication';
+import { User } from '../_models/User';
+import { TrainerApplication } from '../_models/TrainerApplication';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useLogout } from '../../hooks/useLogout';
 
 type ExtendedTrainerApplication = TrainerApplication & { 
   firstName?: string; 
@@ -38,6 +39,7 @@ export default function ManageTrainersPage() {
   const [rejectingUid, setRejectingUid] = useState<string | null>(null);
   const [selectedRejectionReason, setSelectedRejectionReason] = useState<string>('');
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  const handleLogout = useLogout();
 
   // Rejection reasons
   const rejectionReasons = [
@@ -124,15 +126,6 @@ export default function ManageTrainersPage() {
       setApplications([]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await AuthController.logout();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Logout error:', error);
     }
   };
 
@@ -544,7 +537,7 @@ export default function ManageTrainersPage() {
             <View style={styles.menuContainer}>
               <TouchableOpacity 
                 style={styles.menuItem}
-                onPress={handleLogout}
+                onPress={() => { setShowMenu(false); handleLogout(); }}
               >
                 <Image
                   source={require('../../assets/images/logouticon.png')}
@@ -722,7 +715,7 @@ export default function ManageTrainersPage() {
           <View style={styles.menuContainer}>
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={handleLogout}
+              onPress={() => { setShowMenu(false); handleLogout(); }}
             >
               <Image
                 source={require('../../assets/images/logouticon.png')}
@@ -1099,13 +1092,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
   },
   menuContainer: {
     position: 'absolute',
     top: 60,
     left: 20,
-    backgroundColor: '#011f36',
+    backgroundColor: '#000E1C',
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#6b8693',

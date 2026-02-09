@@ -15,6 +15,8 @@ The database rules have been updated to include the `TrainerApplication` table. 
 
 - **Users**: Can read/write their own data, admins can read/write all users
 - **skillProfiles**: Users can read/write their own profile, admins can read/write all profiles
+- **userProgress**: Each user can read/write their own completed modules at `userProgress/{uid}` (used for recommendations and "every 5 modules" refresh).
+- **recommendations**: Each user can read their own at `recommendations/{uid}`; only admins can write (ML export script uploads here).
 - **TrainerApplication**: 
   - Users can read/write their own application (at `TrainerApplication/{their_uid}`)
   - Admins can read/write all trainer applications

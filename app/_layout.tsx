@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { SkillProfileProvider } from './contexts/SkillProfileContext';
+import { LogoutProvider } from './contexts/LogoutContext';
+import { UnreadMessagesProvider } from './contexts/UnreadMessagesContext';
 import { AuthController } from './controllers/AuthController';
 import BlockedUserModal from '../components/BlockedUserModal';
 
@@ -105,16 +107,20 @@ export default function RootLayout() {
 
   return (
     <SkillProfileProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(admin)" />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <BlockedUserModal
-        visible={showBlockedModal}
-        onDismiss={() => setShowBlockedModal(false)}
-      />
+      <LogoutProvider>
+        <UnreadMessagesProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(admin)" />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+        </UnreadMessagesProvider>
+        <BlockedUserModal
+          visible={showBlockedModal}
+          onDismiss={() => setShowBlockedModal(false)}
+        />
+      </LogoutProvider>
     </SkillProfileProvider>
   );
 }
