@@ -9,9 +9,9 @@ import {
     TextInput,
     TouchableOpacity,
     View,
-    Dimensions,
     Platform,
     Modal,
+    useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
@@ -22,7 +22,7 @@ import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 
-const screenWidth = Dimensions.get('window').width;
+const MOBILE_BREAKPOINT = 768;
 
 // Famous martial arts list
 const martialArts = [
@@ -84,6 +84,8 @@ const yearsOptions = Array.from({ length: 51 }, (_, i) => i.toString());
 
 export default function TrainerRegistrationScreen() {
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+  const isMobile = screenWidth < MOBILE_BREAKPOINT;
   const [showMenu, setShowMenu] = useState(false);
   
   // Form state
@@ -351,6 +353,7 @@ export default function TrainerRegistrationScreen() {
   };
 
   const handleRegister = () => {
+    if (loading) return;
     // Validate all fields and set errors
     const fullNameError = validateFullName(fullName);
     const dateError = validateDateOfBirth(selectedDate);
@@ -405,16 +408,10 @@ export default function TrainerRegistrationScreen() {
 
       // Check if user already has an existing application
       const existingApplication = await AuthController.getUserTrainerApplication(currentUser.uid);
-      if (existingApplication) {
-        // Only allow submission if the existing application is rejected
-        if (existingApplication.status !== 'rejected') {
-          const statusMessage = existingApplication.status === 'awaiting review' 
-            ? 'Your application is currently under review. Please wait for a decision.'
-            : 'You already have an approved application.';
-          showToast(statusMessage);
-          setLoading(false);
-          return;
-        }
+      if (existingApplication && existingApplication.status !== 'rejected') {
+        showToast('You have already submitted an application. Please wait for admins.');
+        setLoading(false);
+        return;
       }
 
       // Prepare application data
@@ -449,10 +446,9 @@ export default function TrainerRegistrationScreen() {
       await AuthController.submitTrainerApplication(applicationData);
       
       showToast('Application submitted successfully!');
-      
-      // Navigate back or show success message
-      // You can add navigation here if needed
-      // router.push('/profile');
+      setTimeout(() => {
+        router.replace('/dashboard');
+      }, 2500);
     } catch (error: any) {
       console.error('Error submitting application:', error);
       showToast(error.message || 'Failed to submit application. Please try again.');
@@ -602,86 +598,156 @@ export default function TrainerRegistrationScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Fixed Sidebar - always visible */}
-        <View style={styles.sidebar}>
-          {/* Three dots icon at top */}
-          <View style={styles.sidebarTopButtonWrap}>
-            <TouchableOpacity 
-              style={styles.sidebarTopButton}
-              onPress={() => { clearUnread(); setShowMenu(true); }}
-            >
-              <Image
-                source={require('../../assets/images/threedoticon.png')}
-                style={styles.threeDotIcon}
-              />
-            </TouchableOpacity>
-            {unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+        {/* Sidebar: hidden on mobile so content is full-width and easy to use on small screens */}
+        {!isMobile && (
+          <View style={styles.sidebar}>
+            <View style={styles.sidebarTopButtonWrap}>
+              <TouchableOpacity 
+                style={styles.sidebarTopButton}
+                onPress={() => { clearUnread(); setShowMenu(true); }}
+              >
+                <Image
+                  source={require('../../assets/images/threedoticon.png')}
+                  style={styles.threeDotIcon}
+                />
+              </TouchableOpacity>
+              {unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.sidebarIconsBottom}>
+              <TouchableOpacity 
+                style={styles.sidebarButton}
+                onPress={() => router.push('/profile')}
+              >
+                <Image
+                  source={require('../../assets/images/blueprofileicon.png')}
+                  style={styles.iconImage}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.sidebarButton, styles.sidebarActive]}>
+                <Image
+                  source={require('../../assets/images/trainericon.png')}
+                  style={styles.iconImage}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.sidebarButton}
+                onPress={() => router.push('/dashboard')}
+              >
+                <Image
+                  source={require('../../assets/images/homeicon.png')}
+                  style={styles.iconImage}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Main content: full-width on mobile with top bar; scroll + sticky submit */}
+        <View style={[styles.mainContentWrap, isMobile && styles.mainContentWrapMobile]}>
+          {/* Top bar on mobile: Back + menu (like publish module) */}
+          {isMobile && (
+            <View style={[styles.topBar, styles.topBarMobile]}>
+              <TouchableOpacity 
+                style={styles.topBarBackButton}
+                onPress={() => router.back()}
+                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                activeOpacity={0.7}
+              >
+                <Image
+                  source={require('../../assets/images/backbuttonicon.png')}
+                  style={styles.topBarBackIcon}
+                />
+              </TouchableOpacity>
+              <View style={styles.mobileMenuButtonWrap}>
+                <TouchableOpacity 
+                  style={styles.mobileMenuButton}
+                  onPress={() => { clearUnread(); setShowMenu(true); }}
+                  hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                  activeOpacity={0.7}
+                >
+                  <Image
+                    source={require('../../assets/images/threedoticon.png')}
+                    style={styles.threeDotIcon}
+                  />
+                </TouchableOpacity>
+                {unreadCount > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+                  </View>
+                )}
               </View>
-            )}
-          </View>
+            </View>
+          )}
 
-          <View style={styles.sidebarIconsBottom}>
+          {/* Back button - desktop only; same as edit profile (fixed top-left) */}
+          {!isMobile && (
             <TouchableOpacity 
-              style={styles.sidebarButton}
-              onPress={() => router.push('/profile')}
+              style={styles.backButton}
+              onPress={() => router.back()}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Image
-                source={require('../../assets/images/blueprofileicon.png')}
-                style={styles.iconImage}
+                source={require('../../assets/images/backbuttonicon.png')}
+                style={styles.backButtonIcon}
+                resizeMode="contain"
               />
             </TouchableOpacity>
+          )}
 
-            <TouchableOpacity style={[styles.sidebarButton, styles.sidebarActive]}>
-              <Image
-                source={require('../../assets/images/trainericon.png')}
-                style={styles.iconImage}
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.sidebarButton}
-              onPress={() => router.push('/dashboard')}
-            >
-              <Image
-                source={require('../../assets/images/homeicon.png')}
-                style={styles.iconImage}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Main Content */}
         <ScrollView 
           style={styles.mainContent}
-          contentContainerStyle={styles.mainContentContainer}
+          contentContainerStyle={[styles.mainContentContainer, isMobile && styles.mainContentContainerMobile]}
           showsVerticalScrollIndicator={true}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
-          <View style={styles.header}>
+          {/* Header — same vibes as publish module */}
+          <View style={[styles.publishHeader, isMobile && styles.publishHeaderMobile]}>
             <Image
               source={require('../../assets/images/defendudashboardlogo.png')}
-              style={styles.logoImage}
+              style={[styles.logoImage, isMobile && styles.logoImageMobile]}
             />
-            <Text style={styles.pageTitle}>Build Your Verified Profile</Text>
+            <Text style={[styles.publishTitle, isMobile && styles.publishTitleMobile]}>
+              {isMobile ? 'Apply to become a trainer' : 'Build your verified trainer profile'}
+            </Text>
+            <Text style={styles.publishSubtitle}>
+              {isMobile ? "One section at a time. Scroll down and fill each part. Fields with * are required." : "Fill in each section below. Required fields are marked with *. We'll review and get back to you."}
+            </Text>
+            <View style={styles.progressStrip}>
+              <View style={styles.progressStripBar} />
+              <Text style={styles.progressStripText}>
+                {isMobile ? '5 steps — complete from top to bottom' : 'Complete each section from top to bottom'}
+              </Text>
+            </View>
           </View>
 
-          {/* Two Column Layout */}
-          <View style={styles.twoColumnContainer}>
-            {/* Left Column */}
-            <View style={styles.leftColumn}>
-              {/* Personal Information */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Personal Information</Text>
+          {/* Single column straight down — same vibes as publish module */}
+          <View style={[styles.singleColumn, isMobile && styles.singleColumnMobile]}>
+            {/* Step 1: Personal Information */}
+              <View style={[styles.section, styles.sectionCard, isMobile && styles.sectionCardMobile]}>
+                <View style={[styles.sectionBadgeRow, isMobile && styles.sectionBadgeRowMobile]}>
+                  <View style={styles.sectionBadge}>
+                    <Text style={styles.sectionBadgeText}>1</Text>
+                  </View>
+                  {isMobile && <Text style={styles.stepOfTotal}>Step 1 of 5</Text>}
+                </View>
+                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>About you</Text>
+                <Text style={[styles.sectionHint, isMobile && styles.sectionHintMobile]}>Your name, contact details, and where you train. We use this to verify your application.</Text>
                 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Full Name</Text>
-                  <View style={styles.inputWrapper}>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Full name <Text style={styles.requiredDot}>*</Text></Text>
+                  <View style={[styles.inputWrapper, errors.fullName ? styles.inputWrapperError : null, isMobile && styles.inputWrapperMobile]}>
                     <TextInput
-                      style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                      placeholder=""
-                      placeholderTextColor="transparent"
+                      style={[styles.input, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      placeholder="Your full legal name"
+                      placeholderTextColor="#6b8693"
                       value={fullName}
                       onChangeText={(text) => {
                         // Remove numbers from input
@@ -698,12 +764,12 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Professional Alias/Display Name</Text>
-                  <View style={styles.inputWrapper}>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Professional alias (optional)</Text>
+                  <View style={[styles.inputWrapper, isMobile && styles.inputWrapperMobile]}>
                     <TextInput
-                      style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                      placeholder=""
-                      placeholderTextColor="transparent"
+                      style={[styles.input, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      placeholder="e.g. Coach Mike"
+                      placeholderTextColor="#6b8693"
                       value={professionalAlias}
                       onChangeText={setProfessionalAlias}
                     />
@@ -711,9 +777,9 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Date of Birth</Text>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Date of birth <Text style={styles.requiredDot}>*</Text></Text>
                   {Platform.OS === 'web' ? (
-                    <View style={styles.inputWrapper}>
+                    <View style={[styles.inputWrapper, errors.dateOfBirth ? styles.inputWrapperError : null, isMobile && styles.inputWrapperMobile]}>
                       {/* @ts-ignore - Web-specific input element */}
                       <input
                         type="date"
@@ -749,13 +815,14 @@ export default function TrainerRegistrationScreen() {
                   ) : (
                     <>
                       <TouchableOpacity
-                        style={styles.inputWrapper}
+                        style={[styles.inputWrapper, errors.dateOfBirth ? styles.inputWrapperError : null, isMobile && styles.inputWrapperMobile]}
                         onPress={() => setShowDatePicker(true)}
+                        activeOpacity={0.7}
                       >
                         <Text style={dateOfBirth ? styles.selectedText : styles.placeholderText}>
-                          {selectedDate ? formatDateDisplay(selectedDate) : 'Select date of birth'}
+                          {selectedDate ? formatDateDisplay(selectedDate) : 'Tap to choose your birth date'}
                         </Text>
-                        <Ionicons name="calendar-outline" size={20} color="#0097A7" />
+                        <Ionicons name="calendar-outline" size={20} color="#07bbc0" />
                       </TouchableOpacity>
                       {showDatePicker && DateTimePicker && (
                         <>
@@ -818,12 +885,12 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Phone Number</Text>
-                  <View style={styles.inputWrapper}>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Phone number <Text style={styles.requiredDot}>*</Text></Text>
+                  <View style={[styles.inputWrapper, errors.phoneNumber ? styles.inputWrapperError : null, isMobile && styles.inputWrapperMobile]}>
                     <TextInput
-                      style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                      placeholder=""
-                      placeholderTextColor="transparent"
+                      style={[styles.input, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      placeholder="e.g. +1 234 567 8900"
+                      placeholderTextColor="#6b8693"
                       value={phoneNumber}
                       onChangeText={(text) => {
                         // Only allow numbers and common phone formatting characters
@@ -841,12 +908,12 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Email Address</Text>
-                  <View style={styles.inputWrapper}>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Email address <Text style={styles.requiredDot}>*</Text></Text>
+                  <View style={[styles.inputWrapper, errors.emailAddress ? styles.inputWrapperError : null, isMobile && styles.inputWrapperMobile]}>
                     <TextInput
-                      style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                      placeholder=""
-                      placeholderTextColor="transparent"
+                      style={[styles.input, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      placeholder="your@email.com"
+                      placeholderTextColor="#6b8693"
                       value={emailAddress}
                       onChangeText={(text) => {
                         setEmailAddress(text);
@@ -863,12 +930,12 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Academy Name</Text>
-                  <View style={styles.inputWrapper}>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Academy or gym name (optional)</Text>
+                  <View style={[styles.inputWrapper, isMobile && styles.inputWrapperMobile]}>
                     <TextInput
-                      style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                      placeholder=""
-                      placeholderTextColor="transparent"
+                      style={[styles.input, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      placeholder="Where you teach"
+                      placeholderTextColor="#6b8693"
                       value={academyName}
                       onChangeText={(text) => {
                         setAcademyName(text);
@@ -879,12 +946,12 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Physical Address</Text>
-                  <View style={styles.inputWrapper}>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Physical address <Text style={styles.requiredDot}>*</Text></Text>
+                  <View style={[styles.inputWrapper, errors.physicalAddress ? styles.inputWrapperError : null, isMobile && styles.inputWrapperMobile]}>
                     <TextInput
-                      style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                      placeholder=""
-                      placeholderTextColor="transparent"
+                      style={[styles.input, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      placeholder="Street, city, state/country"
+                      placeholderTextColor="#6b8693"
                       value={physicalAddress}
                       onChangeText={(text) => {
                         setPhysicalAddress(text);
@@ -899,14 +966,21 @@ export default function TrainerRegistrationScreen() {
                 </View>
               </View>
 
-              {/* Credentials & Certifications */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Credentials & Certifications</Text>
+              {/* Step 2: Credentials & Certifications */}
+              <View style={[styles.section, styles.sectionCard, isMobile && styles.sectionCardMobile]}>
+                <View style={[styles.sectionBadgeRow, isMobile && styles.sectionBadgeRowMobile]}>
+                  <View style={styles.sectionBadge}>
+                    <Text style={styles.sectionBadgeText}>2</Text>
+                  </View>
+                  {isMobile && <Text style={styles.stepOfTotal}>Step 2 of 5</Text>}
+                </View>
+                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Your experience</Text>
+                <Text style={[styles.sectionHint, isMobile && styles.sectionHintMobile]}>Styles you teach, years of experience, and rank. Select at least one style.</Text>
                 
                 <View style={[styles.inputGroup, showMartialArtsDropdown && styles.inputGroupWithDropdown]}>
-                  <Text style={styles.inputLabel}>Defense Style</Text>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Defense style(s) <Text style={styles.requiredDot}>*</Text></Text>
                   <TouchableOpacity 
-                    style={styles.selectInput}
+                    style={[styles.selectInput, errors.defenseStyle ? styles.inputWrapperError : null, isMobile && styles.selectInputMobile]}
                     onPress={() => {
                       setShowMartialArtsDropdown(!showMartialArtsDropdown);
                       setShowYearsExperienceDropdown(false);
@@ -916,7 +990,7 @@ export default function TrainerRegistrationScreen() {
                   >
                     <View style={styles.selectedItemsContainer}>
                       {selectedMartialArts.length === 0 ? (
-                        <Text style={styles.placeholderText}>Select martial arts...</Text>
+                        <Text style={styles.placeholderText}>Tap to choose (e.g. Karate, BJJ)</Text>
                       ) : (
                         <View style={styles.chipsContainer}>
                           {selectedMartialArts.map((art) => (
@@ -936,7 +1010,7 @@ export default function TrainerRegistrationScreen() {
                         </View>
                       )}
                     </View>
-                    <Ionicons name="chevron-down" size={20} color="#0097A7" style={styles.selectIcon} />
+                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={styles.selectIcon} />
                   </TouchableOpacity>
                   {showMartialArtsDropdown && (
                     <>
@@ -972,6 +1046,7 @@ export default function TrainerRegistrationScreen() {
                                 key={art}
                                 style={[
                                   styles.dropdownItem,
+                                  isMobile && styles.dropdownItemMobile,
                                   selectedMartialArts.includes(art) && styles.dropdownItemSelected,
                                 ]}
                                 onPress={() => toggleMartialArt(art)}
@@ -983,7 +1058,7 @@ export default function TrainerRegistrationScreen() {
                                   {art}
                                 </Text>
                                 {selectedMartialArts.includes(art) && (
-                                  <Ionicons name="checkmark" size={20} color="#0097A7" />
+                                  <Ionicons name="checkmark" size={20} color="#07bbc0" />
                                 )}
                               </TouchableOpacity>
                             ))
@@ -1000,9 +1075,9 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={[styles.inputGroup, showYearsExperienceDropdown && styles.inputGroupWithDropdown]}>
-                  <Text style={styles.inputLabel}>Years of Experience</Text>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Years of experience <Text style={styles.requiredDot}>*</Text></Text>
                   <TouchableOpacity 
-                    style={styles.selectInput}
+                    style={[styles.selectInput, errors.yearsExperience ? styles.inputWrapperError : null, isMobile && styles.selectInputMobile]}
                     onPress={() => {
                       setShowMartialArtsDropdown(false);
                       setShowYearsExperienceDropdown(!showYearsExperienceDropdown);
@@ -1011,9 +1086,9 @@ export default function TrainerRegistrationScreen() {
                     }}
                   >
                     <Text style={yearsExperience ? styles.selectedText : styles.placeholderText}>
-                      {yearsExperience || 'Select years...'}
+                      {yearsExperience ? `${yearsExperience} ${yearsExperience === '1' ? 'year' : 'years'}` : 'Tap to choose'}
                     </Text>
-                    <Ionicons name="chevron-down" size={20} color="#0097A7" style={styles.selectIcon} />
+                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={styles.selectIcon} />
                   </TouchableOpacity>
                   {showYearsExperienceDropdown && (
                     <>
@@ -1050,6 +1125,7 @@ export default function TrainerRegistrationScreen() {
                                 key={year}
                                 style={[
                                   styles.dropdownItem,
+                                  isMobile && styles.dropdownItemMobile,
                                   yearsExperience === year && styles.dropdownItemSelected,
                                 ]}
                                 onPress={() => {
@@ -1068,7 +1144,7 @@ export default function TrainerRegistrationScreen() {
                                   {year} {year === '1' ? 'year' : 'years'}
                                 </Text>
                                 {yearsExperience === year && (
-                                  <Ionicons name="checkmark" size={20} color="#0097A7" />
+                                  <Ionicons name="checkmark" size={20} color="#07bbc0" />
                                 )}
                               </TouchableOpacity>
                             ))
@@ -1085,9 +1161,9 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={[styles.inputGroup, showYearsTeachingDropdown && styles.inputGroupWithDropdown]}>
-                  <Text style={styles.inputLabel}>Years of Teaching Experience</Text>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Years of teaching <Text style={styles.requiredDot}>*</Text></Text>
                   <TouchableOpacity 
-                    style={styles.selectInput}
+                    style={[styles.selectInput, errors.yearsTeaching ? styles.inputWrapperError : null, isMobile && styles.selectInputMobile]}
                     onPress={() => {
                       setShowMartialArtsDropdown(false);
                       setShowYearsExperienceDropdown(false);
@@ -1096,9 +1172,9 @@ export default function TrainerRegistrationScreen() {
                     }}
                   >
                     <Text style={yearsTeaching ? styles.selectedText : styles.placeholderText}>
-                      {yearsTeaching || 'Select years...'}
+                      {yearsTeaching ? `${yearsTeaching} ${yearsTeaching === '1' ? 'year' : 'years'}` : 'Tap to choose'}
                     </Text>
-                    <Ionicons name="chevron-down" size={20} color="#0097A7" style={styles.selectIcon} />
+                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={styles.selectIcon} />
                   </TouchableOpacity>
                   {showYearsTeachingDropdown && (
                     <>
@@ -1135,6 +1211,7 @@ export default function TrainerRegistrationScreen() {
                                 key={year}
                                 style={[
                                   styles.dropdownItem,
+                                  isMobile && styles.dropdownItemMobile,
                                   yearsTeaching === year && styles.dropdownItemSelected,
                                 ]}
                                 onPress={() => {
@@ -1153,7 +1230,7 @@ export default function TrainerRegistrationScreen() {
                                   {year} {year === '1' ? 'year' : 'years'}
                                 </Text>
                                 {yearsTeaching === year && (
-                                  <Ionicons name="checkmark" size={20} color="#0097A7" />
+                                  <Ionicons name="checkmark" size={20} color="#07bbc0" />
                                 )}
                               </TouchableOpacity>
                             ))
@@ -1184,7 +1261,7 @@ export default function TrainerRegistrationScreen() {
                       <Text style={currentRank ? styles.selectedText : styles.placeholderText}>
                         {currentRank || 'Select rank/belt...'}
                       </Text>
-                      <Ionicons name="chevron-down" size={20} color="#0097A7" style={styles.selectIcon} />
+                      <Ionicons name="chevron-down" size={20} color="#07bbc0" style={styles.selectIcon} />
                     </TouchableOpacity>
                     {showRankDropdown && (
                       <>
@@ -1220,6 +1297,7 @@ export default function TrainerRegistrationScreen() {
                                   key={belt}
                                   style={[
                                     styles.dropdownItem,
+                                    isMobile && styles.dropdownItemMobile,
                                     currentRank === belt && styles.dropdownItemSelected,
                                   ]}
                                   onPress={() => {
@@ -1235,7 +1313,7 @@ export default function TrainerRegistrationScreen() {
                                     {belt}
                                   </Text>
                                   {currentRank === belt && (
-                                    <Ionicons name="checkmark" size={20} color="#0097A7" />
+                                    <Ionicons name="checkmark" size={20} color="#07bbc0" />
                                   )}
                                 </TouchableOpacity>
                               ))
@@ -1252,59 +1330,63 @@ export default function TrainerRegistrationScreen() {
                 )}
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Social Media Links</Text>
-                  <View style={styles.socialInputWrapper}>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Social links (optional)</Text>
+                  <View style={[styles.socialInputWrapper, isMobile && styles.socialInputWrapperMobile]}>
                     <TextInput
-                      style={[styles.socialInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                      placeholder=""
-                      placeholderTextColor="transparent"
+                      style={[styles.socialInput, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      placeholder="Facebook URL"
+                      placeholderTextColor="#6b8693"
                       value={facebookLink}
                       onChangeText={setFacebookLink}
                     />
-                    <Ionicons name="logo-facebook" size={20} color="#0097A7" style={styles.socialIcon} />
+                    <Ionicons name="logo-facebook" size={20} color="#07bbc0" style={styles.socialIcon} />
                   </View>
-                  <View style={styles.socialInputWrapper}>
+                  <View style={[styles.socialInputWrapper, isMobile && styles.socialInputWrapperMobile]}>
                     <TextInput
-                      style={[styles.socialInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                      placeholder=""
-                      placeholderTextColor="transparent"
+                      style={[styles.socialInput, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      placeholder="Instagram URL"
+                      placeholderTextColor="#6b8693"
                       value={instagramLink}
                       onChangeText={setInstagramLink}
                     />
-                    <Ionicons name="logo-instagram" size={20} color="#0097A7" style={styles.socialIcon} />
+                    <Ionicons name="logo-instagram" size={20} color="#07bbc0" style={styles.socialIcon} />
                   </View>
-                  <View style={styles.socialInputWrapper}>
+                  <View style={[styles.socialInputWrapper, isMobile && styles.socialInputWrapperMobile]}>
                     <TextInput
-                      style={[styles.socialInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                      placeholder=""
-                      placeholderTextColor="transparent"
+                      style={[styles.socialInput, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      placeholder="Other (website, etc.)"
+                      placeholderTextColor="#6b8693"
                       value={otherLink}
                       onChangeText={setOtherLink}
                     />
-                    <Ionicons name="link" size={20} color="#0097A7" style={styles.socialIcon} />
+                    <Ionicons name="link" size={20} color="#07bbc0" style={styles.socialIcon} />
                   </View>
                 </View>
               </View>
-            </View>
 
-            {/* Right Column */}
-            <View style={styles.rightColumn}>
-              {/* Upload Certification Files */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Upload Certification Files</Text>
+            {/* Step 3: Upload Certification Files */}
+              <View style={[styles.section, styles.sectionCard, isMobile && styles.sectionCardMobile]}>
+                <View style={[styles.sectionBadgeRow, isMobile && styles.sectionBadgeRowMobile]}>
+                  <View style={styles.sectionBadge}>
+                    <Text style={styles.sectionBadgeText}>3</Text>
+                  </View>
+                  {isMobile && <Text style={styles.stepOfTotal}>Step 3 of 5</Text>}
+                </View>
+                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Certification documents</Text>
+                <Text style={[styles.sectionHint, isMobile && styles.sectionHintMobile]}>Upload at least one file (PDF or image) that shows your credentials. Max 10MB per file.</Text>
                 {Platform.OS === 'web' ? (
                   <div
                     ref={uploadAreaRef}
                     style={{
                       borderWidth: 2,
-                      borderColor: isDragging ? '#07bbc0' : '#0097A7',
+                      borderColor: isDragging ? '#09AEC3' : '#07bbc0',
                       borderStyle: 'dashed',
                       borderRadius: 12,
-                      height: 250,
+                      minHeight: 220,
                       display: 'flex',
                       justifyContent: 'center',
                       alignItems: 'center',
-                      backgroundColor: isDragging ? 'rgba(7, 187, 192, 0.1)' : 'transparent',
+                      backgroundColor: isDragging ? 'rgba(7, 187, 192, 0.15)' : '#011f36',
                       marginTop: 10,
                       cursor: 'pointer',
                     } as any}
@@ -1314,13 +1396,13 @@ export default function TrainerRegistrationScreen() {
                       <Ionicons 
                         name="cloud-upload-outline" 
                         size={48} 
-                        color={isDragging ? "#07bbc0" : "#0097A7"} 
+                        color="#07bbc0" 
                       />
                       <div style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 500, marginTop: 12 }}>
                         {isDragging ? 'Drop files here' : 'Click to upload or drag files here'}
                       </div>
                       <div style={{ color: '#6b8693', fontSize: 12, marginTop: 8 }}>
-                        PDF, PNG, JPG, JPEG (Max 10MB per file)
+                        PDF or image. Max 10MB each.
                       </div>
                     </div>
                     <input
@@ -1337,6 +1419,8 @@ export default function TrainerRegistrationScreen() {
                     style={[
                       styles.uploadArea,
                       isDragging && styles.uploadAreaDragging,
+                      errors.uploadedFiles ? styles.uploadAreaError : null,
+                      isMobile && styles.uploadAreaMobile,
                     ]}
                     onPress={handleFileSelect}
                     activeOpacity={0.7}
@@ -1344,14 +1428,14 @@ export default function TrainerRegistrationScreen() {
                     <View style={styles.uploadAreaContent}>
                       <Ionicons 
                         name="cloud-upload-outline" 
-                        size={48} 
+                        size={isMobile ? 40 : 48} 
                         color={isDragging ? "#07bbc0" : "#0097A7"} 
                       />
-                      <Text style={styles.uploadText}>
-                        Tap to upload files
+                      <Text style={[styles.uploadText, isMobile && styles.uploadTextMobile]}>
+                        {isMobile ? 'Tap to add files' : 'Tap to upload files'}
                       </Text>
                       <Text style={styles.uploadSubtext}>
-                        PDF, PNG, JPG, JPEG (Max 10MB per file)
+                        PDF or image, max 10MB each
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -1365,7 +1449,7 @@ export default function TrainerRegistrationScreen() {
                         <Ionicons 
                           name={getFileIcon(file.type) as any} 
                           size={20} 
-                          color="#0097A7" 
+                          color="#07bbc0" 
                           style={styles.fileIcon}
                         />
                         <Text style={styles.fileName} numberOfLines={1}>
@@ -1387,41 +1471,51 @@ export default function TrainerRegistrationScreen() {
                 {errors.uploadedFiles ? <Text style={styles.errorText}>{errors.uploadedFiles}</Text> : null}
               </View>
 
-              {/* Credentials Revoked Question */}
-              <View style={styles.section}>
-                <Text style={styles.questionText}>Have you ever had credentials revoked?</Text>
-                <View style={styles.checkboxGroup}>
+              {/* Step 4: A few questions */}
+              <View style={[styles.section, styles.sectionCard, isMobile && styles.sectionCardMobile]}>
+                <View style={[styles.sectionBadgeRow, isMobile && styles.sectionBadgeRowMobile]}>
+                  <View style={styles.sectionBadge}>
+                    <Text style={styles.sectionBadgeText}>4</Text>
+                  </View>
+                  {isMobile && <Text style={styles.stepOfTotal}>Step 4 of 5</Text>}
+                </View>
+                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>A few questions</Text>
+                <Text style={[styles.sectionHint, isMobile && styles.sectionHintMobile]}>Two quick yes/no questions. Answer honestly — it helps us keep the platform safe.</Text>
+                <Text style={[styles.questionText, isMobile && styles.questionTextMobile]}>Have you ever had credentials revoked?</Text>
+                <View style={[styles.checkboxGroup, isMobile && styles.checkboxGroupMobile]}>
                   <TouchableOpacity 
-                    style={styles.checkboxRow}
+                    style={[styles.checkboxRow, isMobile && styles.checkboxRowMobile]}
                     onPress={() => setCredentialsRevoked('yes')}
+                    activeOpacity={0.7}
                   >
-                    <View style={[styles.checkbox, credentialsRevoked === 'yes' && styles.checkboxChecked]}>
+                    <View style={[styles.checkbox, credentialsRevoked === 'yes' && styles.checkboxChecked, isMobile && styles.checkboxMobile]}>
                       {credentialsRevoked === 'yes' && (
-                        <Ionicons name="checkmark" size={16} color="#0097A7" />
+                        <Ionicons name="checkmark" size={credentialsRevoked === 'yes' && isMobile ? 18 : 16} color="#FFFFFF" />
                       )}
                     </View>
-                    <Text style={styles.checkboxLabel}>Yes</Text>
+                    <Text style={[styles.checkboxLabel, isMobile && styles.checkboxLabelMobile]}>Yes</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
-                    style={styles.checkboxRow}
+                    style={[styles.checkboxRow, isMobile && styles.checkboxRowMobile]}
                     onPress={() => setCredentialsRevoked('no')}
+                    activeOpacity={0.7}
                   >
-                    <View style={[styles.checkbox, credentialsRevoked === 'no' && styles.checkboxChecked]}>
+                    <View style={[styles.checkbox, credentialsRevoked === 'no' && styles.checkboxChecked, isMobile && styles.checkboxMobile]}>
                       {credentialsRevoked === 'no' && (
-                        <Ionicons name="checkmark" size={16} color="#0097A7" />
+                        <Ionicons name="checkmark" size={credentialsRevoked === 'no' && isMobile ? 18 : 16} color="#FFFFFF" />
                       )}
                     </View>
-                    <Text style={styles.checkboxLabel}>No</Text>
+                    <Text style={[styles.checkboxLabel, isMobile && styles.checkboxLabelMobile]}>No</Text>
                   </TouchableOpacity>
                 </View>
                 {credentialsRevoked === 'yes' && (
                   <View style={styles.inputGroup}>
                     <Text style={styles.explanationLabel}>If yes, please explain:</Text>
-                    <View style={[styles.inputWrapper, styles.multilineInputWrapper]}>
+                    <View style={[styles.inputWrapper, styles.multilineInputWrapper, isMobile && styles.inputWrapperMobile]}>
                       <TextInput
                         style={[styles.input, styles.multilineInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                        placeholder=""
-                        placeholderTextColor="transparent"
+                        placeholder="Brief explanation (optional)"
+                        placeholderTextColor="#6b8693"
                         value={credentialsRevokedExplanation}
                         onChangeText={setCredentialsRevokedExplanation}
                         multiline
@@ -1429,43 +1523,41 @@ export default function TrainerRegistrationScreen() {
                     </View>
                   </View>
                 )}
-              </View>
-
-              {/* Felony Conviction Question */}
-              <View style={[styles.section, { marginTop: 30 }]}>
-                <Text style={styles.questionText}>Have you been convicted of a felony?</Text>
-                <View style={styles.checkboxGroup}>
+                <Text style={[styles.questionText, isMobile && styles.questionTextMobile, { marginTop: 20 }]}>Have you been convicted of a felony?</Text>
+                <View style={[styles.checkboxGroup, isMobile && styles.checkboxGroupMobile]}>
                   <TouchableOpacity 
-                    style={styles.checkboxRow}
+                    style={[styles.checkboxRow, isMobile && styles.checkboxRowMobile]}
                     onPress={() => setFelonyConviction('yes')}
+                    activeOpacity={0.7}
                   >
-                    <View style={[styles.checkbox, felonyConviction === 'yes' && styles.checkboxChecked]}>
+                    <View style={[styles.checkbox, felonyConviction === 'yes' && styles.checkboxChecked, isMobile && styles.checkboxMobile]}>
                       {felonyConviction === 'yes' && (
-                        <Ionicons name="checkmark" size={16} color="#0097A7" />
+                        <Ionicons name="checkmark" size={felonyConviction === 'yes' && isMobile ? 18 : 16} color="#FFFFFF" />
                       )}
                     </View>
-                    <Text style={styles.checkboxLabel}>Yes</Text>
+                    <Text style={[styles.checkboxLabel, isMobile && styles.checkboxLabelMobile]}>Yes</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
-                    style={styles.checkboxRow}
+                    style={[styles.checkboxRow, isMobile && styles.checkboxRowMobile]}
                     onPress={() => setFelonyConviction('no')}
+                    activeOpacity={0.7}
                   >
-                    <View style={[styles.checkbox, felonyConviction === 'no' && styles.checkboxChecked]}>
+                    <View style={[styles.checkbox, felonyConviction === 'no' && styles.checkboxChecked, isMobile && styles.checkboxMobile]}>
                       {felonyConviction === 'no' && (
-                        <Ionicons name="checkmark" size={16} color="#0097A7" />
+                        <Ionicons name="checkmark" size={felonyConviction === 'no' && isMobile ? 18 : 16} color="#FFFFFF" />
                       )}
                     </View>
-                    <Text style={styles.checkboxLabel}>No</Text>
+                    <Text style={[styles.checkboxLabel, isMobile && styles.checkboxLabelMobile]}>No</Text>
                   </TouchableOpacity>
                 </View>
                 {felonyConviction === 'yes' && (
                   <View style={styles.inputGroup}>
                     <Text style={styles.explanationLabel}>If yes, please explain:</Text>
-                    <View style={[styles.inputWrapper, styles.multilineInputWrapper]}>
+                    <View style={[styles.inputWrapper, styles.multilineInputWrapper, isMobile && styles.inputWrapperMobile]}>
                       <TextInput
                         style={[styles.input, styles.multilineInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                        placeholder=""
-                        placeholderTextColor="transparent"
+                        placeholder="Brief explanation (optional)"
+                        placeholderTextColor="#6b8693"
                         value={felonyExplanation}
                         onChangeText={setFelonyExplanation}
                         multiline
@@ -1475,62 +1567,91 @@ export default function TrainerRegistrationScreen() {
                 )}
               </View>
 
-              {/* Certifications */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Credentials & Certifications</Text>
+              {/* Step 5: Confirm & submit */}
+              <View style={[styles.section, styles.sectionCard, styles.sectionCardLast, isMobile && styles.sectionCardMobile]}>
+                <View style={[styles.sectionBadgeRow, isMobile && styles.sectionBadgeRowMobile]}>
+                  <View style={styles.sectionBadge}>
+                    <Text style={styles.sectionBadgeText}>5</Text>
+                  </View>
+                  {isMobile && <Text style={styles.stepOfTotal}>Step 5 of 5</Text>}
+                </View>
+                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Almost done</Text>
+                <Text style={[styles.sectionHint, isMobile && styles.sectionHintMobile]}>Check the two boxes below, then tap Submit. We’ll review your application and get back to you.</Text>
                 <TouchableOpacity 
-                  style={styles.certificationCheckboxRow}
+                  style={[styles.certificationCheckboxRow, isMobile && styles.certificationCheckboxRowMobile]}
                   onPress={() => {
                     setCertifyAccurate(!certifyAccurate);
                     if (errors.certifyAccurate) {
                       setErrors(prev => ({ ...prev, certifyAccurate: '' }));
                     }
                   }}
+                  activeOpacity={0.7}
                 >
-                  <View style={[styles.checkbox, certifyAccurate && styles.checkboxChecked]}>
+                  <View style={[styles.checkbox, certifyAccurate && styles.checkboxChecked, isMobile && styles.checkboxMobile]}>
                     {certifyAccurate && (
-                      <Ionicons name="checkmark" size={16} color="#0097A7" />
+                      <Ionicons name="checkmark" size={isMobile ? 18 : 16} color="#FFFFFF" />
                     )}
                   </View>
-                  <Text style={styles.certificationText}>I certify all information provided is accurate</Text>
+                  <Text style={[styles.certificationText, isMobile && styles.certificationTextMobile]}>I confirm that all information I provided is accurate</Text>
                 </TouchableOpacity>
                 {errors.certifyAccurate ? <Text style={styles.errorText}>{errors.certifyAccurate}</Text> : null}
                 <TouchableOpacity 
-                  style={styles.certificationCheckboxRow}
+                  style={[styles.certificationCheckboxRow, isMobile && styles.certificationCheckboxRowMobile]}
                   onPress={() => {
                     setAgreeConduct(!agreeConduct);
                     if (errors.agreeConduct) {
                       setErrors(prev => ({ ...prev, agreeConduct: '' }));
                     }
                   }}
+                  activeOpacity={0.7}
                 >
-                  <View style={[styles.checkbox, agreeConduct && styles.checkboxChecked]}>
+                  <View style={[styles.checkbox, agreeConduct && styles.checkboxChecked, isMobile && styles.checkboxMobile]}>
                     {agreeConduct && (
-                      <Ionicons name="checkmark" size={16} color="#0097A7" />
+                      <Ionicons name="checkmark" size={isMobile ? 18 : 16} color="#FFFFFF" />
                     )}
                   </View>
-                  <Text style={styles.certificationText}>I agree to maintain professional conduct</Text>
+                  <Text style={[styles.certificationText, isMobile && styles.certificationTextMobile]}>I agree to maintain professional conduct as a trainer</Text>
                 </TouchableOpacity>
                 {errors.agreeConduct ? <Text style={styles.errorText}>{errors.agreeConduct}</Text> : null}
               </View>
-            </View>
           </View>
 
-          {/* Register Button */}
-          <View style={styles.registerButtonContainer}>
+          {/* Register Button - desktop */}
+          <View style={[styles.registerButtonContainer, isMobile && styles.registerButtonContainerMobileHide]}>
             <TouchableOpacity 
-              style={[styles.registerButton, loading && styles.registerButtonDisabled]}
+              style={[styles.registerButton, loading && styles.registerButtonDisabled, isMobile && styles.registerButtonMobile]}
               onPress={handleRegister}
               disabled={loading}
             >
               {loading ? (
                 <Text style={styles.registerButtonText}>Submitting...</Text>
               ) : (
-                <Text style={styles.registerButtonText}>Register</Text>
+                <Text style={styles.registerButtonText}>Submit application</Text>
               )}
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        {/* Sticky submit bar on mobile */}
+        {isMobile && (
+          <View style={styles.stickySubmitBar}>
+            <TouchableOpacity
+              style={[styles.stickySubmitButton, loading && styles.registerButtonDisabled]}
+              onPress={handleRegister}
+              disabled={loading}
+            >
+              {loading ? (
+                <Text style={styles.registerButtonText}>Submitting...</Text>
+              ) : (
+                <>
+                  <Ionicons name="send" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.registerButtonText}>Submit application</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+        </View>
       </View>
 
       {/* Pop-up Menu */}
@@ -1540,7 +1661,7 @@ export default function TrainerRegistrationScreen() {
           activeOpacity={1}
           onPress={() => setShowMenu(false)}
         >
-          <View style={styles.menuContainer}>
+          <View style={[styles.menuContainer, isMobile && styles.menuContainerMobile]}>
             <TouchableOpacity 
               style={styles.menuItem}
               onPress={handleMessages}
@@ -1661,6 +1782,50 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  mainContentWrap: {
+    flex: 1,
+    minWidth: 0,
+    position: 'relative',
+  },
+  mainContentWrapMobile: {
+    width: '100%',
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    minHeight: 52,
+  },
+  topBarMobile: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0a3645',
+  },
+  topBarBackButton: {
+    padding: 10,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  topBarBackIcon: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
+  },
+  mobileMenuButtonWrap: {
+    position: 'relative',
+  },
+  mobileMenuButton: {
+    padding: 12,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   mainContent: {
     flex: 1,
   },
@@ -1669,9 +1834,32 @@ const styles = StyleSheet.create({
     paddingVertical: 25,
     paddingBottom: 40,
   },
-  header: {
-    marginBottom: 40,
+  mainContentContainerMobile: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 140,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 25,
+    left: 30,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonIcon: {
+    width: 24,
+    height: 24,
+  },
+  publishHeader: {
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0a3645',
     alignItems: 'center',
+  },
+  publishHeaderMobile: {
+    marginBottom: 20,
+    paddingBottom: 12,
   },
   logoImage: {
     width: 180,
@@ -1679,35 +1867,125 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
     marginBottom: 20,
   },
-  pageTitle: {
+  logoImageMobile: {
+    width: 140,
+    height: 48,
+    marginBottom: 12,
+  },
+  publishTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: '#FFFFFF',
     textAlign: 'center',
     width: '100%',
+    marginBottom: 6,
   },
-  twoColumnContainer: {
+  publishTitleMobile: {
+    fontSize: 22,
+    paddingHorizontal: 8,
+  },
+  publishSubtitle: {
+    fontSize: 14,
+    color: '#8fa3b0',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+  },
+  progressStrip: {
     flexDirection: 'row',
-    gap: 40,
-    marginBottom: 40,
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
   },
-  leftColumn: {
-    flex: 1,
-    minWidth: 0,
+  progressStripBar: {
+    width: 4,
+    height: 20,
+    borderRadius: 2,
+    backgroundColor: '#07bbc0',
   },
-  rightColumn: {
-    flex: 1,
-    minWidth: 0,
+  progressStripText: {
+    fontSize: 12,
+    color: '#6b8693',
+  },
+  singleColumn: {
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+    marginBottom: 24,
+  },
+  singleColumnMobile: {
+    maxWidth: '100%',
   },
   section: {
     marginBottom: 50,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  sectionCard: {
+    backgroundColor: '#061d2e',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#0a3645',
+    marginBottom: 24,
+  },
+  sectionCardMobile: {
+    padding: 18,
     marginBottom: 20,
+    borderRadius: 10,
+  },
+  sectionCardLast: {
+    marginBottom: 32,
+  },
+  sectionBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 10,
+  },
+  sectionBadgeRowMobile: {
+    marginBottom: 14,
+  },
+  sectionBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#07bbc0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#041527',
+  },
+  stepOfTotal: {
+    fontSize: 13,
+    color: '#8fa3b0',
+    fontWeight: '500',
+  },
+  sectionHint: {
+    fontSize: 13,
+    color: '#8fa3b0',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  sectionHintMobile: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  requiredDot: {
+    color: '#07bbc0',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#07bbc0',
+    marginBottom: 16,
+    textTransform: 'uppercase',
+  },
+  sectionTitleMobile: {
+    fontSize: 17,
+    marginBottom: 12,
   },
   inputGroup: {
     marginBottom: 24,
@@ -1725,15 +2003,28 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 8,
   },
+  inputLabelMobile: {
+    fontSize: 15,
+    marginBottom: 10,
+  },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#01151F',
-    borderRadius: 25,
+    backgroundColor: '#011f36',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#0097A7',
-    paddingHorizontal: 15,
+    borderColor: '#0a3645',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     minHeight: 56,
+  },
+  inputWrapperError: {
+    borderColor: '#FF6B6B',
+  },
+  inputWrapperMobile: {
+    minHeight: 48,
+    paddingVertical: 14,
+    borderRadius: 8,
   },
   input: {
     flex: 1,
@@ -1741,6 +2032,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 0,
     textAlignVertical: 'center',
+  },
+  inputMobile: {
+    fontSize: 16,
+    minHeight: 44,
   },
   multilineInputWrapper: {
     alignItems: 'flex-start',
@@ -1754,13 +2049,19 @@ const styles = StyleSheet.create({
   selectInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#01151F',
-    borderRadius: 25,
+    backgroundColor: '#011f36',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#0097A7',
-    paddingHorizontal: 15,
+    borderColor: '#0a3645',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     minHeight: 56,
     justifyContent: 'space-between',
+  },
+  selectInputMobile: {
+    minHeight: 48,
+    borderRadius: 8,
+    paddingVertical: 14,
   },
   selectedItemsContainer: {
     flex: 1,
@@ -1777,12 +2078,14 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0097A7',
-    borderRadius: 15,
+    backgroundColor: 'rgba(7, 187, 192, 0.25)',
+    borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 6,
     marginRight: 4,
     marginBottom: 4,
+    borderWidth: 1,
+    borderColor: '#07bbc0',
   },
   chipText: {
     color: '#FFFFFF',
@@ -1817,17 +2120,17 @@ const styles = StyleSheet.create({
     top: '100%',
     left: 0,
     right: 0,
-    backgroundColor: '#01151F',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#0097A7',
+    backgroundColor: '#011f36',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#0a3645',
     marginTop: 4,
     maxHeight: 200,
     zIndex: 10000,
-    shadowColor: '#0097A7',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
     elevation: 25,
     overflow: 'hidden',
   },
@@ -1838,7 +2141,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#0097A7',
+    borderBottomColor: '#0a3645',
   },
   searchIcon: {
     marginRight: 8,
@@ -1862,6 +2165,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#0a3645',
   },
+  dropdownItemMobile: {
+    paddingVertical: 14,
+    minHeight: 48,
+  },
   dropdownItemSelected: {
     backgroundColor: '#062731',
   },
@@ -1877,12 +2184,12 @@ const styles = StyleSheet.create({
   socialInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#01151F',
-    borderRadius: 25,
+    backgroundColor: '#011f36',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#0097A7',
-    paddingHorizontal: 15,
-    height: 56,
+    borderColor: '#0a3645',
+    paddingHorizontal: 12,
+    minHeight: 56,
     marginBottom: 16,
   },
   socialInput: {
@@ -1895,21 +2202,34 @@ const styles = StyleSheet.create({
   socialIcon: {
     marginLeft: 8,
   },
+  socialInputWrapperMobile: {
+    minHeight: 48,
+    marginBottom: 12,
+  },
   uploadArea: {
     borderWidth: 2,
-    borderColor: '#0097A7',
+    borderColor: '#07bbc0',
     borderStyle: 'dashed',
     borderRadius: 12,
-    height: 250,
+    height: 220,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: '#011f36',
     marginTop: 10,
     position: 'relative',
   },
   uploadAreaDragging: {
-    borderColor: '#07bbc0',
-    backgroundColor: 'rgba(7, 187, 192, 0.1)',
+    borderColor: '#09AEC3',
+    backgroundColor: 'rgba(7, 187, 192, 0.15)',
+    borderWidth: 3,
+  },
+  uploadAreaError: {
+    borderColor: '#FF6B6B',
+  },
+  uploadAreaMobile: {
+    height: 160,
+    marginTop: 8,
+    minHeight: 140,
   },
   uploadAreaContent: {
     width: '100%',
@@ -1925,6 +2245,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
     textAlign: 'center',
   },
+  uploadTextMobile: {
+    fontSize: 15,
+  },
   uploadSubtext: {
     color: '#6b8693',
     fontSize: 12,
@@ -1938,11 +2261,11 @@ const styles = StyleSheet.create({
   uploadedFileItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#01151F',
+    backgroundColor: '#011f36',
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#0097A7',
+    borderColor: '#0a3645',
   },
   fileIcon: {
     marginRight: 12,
@@ -1967,32 +2290,50 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 16,
   },
+  questionTextMobile: {
+    fontSize: 15,
+  },
   checkboxGroup: {
     flexDirection: 'row',
     gap: 24,
     marginBottom: 16,
   },
+  checkboxGroupMobile: {
+    gap: 20,
+  },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  checkboxRowMobile: {
+    minHeight: 44,
   },
   checkbox: {
     width: 20,
     height: 20,
     borderWidth: 2,
-    borderColor: '#0097A7',
-    borderRadius: 2,
+    borderColor: '#07bbc0',
+    borderRadius: 4,
     marginRight: 8,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
+  checkboxMobile: {
+    width: 24,
+    height: 24,
+    marginRight: 10,
+  },
   checkboxChecked: {
-    backgroundColor: 'transparent',
+    backgroundColor: '#07bbc0',
+    borderColor: '#07bbc0',
   },
   checkboxLabel: {
     fontSize: 16,
     color: '#FFFFFF',
+  },
+  checkboxLabelMobile: {
+    fontSize: 15,
   },
   explanationLabel: {
     fontSize: 14,
@@ -2006,16 +2347,27 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 16,
   },
+  certificationCheckboxRowMobile: {
+    marginBottom: 20,
+    minHeight: 44,
+  },
   certificationText: {
     fontSize: 16,
     color: '#FFFFFF',
     flex: 1,
     marginLeft: 8,
   },
+  certificationTextMobile: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
   registerButtonContainer: {
-    alignItems: 'flex-end',
+    alignItems: 'center',
     marginTop: 30,
     marginBottom: 20,
+  },
+  registerButtonContainerMobileHide: {
+    marginBottom: 24,
   },
   registerButton: {
     backgroundColor: '#07bbc0',
@@ -2023,6 +2375,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     borderRadius: 8,
     minWidth: 150,
+  },
+  registerButtonMobile: {
+    minWidth: '100%',
+    paddingVertical: 16,
   },
   registerButtonDisabled: {
     backgroundColor: '#6b8693',
@@ -2034,6 +2390,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     textTransform: 'uppercase',
+  },
+  stickySubmitBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 28,
+    backgroundColor: '#041527',
+    borderTopWidth: 1,
+    borderTopColor: '#0a3645',
+  },
+  stickySubmitButton: {
+    backgroundColor: '#07bbc0',
+    borderRadius: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    minHeight: 54,
   },
   menuOverlay: {
     position: 'absolute',
@@ -2059,6 +2437,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  menuContainerMobile: {
+    left: 16,
+    right: 16,
+    top: 70,
   },
   menuItem: {
     flexDirection: 'row',
