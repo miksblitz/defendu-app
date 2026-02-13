@@ -1103,22 +1103,37 @@ export default function PublishModulePage() {
             showsVerticalScrollIndicator={true}
             keyboardShouldPersistTaps="handled"
           >
-            {isMobile && (
-              <Text style={styles.pageTitleMobile}>Publish a module</Text>
-            )}
+            {/* Friendly header for everyone, especially non-techy users */}
+            <View style={[styles.publishHeader, isMobile && styles.publishHeaderMobile]}>
+              <Text style={[styles.publishTitle, isMobile && styles.publishTitleMobile]}>
+                {isMobile ? 'Create a new module' : 'Publish a module'}
+              </Text>
+              <Text style={styles.publishSubtitle}>
+                Fill in each section below. You can save and come back later. Required fields are marked.
+              </Text>
+              <View style={styles.progressStrip}>
+                <View style={styles.progressStripBar} />
+                <Text style={styles.progressStripText}>Complete each section from top to bottom</Text>
+              </View>
+            </View>
+
             {/* Single column: one scroll, step-by-step (easy for everyone, including on mobile) */}
             <View style={[styles.singleColumn, isMobile && styles.singleColumnMobile]}>
               {/* Step 1: What is this module? */}
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Module Information</Text>
+              <View style={[styles.section, styles.sectionCard, isMobile && styles.sectionCardMobile]}>
+                <View style={styles.sectionBadge}>
+                  <Text style={styles.sectionBadgeText}>1</Text>
+                </View>
+                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>What's this module about?</Text>
+                <Text style={styles.sectionHint}>Give it a short title and description so learners know what to expect.</Text>
                   
                   <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Module Title</Text>
-                    <View style={[styles.inputWrapper, errors.moduleTitle ? styles.inputError : null]}>
+                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Module title <Text style={styles.requiredDot}>*</Text></Text>
+                    <View style={[styles.inputWrapper, errors.moduleTitle ? styles.inputError : null, isMobile && styles.inputWrapperMobile]}>
                       <TextInput
                         style={[styles.input, styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
                         value={moduleTitle}
-                        placeholder="(e.g, Basic Palm Strike)"
+                        placeholder="e.g. Basic Palm Strike"
                         placeholderTextColor="#6b8693"
                         onChangeText={(text) => {
                           if (text.length <= 50) {
@@ -1140,12 +1155,12 @@ export default function PublishModulePage() {
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Description</Text>
-                    <View style={[styles.inputWrapper, styles.textAreaWrapper, errors.description ? styles.inputError : null]}>
+                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Description <Text style={styles.requiredDot}>*</Text></Text>
+                    <View style={[styles.inputWrapper, styles.textAreaWrapper, errors.description ? styles.inputError : null, isMobile && styles.inputWrapperMobile]}>
                       <TextInput
                         style={[styles.input, styles.textArea, styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
                         value={description}
-                        placeholder="Brief description..."
+                        placeholder="In a few sentences, what will the learner do or learn?"
                         placeholderTextColor="#6b8693"
                         onChangeText={(text) => {
                           if (text.length <= 600) {
@@ -1170,13 +1185,14 @@ export default function PublishModulePage() {
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Category</Text>
+                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Category <Text style={styles.requiredDot}>*</Text></Text>
                     <TouchableOpacity
                       style={[styles.selectInput, errors.category ? styles.inputError : null, isMobile && styles.selectInputMobile]}
                       onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                      activeOpacity={0.7}
                     >
                       <Text style={category ? styles.selectedText : styles.placeholderText}>
-                        {category || 'Select category...'}
+                        {category || 'Choose a category (e.g. Punching, Kicking)'}
                       </Text>
                       <Ionicons name="chevron-down" size={20} color="#07bbc0" />
                     </TouchableOpacity>
@@ -1374,12 +1390,16 @@ export default function PublishModulePage() {
                 </View>
 
               {/* Step 2: Technique Video */}
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Technique Video (optional)</Text>
+              <View style={[styles.section, styles.sectionCard, isMobile && styles.sectionCardMobile]}>
+                <View style={styles.sectionBadge}>
+                  <Text style={styles.sectionBadgeText}>2</Text>
+                </View>
+                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Show the technique (optional)</Text>
+                <Text style={styles.sectionHint}>Upload a short video or paste a link. Max 30 seconds. Helps learners see the move.</Text>
                   <View style={[styles.videoLimitNotice, isMobile && styles.videoLimitNoticeMobile]}>
                     <Ionicons name="information-circle-outline" size={16} color="#6b8693" style={{ marginRight: 6 }} />
                     <Text style={styles.videoLimitText}>
-                      If there is no technique video, there will be no motion capture and pose estimation.
+                      No video? You can skip this. The module will still have your title and description.
                     </Text>
                   </View>
                   {/* Video duration limit notice */}
@@ -1527,13 +1547,17 @@ export default function PublishModulePage() {
                   </View>
                 )}
 
-                {/* Step 5: AI Training Specifications */}
-                <View style={styles.section}>
-                  <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>AI Training Specifications</Text>
+                {/* Step 3: Difficulty & requirements */}
+                <View style={[styles.section, styles.sectionCard, isMobile && styles.sectionCardMobile]}>
+                  <View style={styles.sectionBadge}>
+                    <Text style={styles.sectionBadgeText}>3</Text>
+                  </View>
+                  <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Difficulty & requirements</Text>
+                  <Text style={styles.sectionHint}>How hard is it? How much space? This helps us recommend it to the right learners.</Text>
                   
                   {/* Intensity Level */}
                   <View style={styles.intensityContainer}>
-                    <Text style={[styles.intensityLabel, isMobile && styles.inputLabelMobile]}>Intensity Level</Text>
+                    <Text style={[styles.intensityLabel, isMobile && styles.inputLabelMobile]}>Intensity (1 = easy, 5 = very hard)</Text>
                     <View style={styles.sliderContainer}>
                       <TouchableOpacity
                         ref={sliderTrackRef}
@@ -1748,12 +1772,14 @@ export default function PublishModulePage() {
                   </View>
                 </View>
 
-                {/* Step 4: Thumbnail */}
+                {/* Thumbnail (optional, part of step 3 flow) */}
                 <View style={styles.section}>
-                  <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Thumbnail</Text>
+                  <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Cover image (optional)</Text>
+                  <Text style={styles.sectionHint}>A picture that appears in the module list. Helps learners spot your module.</Text>
                   <TouchableOpacity 
                     style={[styles.thumbnailUpload, errors.thumbnail ? styles.thumbnailUploadError : null, isMobile && styles.thumbnailUploadMobile]}
                     onPress={handleThumbnailUpload}
+                    activeOpacity={0.8}
                   >
                     {thumbnail ? (
                       <Image source={{ uri: thumbnail }} style={styles.thumbnailImage} />
@@ -1782,8 +1808,13 @@ export default function PublishModulePage() {
                 </View>
             </View>
             
-            {/* Step 6: Certify & Submit */}
-            <View style={[styles.bottomSection, isMobile && styles.bottomSectionMobile]}>
+            {/* Step 4: Certify & Submit */}
+            <View style={[styles.bottomSection, isMobile && styles.bottomSectionMobile, styles.sectionCard, styles.sectionCardSubmit]}>
+              <View style={styles.sectionBadge}>
+                <Text style={styles.sectionBadgeText}>4</Text>
+              </View>
+              <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile, { marginBottom: 8 }]}>Almost done</Text>
+              <Text style={[styles.sectionHint, { marginBottom: 20 }]}>Confirm and send for review. An admin will approve it before learners see it.</Text>
               <TouchableOpacity
                 style={[styles.certificationCheckbox, isMobile && styles.certificationCheckboxMobile]}
                 onPress={() => {
@@ -1805,7 +1836,7 @@ export default function PublishModulePage() {
                   )}
                 </View>
                 <Text style={[styles.certificationText, isMobile && styles.certificationTextMobile]}>
-                  I certify this technique is appropriate and valid for self defense
+                  I confirm this technique is safe and appropriate for self-defense training
                 </Text>
               </TouchableOpacity>
               {errors.certification ? <Text style={styles.errorText}>{errors.certification}</Text> : null}
@@ -1819,12 +1850,33 @@ export default function PublishModulePage() {
                   {loading ? (
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
-                    <Text style={styles.submitButtonText}>Upload & Submit for Review</Text>
+                    <Text style={styles.submitButtonText}>Submit for review</Text>
                   )}
                 </TouchableOpacity>
               </View>
             </View>
+
           </ScrollView>
+
+          {/* Sticky submit bar on mobile — fixed at bottom so users don't have to scroll */}
+          {isMobile && (
+            <View style={styles.stickySubmitBar}>
+              <TouchableOpacity
+                style={[styles.stickySubmitButton, loading && styles.submitButtonDisabled]}
+                onPress={handlePublish}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="send" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.submitButtonText}>Submit for review</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
 
@@ -2000,9 +2052,49 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   scrollContentMobile: {
-    paddingBottom: 48,
+    paddingBottom: 120,
     paddingHorizontal: 16,
     paddingTop: 8,
+  },
+  publishHeader: {
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0a3645',
+  },
+  publishHeaderMobile: {
+    marginBottom: 20,
+    paddingBottom: 12,
+  },
+  publishTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  publishTitleMobile: {
+    fontSize: 22,
+  },
+  publishSubtitle: {
+    fontSize: 14,
+    color: '#8fa3b0',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  progressStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  progressStripBar: {
+    width: 4,
+    height: 20,
+    borderRadius: 2,
+    backgroundColor: '#07bbc0',
+  },
+  progressStripText: {
+    fontSize: 12,
+    color: '#6b8693',
   },
   pageTitleMobile: {
     fontSize: 22,
@@ -2021,6 +2113,43 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: 24,
+  },
+  sectionCard: {
+    backgroundColor: '#061d2e',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#0a3645',
+  },
+  sectionCardMobile: {
+    padding: 18,
+    borderRadius: 10,
+  },
+  sectionCardSubmit: {
+    marginTop: 8,
+  },
+  sectionBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#07bbc0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  sectionBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#041527',
+  },
+  sectionHint: {
+    fontSize: 13,
+    color: '#8fa3b0',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  requiredDot: {
+    color: '#07bbc0',
   },
   sectionTitle: {
     fontSize: 16,
@@ -2525,6 +2654,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
+  inputWrapperMobile: {
+    minHeight: 48,
+    paddingVertical: 14,
+  },
   textAreaWrapper: {
     alignItems: 'flex-start',
     paddingVertical: 12,
@@ -2700,6 +2833,28 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  stickySubmitBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 24,
+    backgroundColor: '#041527',
+    borderTopWidth: 1,
+    borderTopColor: '#0a3645',
+  },
+  stickySubmitButton: {
+    backgroundColor: '#07bbc0',
+    borderRadius: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    minHeight: 52,
   },
   menuOverlay: {
     position: 'absolute',
