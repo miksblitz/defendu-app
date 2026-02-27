@@ -272,6 +272,7 @@ const styles = StyleSheet.create({
   },
   navMenuButton: {
     padding: 12,
+    cursor: 'pointer',
   },
   navBottomIcons: {
     alignItems: 'center',
@@ -346,6 +347,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     marginRight: 20,
+    cursor: 'pointer',
   },
   cardBackground: {
     width: '100%',
@@ -405,6 +407,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
+    cursor: 'pointer',
   },
   menuIcon: {
     width: 24,

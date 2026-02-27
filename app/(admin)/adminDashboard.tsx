@@ -598,6 +598,7 @@ const styles = StyleSheet.create({
   },
   navMenuButton: {
     padding: 12,
+    cursor: 'pointer',
   },
   navBottomIcons: {
     alignItems: 'center',
@@ -681,6 +682,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(56, 166, 222, 0.2)',
+    cursor: 'pointer',
   },
   activeBoxLabel: {
     color: '#FFFFFF',
@@ -717,6 +719,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(56, 166, 222, 0.2)',
     minHeight: 180,
+    cursor: 'pointer',
   },
   kpiHeader: {
     marginBottom: 12,
@@ -777,6 +780,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
+    cursor: 'pointer',
   },
   chartTitle: {
     color: '#FFFFFF',
@@ -859,6 +863,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
+    cursor: 'pointer',
   },
   revenueHeader: {
     flexDirection: 'row',
@@ -941,6 +946,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
+    cursor: 'pointer',
   },
   menuIcon: {
     width: 24,

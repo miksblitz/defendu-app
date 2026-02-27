@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import React, { useState, useEffect, useMemo } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+    ActivityIndicator,
     Image,
+    Modal,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -10,16 +12,14 @@ import {
     TextInput,
     TouchableOpacity,
     View,
-    ActivityIndicator,
-    Modal,
 } from 'react-native';
-import { AuthController } from '../controllers/AuthController';
-import { User } from '../_models/User';
-import { TrainerApplication } from '../_models/TrainerApplication';
 import Toast from '../../components/Toast';
-import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
+import { useToast } from '../../hooks/useToast';
+import { TrainerApplication } from '../_models/TrainerApplication';
+import { User } from '../_models/User';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { AuthController } from '../controllers/AuthController';
 
 interface TrainerWithData extends User {
   applicationData?: TrainerApplication | null;
@@ -786,6 +786,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    cursor: 'pointer',
   },
   registerButtonText: {
     color: '#FFFFFF',
@@ -799,6 +800,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    cursor: 'pointer',
   },
   publishModuleButtonText: {
     color: '#FFFFFF',
@@ -966,6 +968,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 20,
     right: 20,
+    cursor: 'pointer',
   },
   viewButtonText: {
     color: '#FFFFFF',
@@ -1021,6 +1024,7 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 4,
+    cursor: 'pointer',
   },
   modalContent: {
     padding: 20,
@@ -1059,6 +1063,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 8,
+    cursor: 'pointer',
   },
   contactTrainerButtonText: {
     color: '#FFFFFF',
@@ -1152,6 +1157,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
+    cursor: 'pointer',
   },
   menuIcon: {
     width: 24,

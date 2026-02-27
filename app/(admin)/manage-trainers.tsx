@@ -908,6 +908,7 @@ const styles = StyleSheet.create({
     padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    cursor: 'pointer',
   },
   backButtonIcon: {
     width: 24,
@@ -1001,6 +1002,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(107, 134, 147, 0.2)',
+    cursor: 'pointer',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -1045,6 +1047,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     alignItems: 'center',
+    cursor: 'pointer',
   },
   viewButtonText: {
     color: '#38a6de',
@@ -1176,6 +1179,7 @@ const styles = StyleSheet.create({
     minWidth: 100,
     alignItems: 'center',
     justifyContent: 'center',
+    cursor: 'pointer',
   },
   approveButton: {
     backgroundColor: '#38a6de',
@@ -1219,6 +1223,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
+    cursor: 'pointer',
   },
   menuIcon: {
     width: 24,

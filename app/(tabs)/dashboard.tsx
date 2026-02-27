@@ -639,6 +639,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     width: '100%',
     alignItems: 'center',
+    cursor: 'pointer',
   },
   sidebarActive: {
     backgroundColor: '#024446',
@@ -654,6 +655,7 @@ const styles = StyleSheet.create({
   },
   sidebarTopButton: {
     padding: 8,
+    cursor: 'pointer',
   },
   unreadBadge: {
     position: 'absolute',
@@ -794,6 +796,7 @@ const styles = StyleSheet.create({
   },
   dayProgressContainer: {
     alignItems: 'center',
+    cursor: 'pointer',
   },
   dayLabelContainer: {
     marginTop: 4,
@@ -883,6 +886,7 @@ const styles = StyleSheet.create({
   moduleCardTouchable: {
     width: '100%',
     height: '100%',
+    cursor: 'pointer',
   },
   moduleCardSelected: {
     shadowColor: '#07bbc0',
@@ -1005,6 +1009,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
+    cursor: 'pointer',
   },
   menuIcon: {
     width: 24,

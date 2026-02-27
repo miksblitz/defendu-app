@@ -694,6 +694,7 @@ const styles = StyleSheet.create({
     padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    cursor: 'pointer',
   },
   backButtonIcon: {
     width: 24,
@@ -823,6 +824,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 14,
+    cursor: 'pointer',
   },
   deleteButtonText: {
     color: '#FFFFFF',
@@ -871,6 +873,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 6,
     backgroundColor: 'rgba(56, 166, 222, 0.1)',
+    cursor: 'pointer',
   },
   reasonOptionSelected: {
     backgroundColor: 'rgba(56, 166, 222, 0.3)',
@@ -931,6 +934,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    cursor: 'pointer',
   },
   cancelButton: {
     backgroundColor: 'rgba(107, 134, 147, 0.3)',
@@ -987,6 +991,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
+    cursor: 'pointer',
   },
   moduleImageContainer: {
     width: '100%',
@@ -1092,6 +1097,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
+    cursor: 'pointer',
   },
   menuIcon: {
     width: 24,
