@@ -1,10 +1,10 @@
 // app/(auth)/login.tsx
-import React, { useState } from 'react';
-import { Image, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { AuthController } from '../controllers/AuthController';
+import React, { useState } from 'react';
+import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { AuthController } from '../controllers/AuthController';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -177,50 +177,61 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#041527',
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
     justifyContent: 'center',
+    maxWidth: 600,
+    width: '100%',
+    alignSelf: 'center',
   },
   logoImage: {
-    width: 160,
-    height: 180,
+    width: 140,
+    height: 160,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
     resizeMode: 'contain',
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     color: '#FFF',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#FFF',
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 32,
+    lineHeight: 22,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#01151F',
-    borderRadius: 25,
-    paddingHorizontal: 15,
+    borderRadius: 28,
+    paddingHorizontal: 20,
     marginBottom: 16,
     height: 56,
-    width: 500,
-    alignSelf: 'center',
+    width: '100%',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   iconImage: {
-    width: 20,
-    height: 20,
-    marginRight: 10,
-    tintColor: '#FFF',
+    width: 22,
+    height: 22,
+    marginRight: 12,
+    tintColor: 'rgba(255, 255, 255, 0.7)',
     resizeMode: 'contain',
   },
   input: {
     flex: 1,
-    fontSize: 20,
+    fontSize: 16,
     lineHeight: 24,
     height: 56,
     color: '#FFF',
@@ -229,17 +240,19 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     marginLeft: 12,
+    padding: 8,
+    borderRadius: 20,
   },
   eyeIcon: {
-    width: 20,
-    height: 20,
-    tintColor: '#FFF',
+    width: 22,
+    height: 22,
+    tintColor: 'rgba(255, 255, 255, 0.7)',
     resizeMode: 'contain',
   },
   forgotPasswordContainer: {
     alignItems: 'flex-end',
-    marginBottom: 24,
-    marginRight: 415,
+    marginBottom: 28,
+    width: '100%',
   },
   forgotText: {
     color: '#00AABB',
@@ -248,27 +261,36 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#00AABB',
-    borderRadius: 30,
-    paddingVertical: 14,
+    borderRadius: 28,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginBottom: 20,
-    width: 300,
+    marginBottom: 24,
+    width: '100%',
+    maxWidth: 400,
     alignSelf: 'center',
+    shadowColor: '#00AABB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonDisabled: {
     opacity: 0.6,
+    shadowOpacity: 0.1,
   },
   buttonText: {
     color: '#FFF',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 17,
+    letterSpacing: 0.5,
   },
   bottomRow: {
     flexDirection: 'row',
     justifyContent: 'center',
+    marginTop: 8,
   },
   bottomText: {
-    color: '#FFF',
+    color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 14,
   },
   linkText: {

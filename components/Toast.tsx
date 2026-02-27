@@ -1,6 +1,6 @@
 // components/Toast.tsx
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Image } from 'react-native';
+import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 
 interface ToastProps {
   message: string;
@@ -93,43 +93,48 @@ export default function Toast({ message, visible, onHide, duration = 3000 }: Toa
 const styles = StyleSheet.create({
   toastContainer: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 32,
+    left: 20,
     right: 20,
     backgroundColor: '#041527',
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: 2,
     borderColor: '#09AEC3',
-    padding: 16,
+    padding: 20,
     minWidth: 280,
-    maxWidth: 350,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    maxWidth: 600,
+    alignSelf: 'center',
+    shadowColor: '#09AEC3',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10,
     overflow: 'hidden',
   },
   toastContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   logo: {
-    width: 40,
-    height: 40,
-    marginRight: 12,
+    width: 42,
+    height: 42,
+    marginRight: 14,
   },
   message: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
   },
   progressBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
-    height: 4,
+    height: 5,
     backgroundColor: '#09AEC3',
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
   },
 });

@@ -1,21 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  Image,
-  ScrollView,
-  ActivityIndicator,
-  Dimensions,
-} from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Dimensions,
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import Svg, { Polyline } from 'react-native-svg';
 import { useLogout } from '../../hooks/useLogout';
-import { AuthController } from '../controllers/AuthController';
 import { AnalyticsController, AnalyticsData } from '../controllers/AnalyticsController';
-import Svg, { Polyline, Line, Circle } from 'react-native-svg';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -531,17 +530,23 @@ const styles = StyleSheet.create({
   },
   chartCard: {
     backgroundColor: 'rgba(30, 30, 30, 0.8)',
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
     marginBottom: 24,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: 'rgba(56, 166, 222, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   chartTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     marginBottom: 20,
+    letterSpacing: 0.5,
   },
   chartContainer: {
     flexDirection: 'row',
@@ -599,18 +604,24 @@ const styles = StyleSheet.create({
   },
   noDataText: {
     color: '#B0BEC5',
-    fontSize: 14,
+    fontSize: 15,
     textAlign: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+    lineHeight: 24,
   },
   revenueCard: {
     backgroundColor: '#0D1C2C',
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(156, 39, 176, 0.3)',
+    borderWidth: 2,
+    borderColor: 'rgba(156, 39, 176, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   revenueHeader: {
     flexDirection: 'row',
@@ -620,8 +631,9 @@ const styles = StyleSheet.create({
   },
   revenueTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   profitabilityBadge: {
     flexDirection: 'row',

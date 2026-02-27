@@ -1,21 +1,21 @@
 // app/(auth)/resetpassword.tsx
-import React, { useState, useEffect } from 'react';
-import { 
-  Image, 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
-  Alert,
-  ActivityIndicator 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ResetPasswordScreen() {
   const [password, setPassword] = useState('');
@@ -578,56 +578,67 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#041527',
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
     justifyContent: 'center',
+    maxWidth: 600,
+    width: '100%',
+    alignSelf: 'center',
   },
   logoImage: {
-    width: 160,
-    height: 180,
+    width: 140,
+    height: 160,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
     resizeMode: 'contain',
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     color: '#FFF',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#FFF',
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 32,
+    lineHeight: 22,
   },
   loadingText: {
-    color: '#FFF',
+    color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 16,
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: 20,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#01151F',
-    borderRadius: 25,
-    paddingHorizontal: 15,
-    marginBottom: 8,
+    borderRadius: 28,
+    paddingHorizontal: 20,
+    marginBottom: 4,
     height: 56,
-    width: 500,
-    alignSelf: 'center',
+    width: '100%',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   iconImage: {
-    width: 20,
-    height: 20,
-    marginRight: 10,
-    tintColor: '#FFF',
+    width: 22,
+    height: 22,
+    marginRight: 12,
+    tintColor: 'rgba(255, 255, 255, 0.7)',
     resizeMode: 'contain',
   },
   input: {
     flex: 1,
-    fontSize: 20,
+    fontSize: 16,
     lineHeight: 24,
     height: 56,
     color: '#FFF',
@@ -636,43 +647,53 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     marginLeft: 12,
+    padding: 8,
+    borderRadius: 20,
   },
   eyeIcon: {
-    width: 20,
-    height: 20,
-    tintColor: '#FFF',
+    width: 22,
+    height: 22,
+    tintColor: 'rgba(255, 255, 255, 0.7)',
     resizeMode: 'contain',
   },
   errorText: {
     color: '#FF6B6B',
-    fontSize: 12,
+    fontSize: 13,
     marginBottom: 12,
-    marginTop: -4,
-    width: 500,
-    paddingLeft: 15,
-    alignSelf: 'center',
+    marginTop: 4,
+    width: '100%',
+    paddingLeft: 20,
+    lineHeight: 18,
   },
   button: {
     backgroundColor: '#00AABB',
-    borderRadius: 30,
-    paddingVertical: 14,
+    borderRadius: 28,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 8,
-    width: 300,
+    marginTop: 16,
+    width: '100%',
+    maxWidth: 400,
     alignSelf: 'center',
+    shadowColor: '#00AABB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonDisabled: {
     opacity: 0.6,
+    shadowOpacity: 0.1,
   },
   buttonText: {
     color: '#FFF',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 17,
+    letterSpacing: 0.5,
   },
   backText: {
     color: '#00AABB',
-    fontWeight: '700',
-    fontSize: 14,
+    fontWeight: '600',
+    fontSize: 15,
     textAlign: 'center',
   },
 });

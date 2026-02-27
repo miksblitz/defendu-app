@@ -1,6 +1,8 @@
 import { useRouter } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
+    Dimensions,
     Image,
     SafeAreaView,
     ScrollView,
@@ -8,15 +10,12 @@ import {
     Text,
     TouchableOpacity,
     View,
-    Dimensions,
-    ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
-import { AuthController } from '../controllers/AuthController';
-import { Module } from '../_models/Module';
 import { useLogout } from '../../hooks/useLogout';
+import { Module } from '../_models/Module';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { AuthController } from '../controllers/AuthController';
 
 const circleSize = 40;
 const strokeWidth = 4;
@@ -536,11 +535,16 @@ const styles = StyleSheet.create({
   },
   weeklyGoalContainer: {
     backgroundColor: '#041527',
-    borderRadius: 25,
-    padding: 25,
-    marginBottom: 30,
-    borderWidth: 1,
+    borderRadius: 28,
+    padding: 28,
+    marginBottom: 32,
+    borderWidth: 2,
     borderColor: '#000E1C',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   weeklyGoalHeader: {
     flexDirection: 'row',
@@ -630,39 +634,50 @@ const styles = StyleSheet.create({
   },
   modulesLoadingContainer: {
     width: '100%',
-    paddingVertical: 48,
+    paddingVertical: 60,
     alignItems: 'center',
-    gap: 12,
+    gap: 16,
   },
   modulesLoadingText: {
     color: '#6b8693',
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '500',
   },
   modulesEmptyContainer: {
     width: '100%',
-    paddingVertical: 48,
+    paddingVertical: 60,
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    backgroundColor: '#041527',
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#0a3645',
+    borderStyle: 'dashed',
   },
   modulesEmptyText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
   },
   modulesEmptySubtext: {
     color: '#6b8693',
-    fontSize: 14,
+    fontSize: 15,
   },
   moduleCard: {
     width: moduleCardWidth,
     minHeight: 240,
-    borderRadius: 20,
+    borderRadius: 24,
     backgroundColor: '#011f36',
     overflow: 'hidden',
     marginRight: moduleCardMarginRight,
     marginBottom: 20,
     borderWidth: 2,
     borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
   },
   moduleCardEndOfRow: {
     marginRight: 0, // Remove right margin from cards at the end of each row
@@ -670,10 +685,11 @@ const styles = StyleSheet.create({
   moduleCardSelected: {
     borderColor: '#07bbc0',
     shadowColor: '#07bbc0',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+    transform: [{ scale: 1.02 }],
   },
   moduleHeader: {
     backgroundColor: '#062731',
@@ -711,11 +727,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 90,
     backgroundColor: '#0a3645',
-    borderRadius: 12,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.1)',
   },
   moduleThumbnailImage: {
     width: '100%',

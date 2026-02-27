@@ -1,20 +1,20 @@
-import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  SafeAreaView,
-  Image,
-} from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { AuthController } from '../controllers/AuthController';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import {
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import OfflineModeModal from '../../components/OfflineModeModal';
-import { OfflineStorage } from '../_utils/offlineStorage';
 import { useLogout } from '../../hooks/useLogout';
+import { OfflineStorage } from '../_utils/offlineStorage';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { AuthController } from '../controllers/AuthController';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -335,76 +335,95 @@ const styles = StyleSheet.create({
   profileDisplaySection: {
     marginBottom: 40,
     alignItems: 'center',
+    paddingTop: 20,
   },
   avatarContainer: {
     alignSelf: 'center',
-    marginBottom: 30,
+    marginBottom: 32,
+    shadowColor: '#07bbc0',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   avatarLarge: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
     backgroundColor: '#07bbc0',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#041527',
   },
   avatarLargeIcon: {
-    width: 90,
-    height: 90,
+    width: 100,
+    height: 100,
     resizeMode: 'contain',
   },
   avatarImage: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
     resizeMode: 'cover',
   },
   userName: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
+    letterSpacing: 0.5,
   },
   userHandle: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 17,
+    fontWeight: '600',
     color: '#07bbc0',
-    marginBottom: 30,
+    marginBottom: 28,
     textAlign: 'center',
   },
   editButton: {
     backgroundColor: '#07bbc0',
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderRadius: 25,
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 28,
     marginTop: 20,
+    shadowColor: '#07bbc0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   editButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 17,
+    letterSpacing: 0.5,
   },
   menuOptionsSection: {
-    marginTop: 20,
+    marginTop: 24,
+    paddingHorizontal: 8,
   },
   menuOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 4,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(7, 187, 192, 0.05)',
+    borderRadius: 16,
+    marginBottom: 12,
   },
   menuOptionText: {
     flex: 1,
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 12,
+    fontWeight: '600',
+    marginLeft: 14,
   },
   menuSeparator: {
     height: 1,
-    backgroundColor: '#062731',
-    marginVertical: 8,
+    backgroundColor: 'rgba(107, 134, 147, 0.2)',
+    marginVertical: 4,
   },
   menuOverlay: {
     position: 'absolute',
