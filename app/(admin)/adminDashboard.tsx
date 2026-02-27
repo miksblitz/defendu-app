@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Animated,
     Dimensions,
     Image,
     SafeAreaView,
@@ -24,6 +25,25 @@ export default function AdminDashboard() {
   const [showMenu, setShowMenu] = useState(false);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Animation values
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const activeBoxAnim1 = useRef(new Animated.Value(0)).current;
+  const activeBoxAnim2 = useRef(new Animated.Value(0)).current;
+  const kpiCard1Anim = useRef(new Animated.Value(0)).current;
+  const kpiCard2Anim = useRef(new Animated.Value(0)).current;
+  const kpiCard3Anim = useRef(new Animated.Value(0)).current;
+  const chartAnim = useRef(new Animated.Value(0)).current;
+  const revenueAnim = useRef(new Animated.Value(0)).current;
+  
+  // Hover scale animations
+  const activeBox1Scale = useRef(new Animated.Value(1)).current;
+  const activeBox2Scale = useRef(new Animated.Value(1)).current;
+  const kpiCard1Scale = useRef(new Animated.Value(1)).current;
+  const kpiCard2Scale = useRef(new Animated.Value(1)).current;
+  const kpiCard3Scale = useRef(new Animated.Value(1)).current;
+  const chartScale = useRef(new Animated.Value(1)).current;
+  const revenueScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     loadAnalytics();
@@ -31,6 +51,58 @@ export default function AdminDashboard() {
     const interval = setInterval(loadAnalytics, 30000);
     return () => clearInterval(interval);
   }, []);
+  
+  useEffect(() => {
+    if (!loading && analytics) {
+      // Staggered entrance animations
+      Animated.stagger(100, [
+        Animated.timing(headerAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.parallel([
+          Animated.timing(activeBoxAnim1, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(activeBoxAnim2, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(kpiCard1Anim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(kpiCard2Anim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(kpiCard3Anim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.timing(chartAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(revenueAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [loading, analytics]);
 
   const loadAnalytics = async () => {
     try {
@@ -42,6 +114,15 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCardHover = (scale: Animated.Value, isHovering: boolean) => {
+    Animated.spring(scale, {
+      toValue: isHovering ? 1.03 : 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 8,
+    }).start();
   };
 
   const formatNumber = (num: number): string => {
@@ -190,7 +271,18 @@ export default function AdminDashboard() {
         </View>
 
         {/* Header with DEFENDU Logo and Admin */}
-        <View style={styles.header}>
+        <Animated.View style={[
+          styles.header,
+          {
+            opacity: headerAnim,
+            transform: [{
+              translateY: headerAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-20, 0],
+              }),
+            }],
+          },
+        ]}>
           <View style={styles.headerContent}>
             <Image
               source={require('../../assets/images/defendudashboardlogo.png')}
@@ -199,7 +291,7 @@ export default function AdminDashboard() {
             />
             <Text style={styles.headerAdminText}>Admin</Text>
           </View>
-        </View>
+        </Animated.View>
 
         <ScrollView 
           style={styles.scrollView}
@@ -208,96 +300,241 @@ export default function AdminDashboard() {
         >
           {/* Active Users and Trainers Boxes */}
           <View style={styles.activeBoxesRow}>
-            <View style={styles.activeBox}>
-              <Text style={styles.activeBoxLabel}>Active Users</Text>
-              <Text style={styles.activeBoxSubLabel}>Individual</Text>
-              <Text style={styles.activeBoxValue}>{data.totalActiveUsers}</Text>
-              <Text style={styles.activeBoxOnline}>{data.activeUsersOnline} Online</Text>
-            </View>
+            <Animated.View style={[
+              { flex: 1 },
+              {
+                opacity: activeBoxAnim1,
+                transform: [
+                  {
+                    translateY: activeBoxAnim1.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [30, 0],
+                    }),
+                  },
+                  { scale: activeBox1Scale },
+                ],
+              },
+            ]}>
+              <TouchableOpacity
+                style={styles.activeBox}
+                activeOpacity={1}
+                onPressIn={() => handleCardHover(activeBox1Scale, true)}
+                onPressOut={() => handleCardHover(activeBox1Scale, false)}
+              >
+                <Text style={styles.activeBoxLabel}>Active Users</Text>
+                <Text style={styles.activeBoxSubLabel}>Individual</Text>
+                <Text style={styles.activeBoxValue}>{data.totalActiveUsers}</Text>
+                <Text style={styles.activeBoxOnline}>{data.activeUsersOnline} Online</Text>
+              </TouchableOpacity>
+            </Animated.View>
 
-            <View style={styles.activeBox}>
-              <Text style={styles.activeBoxLabel}>Active Trainers</Text>
-              <Text style={styles.activeBoxSubLabel}>Verified</Text>
-              <Text style={styles.activeBoxValue}>{data.activeTrainers}</Text>
-              <Text style={styles.activeBoxOnline}>{data.activeTrainersOnline} Online</Text>
-            </View>
+            <Animated.View style={[
+              { flex: 1 },
+              {
+                opacity: activeBoxAnim2,
+                transform: [
+                  {
+                    translateY: activeBoxAnim2.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [30, 0],
+                    }),
+                  },
+                  { scale: activeBox2Scale },
+                ],
+              },
+            ]}>
+              <TouchableOpacity
+                style={styles.activeBox}
+                activeOpacity={1}
+                onPressIn={() => handleCardHover(activeBox2Scale, true)}
+                onPressOut={() => handleCardHover(activeBox2Scale, false)}
+              >
+                <Text style={styles.activeBoxLabel}>Active Trainers</Text>
+                <Text style={styles.activeBoxSubLabel}>Verified</Text>
+                <Text style={styles.activeBoxValue}>{data.activeTrainers}</Text>
+                <Text style={styles.activeBoxOnline}>{data.activeTrainersOnline} Online</Text>
+              </TouchableOpacity>
+            </Animated.View>
           </View>
 
           {/* KPI Cards Row - Horizontal */}
           <View style={styles.kpiRow}>
             {/* Total Registrations */}
-            <View style={styles.kpiCard}>
-              <View style={styles.kpiHeader}>
-                <Text style={styles.kpiTitle}>Total Registrations</Text>
-              </View>
-              <Text style={styles.kpiValue}>{formatNumber(data.totalRegistrations)}</Text>
-              <Text style={styles.kpiSubtext}>Online</Text>
-              <View style={styles.kpiTrend}>
-                <Ionicons name="trending-up" size={14} color="#4CAF50" />
-                <Text style={styles.kpiTrendText}>+15% this month</Text>
-              </View>
-              <View style={styles.kpiChartContainer}>
-                <MiniLineChart />
-              </View>
-            </View>
+            <Animated.View style={[
+              { flex: 1 },
+              {
+                opacity: kpiCard1Anim,
+                transform: [
+                  {
+                    translateY: kpiCard1Anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [40, 0],
+                    }),
+                  },
+                  { scale: kpiCard1Scale },
+                ],
+              },
+            ]}>
+              <TouchableOpacity
+                style={styles.kpiCard}
+                activeOpacity={1}
+                onPressIn={() => handleCardHover(kpiCard1Scale, true)}
+                onPressOut={() => handleCardHover(kpiCard1Scale, false)}
+              >
+                <View style={styles.kpiHeader}>
+                  <Text style={styles.kpiTitle}>Total Registrations</Text>
+                </View>
+                <Text style={styles.kpiValue}>{formatNumber(data.totalRegistrations)}</Text>
+                <Text style={styles.kpiSubtext}>Online</Text>
+                <View style={styles.kpiTrend}>
+                  <Ionicons name="trending-up" size={14} color="#4CAF50" />
+                  <Text style={styles.kpiTrendText}>+15% this month</Text>
+                </View>
+                <View style={styles.kpiChartContainer}>
+                  <MiniLineChart />
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
 
             {/* Pending Trainer Verifications */}
-            <View style={styles.kpiCard}>
-              <View style={styles.kpiHeader}>
-                <Text style={styles.kpiTitle}>Pending Trainer</Text>
-                <Text style={styles.kpiTitle}>Verifications</Text>
-              </View>
-              <Text style={styles.kpiValue}>{data.pendingTrainerVerifications}</Text>
-              <Text style={styles.kpiSubtext}>Applications</Text>
-            </View>
+            <Animated.View style={[
+              { flex: 1 },
+              {
+                opacity: kpiCard2Anim,
+                transform: [
+                  {
+                    translateY: kpiCard2Anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [40, 0],
+                    }),
+                  },
+                  { scale: kpiCard2Scale },
+                ],
+              },
+            ]}>
+              <TouchableOpacity
+                style={styles.kpiCard}
+                activeOpacity={1}
+                onPressIn={() => handleCardHover(kpiCard2Scale, true)}
+                onPressOut={() => handleCardHover(kpiCard2Scale, false)}
+              >
+                <View style={styles.kpiHeader}>
+                  <Text style={styles.kpiTitle}>Pending Trainer</Text>
+                  <Text style={styles.kpiTitle}>Verifications</Text>
+                </View>
+                <Text style={styles.kpiValue}>{data.pendingTrainerVerifications}</Text>
+                <Text style={styles.kpiSubtext}>Applications</Text>
+              </TouchableOpacity>
+            </Animated.View>
 
             {/* Pending Module Reviews */}
-            <View style={styles.kpiCard}>
-              <View style={styles.kpiHeader}>
-                <Text style={styles.kpiTitle}>Pending Module</Text>
-                <Text style={styles.kpiTitle}>Reviews</Text>
-              </View>
-              <Text style={styles.kpiValue}>{data.pendingModuleReviews}</Text>
-              <Text style={styles.kpiSubtext}>New Modules</Text>
-            </View>
+            <Animated.View style={[
+              { flex: 1 },
+              {
+                opacity: kpiCard3Anim,
+                transform: [
+                  {
+                    translateY: kpiCard3Anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [40, 0],
+                    }),
+                  },
+                  { scale: kpiCard3Scale },
+                ],
+              },
+            ]}>
+              <TouchableOpacity
+                style={styles.kpiCard}
+                activeOpacity={1}
+                onPressIn={() => handleCardHover(kpiCard3Scale, true)}
+                onPressOut={() => handleCardHover(kpiCard3Scale, false)}
+              >
+                <View style={styles.kpiHeader}>
+                  <Text style={styles.kpiTitle}>Pending Module</Text>
+                  <Text style={styles.kpiTitle}>Reviews</Text>
+                </View>
+                <Text style={styles.kpiValue}>{data.pendingModuleReviews}</Text>
+                <Text style={styles.kpiSubtext}>New Modules</Text>
+              </TouchableOpacity>
+            </Animated.View>
           </View>
 
           {/* Top Performed Techniques Chart */}
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Top Performed Techniques</Text>
-            <BarChart data={data.topPerformedTechniques} maxValue={maxTechniqueCount} />
-          </View>
+          <Animated.View style={[
+            styles.chartCard,
+            {
+              opacity: chartAnim,
+              transform: [
+                {
+                  translateY: chartAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0],
+                  }),
+                },
+                { scale: chartScale },
+              ],
+            },
+          ]}>
+            <TouchableOpacity
+              activeOpacity={1}
+              onPressIn={() => handleCardHover(chartScale, true)}
+              onPressOut={() => handleCardHover(chartScale, false)}
+            >
+              <Text style={styles.chartTitle}>Top Performed Techniques</Text>
+              <BarChart data={data.topPerformedTechniques} maxValue={maxTechniqueCount} />
+            </TouchableOpacity>
+          </Animated.View>
 
           {/* Revenue Card */}
-          <View style={styles.revenueCard}>
-            <View style={styles.revenueHeader}>
-              <Text style={styles.revenueTitle}>Revenue Overview</Text>
-              <View style={[styles.profitabilityBadge, data.revenue.isProfitable ? styles.profitable : styles.losing]}>
-                <Ionicons 
-                  name={data.revenue.isProfitable ? "trending-up" : "trending-down"} 
-                  size={16} 
-                  color="#FFFFFF" 
-                />
-                <Text style={styles.profitabilityText}>
-                  {data.revenue.isProfitable ? 'Profitable' : 'Losing Money'}
-                </Text>
+          <Animated.View style={[
+            styles.revenueCard,
+            {
+              opacity: revenueAnim,
+              transform: [
+                {
+                  translateY: revenueAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0],
+                  }),
+                },
+                { scale: revenueScale },
+              ],
+            },
+          ]}>
+            <TouchableOpacity
+              activeOpacity={1}
+              onPressIn={() => handleCardHover(revenueScale, true)}
+              onPressOut={() => handleCardHover(revenueScale, false)}
+            >
+              <View style={styles.revenueHeader}>
+                <Text style={styles.revenueTitle}>Revenue Overview</Text>
+                <View style={[styles.profitabilityBadge, data.revenue.isProfitable ? styles.profitable : styles.losing]}>
+                  <Ionicons 
+                    name={data.revenue.isProfitable ? "trending-up" : "trending-down"} 
+                    size={16} 
+                    color="#FFFFFF" 
+                  />
+                  <Text style={styles.profitabilityText}>
+                    {data.revenue.isProfitable ? 'Profitable' : 'Losing Money'}
+                  </Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.revenueGrid}>
-              <View style={styles.revenueItem}>
-                <Text style={styles.revenueLabel}>Total Revenue</Text>
-                <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.totalRevenue)}</Text>
+              <View style={styles.revenueGrid}>
+                <View style={styles.revenueItem}>
+                  <Text style={styles.revenueLabel}>Total Revenue</Text>
+                  <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.totalRevenue)}</Text>
+                </View>
+                <View style={styles.revenueItem}>
+                  <Text style={styles.revenueLabel}>Monthly Revenue</Text>
+                  <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.monthlyRevenue)}</Text>
+                </View>
+                <View style={styles.revenueItem}>
+                  <Text style={styles.revenueLabel}>Subscription Revenue</Text>
+                  <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.subscriptionRevenue)}</Text>
+                </View>
               </View>
-              <View style={styles.revenueItem}>
-                <Text style={styles.revenueLabel}>Monthly Revenue</Text>
-                <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.monthlyRevenue)}</Text>
-              </View>
-              <View style={styles.revenueItem}>
-                <Text style={styles.revenueLabel}>Subscription Revenue</Text>
-                <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.subscriptionRevenue)}</Text>
-              </View>
-            </View>
-          </View>
+            </TouchableOpacity>
+          </Animated.View>
         </ScrollView>
       </View>
 

@@ -1,18 +1,18 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  Image,
-  ImageBackground,
-  ScrollView,
-} from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    Animated,
+    Image,
+    ImageBackground,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { useLogout } from '../../hooks/useLogout';
-import { AuthController } from '../controllers/AuthController';
 
 const adminCards = [
   {
@@ -39,6 +39,51 @@ export default function AdminManaging() {
   const router = useRouter();
   const handleLogout = useLogout();
   const [showMenu, setShowMenu] = useState(false);
+  
+  // Animation refs
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const card1Anim = useRef(new Animated.Value(0)).current;
+  const card2Anim = useRef(new Animated.Value(0)).current;
+  const card3Anim = useRef(new Animated.Value(0)).current;
+  const card1Scale = useRef(new Animated.Value(1)).current;
+  const card2Scale = useRef(new Animated.Value(1)).current;
+  const card3Scale = useRef(new Animated.Value(1)).current;
+  
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(headerAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.stagger(150, [
+        Animated.timing(card1Anim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(card2Anim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(card3Anim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, []);
+  
+  const handleCardHover = (scale: Animated.Value, isHovering: boolean) => {
+    Animated.spring(scale, {
+      toValue: isHovering ? 1.08 : 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 10,
+    }).start();
+  };
 
   const handleCardPress = (route: string) => {
     if (route === '/manage-users') {
@@ -92,7 +137,18 @@ export default function AdminManaging() {
         </View>
 
         {/* Header with DEFENDU Logo and Admin */}
-        <View style={styles.header}>
+        <Animated.View style={[
+          styles.header,
+          {
+            opacity: headerAnim,
+            transform: [{
+              translateY: headerAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-20, 0],
+              }),
+            }],
+          },
+        ]}>
           <View style={styles.headerContent}>
             <Image
               source={require('../../assets/images/defendudashboardlogo.png')}
@@ -101,7 +157,7 @@ export default function AdminManaging() {
             />
             <Text style={styles.headerAdminText}>Admin</Text>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Main Content */}
         <View style={styles.mainContent}>
@@ -113,26 +169,54 @@ export default function AdminManaging() {
               contentContainerStyle={styles.cardsContainer}
               style={styles.cardsScrollView}
             >
-            {adminCards.map((card) => (
-              <TouchableOpacity
-                key={card.id}
-                style={styles.card}
-                onPress={() => handleCardPress(card.route)}
-                activeOpacity={0.8}
-              >
-                <ImageBackground
-                  source={card.image}
-                  style={styles.cardBackground}
-                  imageStyle={styles.cardBackgroundImage}
+            {adminCards.map((card, index) => {
+              const cardAnims = [card1Anim, card2Anim, card3Anim];
+              const cardScales = [card1Scale, card2Scale, card3Scale];
+              const animValue = cardAnims[index];
+              const scaleValue = cardScales[index];
+              
+              return (
+                <Animated.View
+                  key={card.id}
+                  style={[
+                    {
+                      opacity: animValue,
+                      transform: [
+                        {
+                          translateY: animValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [50, 0],
+                          }),
+                        },
+                        {
+                          scale: Animated.multiply(animValue, scaleValue),
+                        },
+                      ],
+                    },
+                  ]}
                 >
-                  <View style={styles.cardOverlay}>
-                    <View style={styles.cardLabelContainer}>
-                      <Text style={styles.cardLabel}>{card.label}</Text>
-                    </View>
-                  </View>
-                </ImageBackground>
-              </TouchableOpacity>
-            ))}
+                  <TouchableOpacity
+                    style={styles.card}
+                    onPress={() => handleCardPress(card.route)}
+                    onPressIn={() => handleCardHover(scaleValue, true)}
+                    onPressOut={() => handleCardHover(scaleValue, false)}
+                    activeOpacity={0.9}
+                  >
+                    <ImageBackground
+                      source={card.image}
+                      style={styles.cardBackground}
+                      imageStyle={styles.cardBackgroundImage}
+                    >
+                      <View style={styles.cardOverlay}>
+                        <View style={styles.cardLabelContainer}>
+                          <Text style={styles.cardLabel}>{card.label}</Text>
+                        </View>
+                      </View>
+                    </ImageBackground>
+                  </TouchableOpacity>
+                </Animated.View>
+              );
+            })}
             </ScrollView>
           </View>
         </View>

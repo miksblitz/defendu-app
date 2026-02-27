@@ -1,20 +1,21 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  ActivityIndicator,
-  Image,
-  TextInput,
-} from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthController } from '../controllers/AuthController';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { useLogout } from '../../hooks/useLogout';
 import { User } from '../_models/User';
+import { AuthController } from '../controllers/AuthController';
 
 export default function ManageUsersPage() {
   const router = useRouter();
@@ -26,10 +27,41 @@ export default function ManageUsersPage() {
   const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [displayedCount, setDisplayedCount] = useState(10);
+  
+  // Animation refs
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const searchAnim = useRef(new Animated.Value(0)).current;
+  const tableHeaderAnim = useRef(new Animated.Value(0)).current;
+  const animatedValues = useRef<Map<string, Animated.Value>>(new Map()).current;
+  const hoverScales = useRef<Map<string, Animated.Value>>(new Map()).current;
 
   useEffect(() => {
     loadUsers();
   }, []);
+  
+  useEffect(() => {
+    if (!loading) {
+      Animated.parallel([
+        Animated.timing(headerAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(searchAnim, {
+          toValue: 1,
+          duration: 600,
+          delay: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(tableHeaderAnim, {
+          toValue: 1,
+          duration: 600,
+          delay: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [loading]);
 
   // Reset displayed count when search query changes
   useEffect(() => {
@@ -53,6 +85,46 @@ export default function ManageUsersPage() {
   const displayedUsers = useMemo(() => {
     return filteredUsers.slice(0, displayedCount);
   }, [filteredUsers, displayedCount]);
+  
+  // Animate displayed users when they change
+  useEffect(() => {
+    if (displayedUsers.length > 0) {
+      const animations = displayedUsers.map((user, index) => {
+        const animValue = getAnimatedValue(user.uid);
+        return Animated.timing(animValue, {
+          toValue: 1,
+          duration: 400,
+          delay: Math.min(index * 30, 500),
+          useNativeDriver: true,
+        });
+      });
+      Animated.stagger(20, animations).start();
+    }
+  }, [displayedUsers]);
+  
+  const getAnimatedValue = (uid: string) => {
+    if (!animatedValues.has(uid)) {
+      animatedValues.set(uid, new Animated.Value(0));
+    }
+    return animatedValues.get(uid)!;
+  };
+  
+  const getHoverScale = (uid: string) => {
+    if (!hoverScales.has(uid)) {
+      hoverScales.set(uid, new Animated.Value(1));
+    }
+    return hoverScales.get(uid)!;
+  };
+  
+  const handleRowHover = (uid: string, isHovering: boolean) => {
+    const scale = getHoverScale(uid);
+    Animated.spring(scale, {
+      toValue: isHovering ? 1.02 : 1,
+      useNativeDriver: true,
+      speed: 25,
+      bounciness: 8,
+    }).start();
+  };
 
   const hasMoreUsers = displayedCount < filteredUsers.length;
 
@@ -190,7 +262,18 @@ export default function ManageUsersPage() {
         </View>
 
         {/* Header with DEFENDU Logo and Admin */}
-        <View style={styles.header}>
+        <Animated.View style={[
+          styles.header,
+          {
+            opacity: headerAnim,
+            transform: [{
+              translateY: headerAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-20, 0],
+              }),
+            }],
+          },
+        ]}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => router.push('/(admin)/adminManaging')}
@@ -212,12 +295,23 @@ export default function ManageUsersPage() {
               All Users {searchQuery ? `${filteredUsers.length} of ${users.length}` : users.length}
             </Text>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Main Content */}
         <View style={styles.mainContent}>
           {/* Search Bar */}
-          <View style={styles.searchContainer}>
+          <Animated.View style={[
+            styles.searchContainer,
+            {
+              opacity: searchAnim,
+              transform: [{
+                translateY: searchAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+            },
+          ]}>
             <Ionicons name="search" size={20} color="#6b8693" style={styles.searchIcon} />
             <TextInput
               style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
@@ -234,7 +328,7 @@ export default function ManageUsersPage() {
                 <Ionicons name="close-circle" size={20} color="#6b8693" />
               </TouchableOpacity>
             )}
-          </View>
+          </Animated.View>
 
           {/* Users Table */}
           {loading ? (
@@ -255,18 +349,56 @@ export default function ManageUsersPage() {
                 showsVerticalScrollIndicator={false}
               >
               {/* Table Header */}
-              <View style={styles.tableHeader}>
+              <Animated.View style={[
+                styles.tableHeader,
+                {
+                  opacity: tableHeaderAnim,
+                  transform: [{
+                    translateY: tableHeaderAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [10, 0],
+                    }),
+                  }],
+                },
+              ]}>
                 <Text style={[styles.headerCell, styles.nameHeader]}>Name</Text>
                 <Text style={[styles.headerCell, styles.emailHeader]}>Email</Text>
                 <Text style={[styles.headerCell, styles.accessHeader]}>Access</Text>
                 <Text style={[styles.headerCell, styles.lastActiveHeader]}>Last Active</Text>
                 <Text style={[styles.headerCell, styles.dateAddedHeader]}>Date Added</Text>
                 <View style={[styles.headerCell, styles.actionsHeader]} />
-              </View>
+              </Animated.View>
 
               {/* Table Rows */}
-              {displayedUsers.map((user) => (
-                <View key={user.uid} style={styles.tableRow}>
+              {displayedUsers.map((user) => {
+                const animValue = getAnimatedValue(user.uid);
+                const hoverScale = getHoverScale(user.uid);
+                
+                return (
+                  <Animated.View
+                    key={user.uid}
+                    style={[
+                      styles.tableRow,
+                      {
+                        opacity: animValue,
+                        transform: [
+                          {
+                            translateY: animValue.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [20, 0],
+                            }),
+                          },
+                          { scale: hoverScale },
+                        ],
+                      },
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={{ flex: 1 }}
+                      activeOpacity={1}
+                      onPressIn={() => handleRowHover(user.uid, true)}
+                      onPressOut={() => handleRowHover(user.uid, false)}
+                    >
                   <View style={[styles.tableCell, styles.nameCell]}>
                     <Text style={styles.nameText} numberOfLines={1}>
                       {user.firstName} {user.lastName}
@@ -338,10 +470,12 @@ export default function ManageUsersPage() {
                           </TouchableOpacity>
                         )}
                       </View>
-                    )}
-                  </View>
-                </View>
-              ))}
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+              );
+              })}
               
               {/* Load More Button */}
               {hasMoreUsers && (

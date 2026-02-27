@@ -58,13 +58,43 @@ export default function DashboardScreen() {
   
   // Animation values
   const animatedValues = useRef<Map<string, Animated.Value>>(new Map()).current;
+  const hoverScales = useRef<Map<string, Animated.Value>>(new Map()).current;
   const weeklyGoalPulse = useRef(new Animated.Value(1)).current;
+  const welcomeAnim = useRef(new Animated.Value(0)).current;
+  const statsAnim = useRef(new Animated.Value(0)).current;
   
   const getAnimatedValue = (moduleId: string) => {
     if (!animatedValues.has(moduleId)) {
       animatedValues.set(moduleId, new Animated.Value(0));
     }
     return animatedValues.get(moduleId)!;
+  };
+
+  const getHoverScale = (moduleId: string) => {
+    if (!hoverScales.has(moduleId)) {
+      hoverScales.set(moduleId, new Animated.Value(1));
+    }
+    return hoverScales.get(moduleId)!;
+  };
+
+  const handleCardPressIn = (moduleId: string) => {
+    const scale = getHoverScale(moduleId);
+    Animated.spring(scale, {
+      toValue: 1.05,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 10,
+    }).start();
+  };
+
+  const handleCardPressOut = (moduleId: string) => {
+    const scale = getHoverScale(moduleId);
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 10,
+    }).start();
   };
 
   useEffect(() => {
@@ -74,6 +104,22 @@ export default function DashboardScreen() {
         router.replace('/(auth)/login');
         return;
       }
+      
+      // Animate welcome section
+      Animated.parallel([
+        Animated.timing(welcomeAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(statsAnim, {
+          toValue: 1,
+          duration: 800,
+          delay: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      
       try {
         setModulesLoading(true);
         const [approved, recs, progress] = await Promise.all([
@@ -272,7 +318,18 @@ export default function DashboardScreen() {
             nestedScrollEnabled={true}
           >
             {/* Welcome Header */}
-            <View style={styles.welcomeSection}>
+            <Animated.View style={[
+              styles.welcomeSection,
+              {
+                opacity: welcomeAnim,
+                transform: [{
+                  translateY: welcomeAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-30, 0],
+                  }),
+                }],
+              },
+            ]}>
               <Image
                 source={require('../../assets/images/defendudashboardlogo.png')}
                 style={styles.logoImage}
@@ -281,7 +338,7 @@ export default function DashboardScreen() {
                 <Text style={styles.welcomeText}>Welcome back, {userName}!</Text>
                 <Text style={styles.welcomeSubtext}>Today is {todayName} - Let's keep training</Text>
               </View>
-            </View>
+            </Animated.View>
 
             {/* Recommended for you: best-suited modules (refreshes every 5 completed modules) */}
             {recommendedModules.length > 0 && (
@@ -300,6 +357,7 @@ export default function DashboardScreen() {
                     const imageSource = module.thumbnailUrl 
                       ? { uri: module.thumbnailUrl }
                       : require('../../assets/images/managemodulepic.png');
+                    const hoverScale = getHoverScale(`rec-${module.moduleId}`);
                     
                     return (
                       <Animated.View
@@ -317,10 +375,7 @@ export default function DashboardScreen() {
                                 }),
                               },
                               {
-                                scale: animValue.interpolate({
-                                  inputRange: [0, 1],
-                                  outputRange: [0.9, 1],
-                                }),
+                                scale: Animated.multiply(animValue, hoverScale),
                               },
                             ],
                           },
@@ -332,6 +387,8 @@ export default function DashboardScreen() {
                             selectedModule === module.moduleId && styles.moduleCardSelected,
                           ]}
                           onPress={() => handleModulePress(module)}
+                          onPressIn={() => handleCardPressIn(`rec-${module.moduleId}`)}
+                          onPressOut={() => handleCardPressOut(`rec-${module.moduleId}`)}
                           accessibilityRole="button"
                           accessibilityLabel={`Open recommended module ${module.moduleTitle}`}
                           activeOpacity={0.85}
@@ -446,6 +503,7 @@ export default function DashboardScreen() {
                   const isEndOfRow = (index + 1) % 4 === 0;
                   const durationMin = module.videoDuration ? `${Math.ceil(module.videoDuration / 60)} min` : '';
                   const animValue = getAnimatedValue(module.moduleId);
+                  const hoverScale = getHoverScale(module.moduleId);
                   const imageSource = module.thumbnailUrl 
                     ? { uri: module.thumbnailUrl }
                     : require('../../assets/images/managemodulepic.png');
@@ -466,10 +524,7 @@ export default function DashboardScreen() {
                               }),
                             },
                             {
-                              scale: animValue.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [0.9, 1],
-                              }),
+                              scale: Animated.multiply(animValue, hoverScale),
                             },
                           ],
                         },
@@ -481,6 +536,8 @@ export default function DashboardScreen() {
                           selectedModule === module.moduleId && styles.moduleCardSelected,
                         ]}
                         onPress={() => handleModulePress(module)}
+                        onPressIn={() => handleCardPressIn(module.moduleId)}
+                        onPressOut={() => handleCardPressOut(module.moduleId)}
                         accessibilityRole="button"
                         accessibilityLabel={`Open training module ${module.moduleTitle}`}
                         activeOpacity={0.85}

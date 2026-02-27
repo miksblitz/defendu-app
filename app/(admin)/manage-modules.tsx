@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Animated,
     FlatList,
     Image,
     Modal,
@@ -59,10 +60,34 @@ export default function ManageModulesPage() {
   const [deletionReason, setDeletionReason] = useState('');
   const [customDeletionReason, setCustomDeletionReason] = useState('');
   const [deleting, setDeleting] = useState(false);
+  
+  // Animation refs
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const filterAnim = useRef(new Animated.Value(0)).current;
+  const animatedValues = useRef<Map<string, Animated.Value>>(new Map()).current;
+  const hoverScales = useRef<Map<string, Animated.Value>>(new Map()).current;
 
   useEffect(() => {
     loadModules();
   }, []);
+  
+  useEffect(() => {
+    if (!loading) {
+      Animated.parallel([
+        Animated.timing(headerAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(filterAnim, {
+          toValue: 1,
+          duration: 600,
+          delay: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [loading]);
 
   // Reset search when filter changes
   useEffect(() => {
@@ -118,6 +143,46 @@ export default function ManageModulesPage() {
 
     return filtered;
   }, [modules, filterType, searchQuery, categoryFilter]);
+  
+  // Animate filtered modules when they change
+  useEffect(() => {
+    if (filteredModules.length > 0) {
+      const animations = filteredModules.map((module, index) => {
+        const animValue = getAnimatedValue(module.moduleId);
+        return Animated.timing(animValue, {
+          toValue: 1,
+          duration: 500,
+          delay: Math.min(index * 50, 1000),
+          useNativeDriver: true,
+        });
+      });
+      Animated.stagger(30, animations).start();
+    }
+  }, [filteredModules]);
+  
+  const getAnimatedValue = (moduleId: string) => {
+    if (!animatedValues.has(moduleId)) {
+      animatedValues.set(moduleId, new Animated.Value(0));
+    }
+    return animatedValues.get(moduleId)!;
+  };
+  
+  const getHoverScale = (moduleId: string) => {
+    if (!hoverScales.has(moduleId)) {
+      hoverScales.set(moduleId, new Animated.Value(1));
+    }
+    return hoverScales.get(moduleId)!;
+  };
+  
+  const handleCardHover = (moduleId: string, isHovering: boolean) => {
+    const scale = getHoverScale(moduleId);
+    Animated.spring(scale, {
+      toValue: isHovering ? 1.05 : 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 10,
+    }).start();
+  };
 
   const formatDate = (date: Date | undefined): string => {
     if (!date) return 'N/A';
@@ -218,7 +283,18 @@ export default function ManageModulesPage() {
         </View>
 
         {/* Header with Back button, DEFENDU Logo and Admin */}
-        <View style={styles.header}>
+        <Animated.View style={[
+          styles.header,
+          {
+            opacity: headerAnim,
+            transform: [{
+              translateY: headerAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-20, 0],
+              }),
+            }],
+          },
+        ]}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.push('/(admin)/adminManaging')}
@@ -237,12 +313,23 @@ export default function ManageModulesPage() {
             />
             <Text style={styles.headerAdminText}>Admin</Text>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Main Content */}
         <View style={styles.mainContent}>
           {/* Filter Buttons and Search */}
-          <View style={styles.topSection}>
+          <Animated.View style={[
+            styles.topSection,
+            {
+              opacity: filterAnim,
+              transform: [{
+                translateY: filterAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+            },
+          ]}>
             <View style={styles.filterButtons}>
               <TouchableOpacity
                 style={[
@@ -290,10 +377,15 @@ export default function ManageModulesPage() {
                 onChangeText={setSearchQuery}
               />
             </View>
-          </View>
+          </Animated.View>
 
           {/* Category Filter */}
-          <View style={styles.categoryFilterWrap}>
+          <Animated.View style={[
+            styles.categoryFilterWrap,
+            {
+              opacity: filterAnim,
+            },
+          ]}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -320,7 +412,7 @@ export default function ManageModulesPage() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </View>
+          </Animated.View>
 
           {/* Modules Grid */}
           {loading ? (
@@ -348,12 +440,33 @@ export default function ManageModulesPage() {
               columnWrapperStyle={styles.row}
               contentContainerStyle={styles.modulesGrid}
               showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={styles.moduleCard}
-                  onPress={() => handleViewModule(item)}
-                  activeOpacity={0.9}
-                >
+              renderItem={({ item }) => {
+                const animValue = getAnimatedValue(item.moduleId);
+                const hoverScale = getHoverScale(item.moduleId);
+                
+                return (
+                  <Animated.View style={[
+                    { flex: 0.5, margin: 8 },
+                    {
+                      opacity: animValue,
+                      transform: [
+                        {
+                          translateY: animValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [30, 0],
+                          }),
+                        },
+                        { scale: Animated.multiply(animValue, hoverScale) },
+                      ],
+                    },
+                  ]}>
+                    <TouchableOpacity 
+                      style={styles.moduleCard}
+                      onPress={() => handleViewModule(item)}
+                      onPressIn={() => handleCardHover(item.moduleId, true)}
+                      onPressOut={() => handleCardHover(item.moduleId, false)}
+                      activeOpacity={0.9}
+                    >
                   {/* Full-width Module Image with Overlay */}
                   <View style={styles.moduleImageContainer}>
                     {item.thumbnailUrl ? (
@@ -502,8 +615,7 @@ export default function ManageModulesPage() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
-      )}
-
+                </Animated.View>
       <Toast
         message={toastMessage}
         visible={toastVisible}

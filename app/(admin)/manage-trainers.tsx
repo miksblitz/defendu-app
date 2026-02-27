@@ -1,24 +1,24 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  ActivityIndicator,
-  Image,
-  TextInput,
-  Modal,
-} from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthController } from '../controllers/AuthController';
-import { User } from '../_models/User';
-import { TrainerApplication } from '../_models/TrainerApplication';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    Image,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import Toast from '../../components/Toast';
-import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
+import { useToast } from '../../hooks/useToast';
+import { TrainerApplication } from '../_models/TrainerApplication';
+import { AuthController } from '../controllers/AuthController';
 
 type ExtendedTrainerApplication = TrainerApplication & { 
   firstName?: string; 
@@ -40,6 +40,12 @@ export default function ManageTrainersPage() {
   const [selectedRejectionReason, setSelectedRejectionReason] = useState<string>('');
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
+  
+  // Animation refs
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const searchAnim = useRef(new Animated.Value(0)).current;
+  const animatedValues = useRef<Map<string, Animated.Value>>(new Map()).current;
+  const hoverScales = useRef<Map<string, Animated.Value>>(new Map()).current;
 
   // Rejection reasons
   const rejectionReasons = [
@@ -55,6 +61,24 @@ export default function ManageTrainersPage() {
   useEffect(() => {
     loadApplications();
   }, []);
+  
+  useEffect(() => {
+    if (!loading) {
+      Animated.parallel([
+        Animated.timing(headerAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(searchAnim, {
+          toValue: 1,
+          duration: 600,
+          delay: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [loading]);
 
   // Filter applications based on search query
   const filteredApplications = useMemo(() => {
@@ -69,6 +93,46 @@ export default function ManageTrainersPage() {
       return fullName.includes(query) || email.includes(query) || specialty.includes(query);
     });
   }, [applications, searchQuery]);
+  
+  // Animate filtered applications when they change
+  useEffect(() => {
+    if (filteredApplications.length > 0) {
+      const animations = filteredApplications.map((app, index) => {
+        const animValue = getAnimatedValue(app.uid);
+        return Animated.timing(animValue, {
+          toValue: 1,
+          duration: 500,
+          delay: Math.min(index * 50, 1000),
+          useNativeDriver: true,
+        });
+      });
+      Animated.stagger(30, animations).start();
+    }
+  }, [filteredApplications]);
+  
+  const getAnimatedValue = (uid: string) => {
+    if (!animatedValues.has(uid)) {
+      animatedValues.set(uid, new Animated.Value(0));
+    }
+    return animatedValues.get(uid)!;
+  };
+  
+  const getHoverScale = (uid: string) => {
+    if (!hoverScales.has(uid)) {
+      hoverScales.set(uid, new Animated.Value(1));
+    }
+    return hoverScales.get(uid)!;
+  };
+  
+  const handleCardHover = (uid: string, isHovering: boolean) => {
+    const scale = getHoverScale(uid);
+    Animated.spring(scale, {
+      toValue: isHovering ? 1.05 : 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 10,
+    }).start();
+  };
 
   const loadApplications = async () => {
     try {
@@ -626,7 +690,18 @@ export default function ManageTrainersPage() {
         {/* Main Content */}
         <View style={styles.mainContent}>
           {/* Search Bar */}
-          <View style={styles.searchContainer}>
+          <Animated.View style={[
+            styles.searchContainer,
+            {
+              opacity: searchAnim,
+              transform: [{
+                translateY: searchAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+            },
+          ]}>
             <Ionicons name="search" size={20} color="#6b8693" style={styles.searchIcon} />
             <TextInput
               style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
@@ -643,7 +718,7 @@ export default function ManageTrainersPage() {
                 <Ionicons name="close-circle" size={20} color="#6b8693" />
               </TouchableOpacity>
             )}
-          </View>
+          </Animated.View>
 
           {/* Applications Grid */}
           {loading ? (
@@ -663,9 +738,36 @@ export default function ManageTrainersPage() {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.grid}>
-                {filteredApplications.map((application) => (
-                  <View key={application.uid} style={styles.applicationCard}>
-                    <View style={styles.cardHeader}>
+                {filteredApplications.map((application) => {
+                  const animValue = getAnimatedValue(application.uid);
+                  const hoverScale = getHoverScale(application.uid);
+                  
+                  return (
+                    <Animated.View
+                      key={application.uid}
+                      style={[
+                        styles.applicationCard,
+                        {
+                          opacity: animValue,
+                          transform: [
+                            {
+                              translateY: animValue.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [30, 0],
+                              }),
+                            },
+                            { scale: Animated.multiply(animValue, hoverScale) },
+                          ],
+                        },
+                      ]}
+                    >
+                      <TouchableOpacity
+                        onPressIn={() => handleCardHover(application.uid, true)}
+                        onPressOut={() => handleCardHover(application.uid, false)}
+                        onPress={() => handleViewApplication(application)}
+                        activeOpacity={1}
+                      >
+                        <View style={styles.cardHeader}>
                 {application.profilePicture ? (
                   <Image
                     source={{ uri: application.profilePicture }}
@@ -690,15 +792,17 @@ export default function ManageTrainersPage() {
                       <Text style={styles.cardInfoLine}>
                         Status: <Text style={styles.cardHighlight}>{application.status}</Text>
                       </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.viewButton}
-                      onPress={() => handleViewApplication(application)}
-                    >
-                      <Text style={styles.viewButtonText}>View full application</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
+                        </View>
+                        <TouchableOpacity
+                          style={styles.viewButton}
+                          onPress={() => handleViewApplication(application)}
+                        >
+                          <Text style={styles.viewButtonText}>View full application</Text>
+                        </TouchableOpacity>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  );
+                })}
               </View>
             </ScrollView>
           )}
