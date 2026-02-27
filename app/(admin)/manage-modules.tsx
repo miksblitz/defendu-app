@@ -617,7 +617,7 @@ export default function ManageModulesPage() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
-                </Animated.View>
+      )}
       <Toast
         message={toastMessage}
         visible={toastVisible}
