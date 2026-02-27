@@ -1,24 +1,24 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  ActivityIndicator,
-  Image,
-  TextInput,
-  FlatList,
-  Modal,
-} from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthController } from '../controllers/AuthController';
-import { Module } from '../_models/Module';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+    ActivityIndicator,
+    FlatList,
+    Image,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import Toast from '../../components/Toast';
-import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
+import { useToast } from '../../hooks/useToast';
+import { Module } from '../_models/Module';
+import { AuthController } from '../controllers/AuthController';
 
 const MODULE_CATEGORIES = [
   'All',
@@ -349,9 +349,13 @@ export default function ManageModulesPage() {
               contentContainerStyle={styles.modulesGrid}
               showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
-                <View style={styles.moduleCard}>
-                  {/* Module Image Placeholder */}
-                  <View style={styles.moduleImagePlaceholder}>
+                <TouchableOpacity 
+                  style={styles.moduleCard}
+                  onPress={() => handleViewModule(item)}
+                  activeOpacity={0.9}
+                >
+                  {/* Full-width Module Image with Overlay */}
+                  <View style={styles.moduleImageContainer}>
                     {item.thumbnailUrl ? (
                       <Image
                         source={{ uri: item.thumbnailUrl }}
@@ -359,8 +363,17 @@ export default function ManageModulesPage() {
                         resizeMode="cover"
                       />
                     ) : (
-                      <View style={styles.moduleImagePlaceholderInner} />
+                      <View style={styles.moduleImagePlaceholder}>
+                        <Ionicons name="fitness-outline" size={48} color="#38a6de" />
+                      </View>
                     )}
+                    {/* Dark gradient overlay for text readability */}
+                    <View style={styles.imageOverlay} />
+                    
+                    {/* Category Badge */}
+                    <View style={styles.categoryBadge}>
+                      <Text style={styles.categoryBadgeText}>{item.category}</Text>
+                    </View>
                   </View>
 
                   {/* Module Info */}
@@ -369,44 +382,30 @@ export default function ManageModulesPage() {
                       {item.moduleTitle}
                     </Text>
 
-                    <View style={styles.moduleDetailRow}>
-                      <Text style={styles.moduleDetailLabel}>Category:</Text>
-                      <Text style={styles.moduleDetailValue}>{item.category}</Text>
-                    </View>
-
-                    <View style={styles.moduleDetailRow}>
-                      <Text style={styles.moduleDetailLabel}>Reference Code:</Text>
-                      <Text style={styles.moduleDetailValue}>
-                        {getReferenceCode(item.moduleId)}
-                      </Text>
-                    </View>
-
-                    <View style={styles.moduleDetailRow}>
-                      <Text style={styles.moduleDetailLabel}>Date Added:</Text>
-                      <Text style={styles.moduleDetailValue}>
-                        {formatDate(item.createdAt)}
-                      </Text>
+                    <View style={styles.moduleMetaRow}>
+                      <View style={styles.metaItem}>
+                        <Ionicons name="code-outline" size={14} color="#6b8693" />
+                        <Text style={styles.metaText}>{getReferenceCode(item.moduleId)}</Text>
+                      </View>
+                      <View style={styles.metaItem}>
+                        <Ionicons name="calendar-outline" size={14} color="#6b8693" />
+                        <Text style={styles.metaText}>{formatDate(item.createdAt)}</Text>
+                      </View>
                     </View>
 
                     <View style={styles.cardActions}>
                       <TouchableOpacity
-                        style={styles.viewButton}
-                        onPress={() => handleViewModule(item)}
-                      >
-                        <Text style={styles.viewButtonText}>
-                          {item.status === 'approved' ? 'View full module' : 'View full application'}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
                         style={styles.deleteButton}
-                        onPress={() => openDeleteModal(item)}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          openDeleteModal(item);
+                        }}
                       >
-                        <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
-                        <Text style={styles.deleteButtonText}>Delete</Text>
+                        <Ionicons name="trash-outline" size={18} color="#ff4444" />
                       </TouchableOpacity>
                     </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               )}
             />
           )}
@@ -690,14 +689,21 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(107, 134, 147, 0.2)',
   },
   deleteButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 68, 68, 0.3)',
     gap: 6,
     backgroundColor: '#c62828',
     borderRadius: 8,
@@ -857,65 +863,90 @@ const styles = StyleSheet.create({
   moduleCard: {
     width: '48%',
     backgroundColor: '#1a2332',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  moduleImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    backgroundColor: '#024446',
-    marginBottom: 12,
+    borderRadius: 16,
     overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  moduleImageContainer: {
+    width: '100%',
+    height: 180,
+    position: 'relative',
+    backgroundColor: '#0d1a2b',
   },
   moduleImage: {
     width: '100%',
     height: '100%',
   },
-  moduleImagePlaceholderInner: {
+  moduleImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#024446',
+    backgroundColor: '#0d1a2b',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+    backgroundColor: 'rgba(11, 22, 37, 0.7)',
+  },
+  categoryBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(56, 166, 222, 0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  categoryBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   moduleInfo: {
-    flex: 1,
+    padding: 16,
   },
   moduleTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     marginBottom: 12,
-    minHeight: 40,
+    minHeight: 48,
+    lineHeight: 24,
   },
-  moduleDetailRow: {
+  moduleMetaRow: {
     flexDirection: 'row',
-    marginBottom: 8,
-    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 8,
   },
-  moduleDetailLabel: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    marginRight: 4,
-  },
-  moduleDetailValue: {
-    color: '#38a6de',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  viewButton: {
-    flex: 1,
-    backgroundColor: '#38a6de',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+  metaItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    flex: 1,
   },
-  viewButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+  metaText: {
+    color: '#6b8693',
+    fontSize: 11,
+    fontWeight: '500',
   },
   menuOverlay: {
     position: 'absolute',
