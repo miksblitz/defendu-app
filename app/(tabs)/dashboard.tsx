@@ -1,9 +1,11 @@
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Animated,
     Dimensions,
     Image,
+    ImageBackground,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -53,6 +55,17 @@ export default function DashboardScreen() {
   const router = useRouter();
   const handleLogout = useLogout();
   const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
+  
+  // Animation values
+  const animatedValues = useRef<Map<string, Animated.Value>>(new Map()).current;
+  const weeklyGoalPulse = useRef(new Animated.Value(1)).current;
+  
+  const getAnimatedValue = (moduleId: string) => {
+    if (!animatedValues.has(moduleId)) {
+      animatedValues.set(moduleId, new Animated.Value(0));
+    }
+    return animatedValues.get(moduleId)!;
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -87,6 +100,58 @@ export default function DashboardScreen() {
     };
     init();
   }, [router]);
+
+  // Animate modules when they load
+  useEffect(() => {
+    if (!modulesLoading && modules.length > 0) {
+      const animations = modules.map((module, index) => {
+        const animValue = getAnimatedValue(module.moduleId);
+        return Animated.timing(animValue, {
+          toValue: 1,
+          duration: 600,
+          delay: index * 80,
+          useNativeDriver: true,
+        });
+      });
+      Animated.stagger(50, animations).start();
+    }
+  }, [modulesLoading, modules]);
+
+  // Animate recommended modules when they load
+  useEffect(() => {
+    if (recommendedModules.length > 0) {
+      const animations = recommendedModules.map((module, index) => {
+        const animValue = getAnimatedValue(`rec-${module.moduleId}`);
+        return Animated.timing(animValue, {
+          toValue: 1,
+          duration: 600,
+          delay: index * 80,
+          useNativeDriver: true,
+        });
+      });
+      Animated.stagger(50, animations).start();
+    }
+  }, [recommendedModules]);
+
+  // Pulse animation for weekly goal
+  useEffect(() => {
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(weeklyGoalPulse, {
+          toValue: 1.02,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(weeklyGoalPulse, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseAnimation.start();
+    return () => pulseAnimation.stop();
+  }, []);
 
   // Get current day name
   const currentDay = new Date().getDay();
@@ -231,36 +296,74 @@ export default function DashboardScreen() {
                   {recommendedModules.slice(0, 8).map((module, index) => {
                     const isEndOfRow = (index + 1) % 4 === 0;
                     const durationMin = module.videoDuration ? `${Math.ceil(module.videoDuration / 60)} min` : '';
+                    const animValue = getAnimatedValue(`rec-${module.moduleId}`);
+                    const imageSource = module.thumbnailUrl 
+                      ? { uri: module.thumbnailUrl }
+                      : require('../../assets/images/managemodulepic.png');
+                    
                     return (
-                      <TouchableOpacity
+                      <Animated.View
                         key={module.moduleId}
                         style={[
                           styles.moduleCard,
-                          selectedModule === module.moduleId && styles.moduleCardSelected,
                           isEndOfRow && styles.moduleCardEndOfRow,
+                          {
+                            opacity: animValue,
+                            transform: [
+                              {
+                                translateY: animValue.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [50, 0],
+                                }),
+                              },
+                              {
+                                scale: animValue.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0.9, 1],
+                                }),
+                              },
+                            ],
+                          },
                         ]}
-                        onPress={() => handleModulePress(module)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Open recommended module ${module.moduleTitle}`}
                       >
-                        <View style={styles.moduleHeader}>
-                          <Text style={styles.moduleHeaderText} numberOfLines={1}>{module.category}</Text>
-                        </View>
-                        <View style={styles.moduleContent}>
-                          <View style={styles.moduleThumbnail}>
-                            {module.thumbnailUrl ? (
-                              <Image source={{ uri: module.thumbnailUrl }} style={styles.moduleThumbnailImage} />
-                            ) : (
-                              <Text style={styles.moduleThumbnailIcon}>🥋</Text>
-                            )}
-                          </View>
-                          <View style={styles.moduleInfo}>
-                            <Text style={styles.moduleTitle} numberOfLines={2}>{module.moduleTitle}</Text>
-                            <Text style={styles.moduleDescription} numberOfLines={2}>{module.description}</Text>
-                            {durationMin ? <Text style={styles.moduleDuration}>{durationMin}</Text> : null}
-                          </View>
-                        </View>
-                      </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.moduleCardTouchable,
+                            selectedModule === module.moduleId && styles.moduleCardSelected,
+                          ]}
+                          onPress={() => handleModulePress(module)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open recommended module ${module.moduleTitle}`}
+                          activeOpacity={0.85}
+                        >
+                          <ImageBackground
+                            source={imageSource}
+                            style={styles.moduleCardBackground}
+                            imageStyle={styles.moduleCardBackgroundImage}
+                          >
+                            <View style={styles.moduleCardOverlay}>
+                              <View style={styles.moduleHeader}>
+                                <Text style={styles.moduleHeaderText} numberOfLines={1}>
+                                  {module.category}
+                                </Text>
+                              </View>
+                              <View style={styles.moduleCardContent}>
+                                <Text style={styles.moduleTitle} numberOfLines={2}>
+                                  {module.moduleTitle}
+                                </Text>
+                                <Text style={styles.moduleDescription} numberOfLines={2}>
+                                  {module.description}
+                                </Text>
+                                {durationMin ? (
+                                  <View style={styles.moduleDurationBadge}>
+                                    <Text style={styles.moduleDuration}>{durationMin}</Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                            </View>
+                          </ImageBackground>
+                        </TouchableOpacity>
+                      </Animated.View>
                     );
                   })}
                 </View>
@@ -268,7 +371,10 @@ export default function DashboardScreen() {
             )}
 
             {/* Weekly Goal */}
-            <View style={styles.weeklyGoalContainer}>
+            <Animated.View style={[
+              styles.weeklyGoalContainer,
+              { transform: [{ scale: weeklyGoalPulse }] }
+            ]}>
               <View style={styles.weeklyGoalHeader}>
                 <View>
                   <Text style={styles.weeklyGoalTitle}>Weekly Goal</Text>
@@ -315,7 +421,7 @@ export default function DashboardScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
+            </Animated.View>
 
             {/* Training Modules */}
             <View style={styles.trainingHeader}>
@@ -339,36 +445,74 @@ export default function DashboardScreen() {
                 modules.map((module, index) => {
                   const isEndOfRow = (index + 1) % 4 === 0;
                   const durationMin = module.videoDuration ? `${Math.ceil(module.videoDuration / 60)} min` : '';
+                  const animValue = getAnimatedValue(module.moduleId);
+                  const imageSource = module.thumbnailUrl 
+                    ? { uri: module.thumbnailUrl }
+                    : require('../../assets/images/managemodulepic.png');
+                  
                   return (
-                    <TouchableOpacity
+                    <Animated.View
                       key={module.moduleId}
                       style={[
                         styles.moduleCard,
-                        selectedModule === module.moduleId && styles.moduleCardSelected,
                         isEndOfRow && styles.moduleCardEndOfRow,
+                        {
+                          opacity: animValue,
+                          transform: [
+                            {
+                              translateY: animValue.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [50, 0],
+                              }),
+                            },
+                            {
+                              scale: animValue.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0.9, 1],
+                              }),
+                            },
+                          ],
+                        },
                       ]}
-                      onPress={() => handleModulePress(module)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Open training module ${module.moduleTitle}`}
                     >
-                      <View style={styles.moduleHeader}>
-                        <Text style={styles.moduleHeaderText} numberOfLines={1}>{module.category}</Text>
-                      </View>
-                      <View style={styles.moduleContent}>
-                        <View style={styles.moduleThumbnail}>
-                          {module.thumbnailUrl ? (
-                            <Image source={{ uri: module.thumbnailUrl }} style={styles.moduleThumbnailImage} />
-                          ) : (
-                            <Text style={styles.moduleThumbnailIcon}>🥋</Text>
-                          )}
-                        </View>
-                        <View style={styles.moduleInfo}>
-                          <Text style={styles.moduleTitle} numberOfLines={2}>{module.moduleTitle}</Text>
-                          <Text style={styles.moduleDescription} numberOfLines={2}>{module.description}</Text>
-                          {durationMin ? <Text style={styles.moduleDuration}>{durationMin}</Text> : null}
-                        </View>
-                      </View>
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.moduleCardTouchable,
+                          selectedModule === module.moduleId && styles.moduleCardSelected,
+                        ]}
+                        onPress={() => handleModulePress(module)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open training module ${module.moduleTitle}`}
+                        activeOpacity={0.85}
+                      >
+                        <ImageBackground
+                          source={imageSource}
+                          style={styles.moduleCardBackground}
+                          imageStyle={styles.moduleCardBackgroundImage}
+                        >
+                          <View style={styles.moduleCardOverlay}>
+                            <View style={styles.moduleHeader}>
+                              <Text style={styles.moduleHeaderText} numberOfLines={1}>
+                                {module.category}
+                              </Text>
+                            </View>
+                            <View style={styles.moduleCardContent}>
+                              <Text style={styles.moduleTitle} numberOfLines={2}>
+                                {module.moduleTitle}
+                              </Text>
+                              <Text style={styles.moduleDescription} numberOfLines={2}>
+                                {module.description}
+                              </Text>
+                              {durationMin ? (
+                                <View style={styles.moduleDurationBadge}>
+                                  <Text style={styles.moduleDuration}>{durationMin}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          </View>
+                        </ImageBackground>
+                      </TouchableOpacity>
+                    </Animated.View>
                   );
                 })
               )}
@@ -665,126 +809,99 @@ const styles = StyleSheet.create({
   },
   moduleCard: {
     width: moduleCardWidth,
-    minHeight: 240,
+    minHeight: 260,
     borderRadius: 24,
-    backgroundColor: '#011f36',
     overflow: 'hidden',
     marginRight: moduleCardMarginRight,
     marginBottom: 20,
-    borderWidth: 2,
-    borderColor: 'transparent',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
   },
   moduleCardEndOfRow: {
-    marginRight: 0, // Remove right margin from cards at the end of each row
+    marginRight: 0,
+  },
+  moduleCardTouchable: {
+    width: '100%',
+    height: '100%',
   },
   moduleCardSelected: {
-    borderColor: '#07bbc0',
     shadowColor: '#07bbc0',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-    transform: [{ scale: 1.02 }],
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 10,
+    transform: [{ scale: 1.03 }],
+  },
+  moduleCardBackground: {
+    width: '100%',
+    height: '100%',
+    minHeight: 260,
+  },
+  moduleCardBackgroundImage: {
+    resizeMode: 'cover',
+    borderRadius: 24,
+  },
+  moduleCardOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(4, 21, 39, 0.75)',
+    justifyContent: 'space-between',
+    padding: 0,
+  },
+  moduleCardContent: {
+    padding: 16,
+    paddingTop: 8,
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   moduleHeader: {
-    backgroundColor: '#062731',
+    backgroundColor: 'rgba(6, 39, 49, 0.9)',
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   moduleHeaderText: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  moduleCompleteBadge: {
-    backgroundColor: '#4CAF50',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  moduleCompleteText: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
-  },
-  moduleContent: {
-    padding: 16,
-  },
-  moduleThumbnail: {
-    width: '100%',
-    height: 90,
-    backgroundColor: '#0a3645',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(7, 187, 192, 0.1)',
-  },
-  moduleThumbnailImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  moduleThumbnailIcon: {
-    fontSize: 40,
-  },
-  moduleInfo: {
-    marginBottom: 12,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   moduleTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 6,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   moduleDescription: {
-    color: '#6b8693',
-    fontSize: 12,
-    marginBottom: 6,
+    color: '#b8cdd9',
+    fontSize: 13,
+    marginBottom: 10,
+    lineHeight: 18,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  moduleDurationBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(7, 187, 192, 0.9)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginTop: 4,
   },
   moduleDuration: {
-    color: '#07bbc0',
+    color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: '600',
-  },
-  moduleProgressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  moduleProgressBar: {
-    flex: 1,
-    height: 6,
-    backgroundColor: '#0a3645',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  moduleProgressFill: {
-    height: '100%',
-    backgroundColor: '#07bbc0',
-    borderRadius: 3,
-  },
-  moduleProgressText: {
-    color: '#6b8693',
-    fontSize: 11,
-    fontWeight: '600',
-    minWidth: 35,
-    textAlign: 'right',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   menuOverlay: {
     position: 'absolute',
