@@ -519,7 +519,9 @@ export default function ManageModulesPage() {
                     </View>
                   </View>
                 </TouchableOpacity>
-              )}
+              </Animated.View>
+              );
+            }}
             />
           )}
         </View>
