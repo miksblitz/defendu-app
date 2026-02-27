@@ -1,19 +1,22 @@
 // controllers/AuthController.ts
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
+    createUserWithEmailAndPassword,
+    EmailAuthProvider,
+    onAuthStateChanged,
+    reauthenticateWithCredential,
+    signInWithEmailAndPassword,
+    signOut,
+    updatePassword,
 } from 'firebase/auth';
-import { ref, set, get, update, remove, onValue, off } from 'firebase/database';
-import { auth, db, cloudinaryConfig } from '../config/firebaseConfig';
-import { User, RegisterData, LoginData, ForgotPasswordData } from '../_models/User';
-import { SkillProfile } from '../_models/SkillProfile';
-import { TrainerApplication } from '../_models/TrainerApplication';
+import { get, off, onValue, ref, remove, set, update } from 'firebase/database';
 import { Module } from '../_models/Module';
 import { ModuleReview } from '../_models/ModuleReview';
+import { SkillProfile } from '../_models/SkillProfile';
+import { TrainerApplication } from '../_models/TrainerApplication';
+import { ForgotPasswordData, LoginData, RegisterData, User } from '../_models/User';
+import { auth, cloudinaryConfig, db } from '../config/firebaseConfig';
 import { MessageController } from './MessageController';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export class AuthController {
   // Register new user
@@ -669,20 +672,24 @@ export class AuthController {
     }
   }
 
-  /** User progress: completed modules. Used for "Recommended for you" and refresh every 5 completions. */
-  static async getUserProgress(): Promise<{ completedModuleIds: string[]; completedCount: number }> {
+  /** User progress: completed modules + per-module timestamps. Used for weekly goal tracking & recommendations. */
+  static async getUserProgress(): Promise<{ completedModuleIds: string[]; completedCount: number; completionTimestamps: Record<string, number> }> {
     try {
       const currentUser = await this.getCurrentUser();
-      if (!currentUser) return { completedModuleIds: [], completedCount: 0 };
+      if (!currentUser) return { completedModuleIds: [], completedCount: 0, completionTimestamps: {} };
       const snap = await get(ref(db, `userProgress/${currentUser.uid}`));
-      if (!snap.exists()) return { completedModuleIds: [], completedCount: 0 };
+      if (!snap.exists()) return { completedModuleIds: [], completedCount: 0, completionTimestamps: {} };
       const data = snap.val();
       const completedModuleIds = Array.isArray(data?.completedModuleIds) ? data.completedModuleIds : [];
       const completedCount = typeof data?.completedCount === 'number' ? data.completedCount : completedModuleIds.length;
-      return { completedModuleIds, completedCount };
+      const completionTimestamps =
+        data?.completionTimestamps && typeof data.completionTimestamps === 'object'
+          ? data.completionTimestamps
+          : {};
+      return { completedModuleIds, completedCount, completionTimestamps };
     } catch (error: any) {
       console.error('❌ Error getting user progress:', error);
-      return { completedModuleIds: [], completedCount: 0 };
+      return { completedModuleIds: [], completedCount: 0, completionTimestamps: {} };
     }
   }
 
@@ -694,9 +701,11 @@ export class AuthController {
     if (existing.completedModuleIds.includes(moduleId)) return existing.completedCount;
     const completedModuleIds = [...existing.completedModuleIds, moduleId];
     const completedCount = completedModuleIds.length;
+    const completionTimestamps = { ...existing.completionTimestamps, [moduleId]: Date.now() };
     await set(ref(db, `userProgress/${currentUser.uid}`), {
       completedModuleIds,
       completedCount,
+      completionTimestamps,
       updatedAt: Date.now(),
     });
     return completedCount;
@@ -787,6 +796,81 @@ export class AuthController {
       
       throw new Error(error.message || 'Failed to update profile picture');
     }
+  }
+
+  /** Change password (requires current password for re-authentication). */
+  static async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) throw new Error('User not authenticated');
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser || !currentUser.email) throw new Error('User not authenticated');
+    const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+    await reauthenticateWithCredential(firebaseUser, credential);
+    await updatePassword(firebaseUser, newPassword);
+  }
+
+  /** Reset all progress (completed modules) for the current user. */
+  static async resetUserProgress(): Promise<void> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) throw new Error('User not authenticated');
+    await set(ref(db, `userProgress/${currentUser.uid}`), {
+      completedModuleIds: [],
+      completedCount: 0,
+      completionTimestamps: {},
+      updatedAt: Date.now(),
+    });
+  }
+
+  /** Update profile: name and/or height/weight. Persists to users + skillProfiles and AsyncStorage. */
+  static async updateUserProfile(updates: {
+    firstName?: string;
+    lastName?: string;
+    height?: number;
+    weight?: number;
+  }): Promise<void> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) throw new Error('User not authenticated');
+    const userUpdates: Record<string, unknown> = {};
+    if (updates.firstName !== undefined) userUpdates.firstName = updates.firstName;
+    if (updates.lastName !== undefined) userUpdates.lastName = updates.lastName;
+    if (updates.height !== undefined) userUpdates.height = updates.height;
+    if (updates.weight !== undefined) userUpdates.weight = updates.weight;
+    if (Object.keys(userUpdates).length === 0) return;
+    await update(ref(db, `users/${currentUser.uid}`), userUpdates);
+    // Also update height/weight in skill profile physicalAttributes if present
+    if (updates.height !== undefined || updates.weight !== undefined) {
+      const snap = await get(ref(db, `skillProfiles/${currentUser.uid}`));
+      if (snap.exists()) {
+        const data = snap.val();
+        const pa = data?.physicalAttributes ?? {};
+        await update(ref(db, `skillProfiles/${currentUser.uid}`), {
+          physicalAttributes: {
+            ...pa,
+            ...(updates.height !== undefined && { height: updates.height }),
+            ...(updates.weight !== undefined && { weight: updates.weight }),
+            age: pa.age ?? 0,
+            gender: pa.gender ?? 'Other',
+            limitations: pa.limitations ?? null,
+          },
+        });
+      }
+    }
+    const updatedUser = { ...currentUser, ...userUpdates };
+    await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+  }
+
+  /** Fetch skill profile height/weight for current user. */
+  static async getSkillProfileHeightWeight(): Promise<{ height: number; weight: number } | null> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) return null;
+    const snap = await get(ref(db, `skillProfiles/${currentUser.uid}`));
+    if (!snap.exists()) return null;
+    const data = snap.val();
+    const pa = data?.physicalAttributes;
+    if (pa && typeof pa.height === 'number' && typeof pa.weight === 'number') {
+      return { height: pa.height, weight: pa.weight };
+    }
+    return null;
   }
 
   // Get all users (admin only)

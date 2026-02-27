@@ -24,9 +24,50 @@ const strokeWidth = 4;
 const radius = (circleSize - strokeWidth) / 2;
 const circumference = 2 * Math.PI * radius;
 
-const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-// Realistic progress values - showing some completed days
-const progressValues = [1, 0.8, 0.6, 0.3, 0, 0, 0]; // Progress for each day
+const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const MODULES_PER_DAY_GOAL = 5;
+
+/** Start of current week (Monday 00:00) and end (Sunday 23:59:59.999) in local time. */
+function getCurrentWeekRange(): { start: number; end: number } {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const daysSinceMonday = (dayOfWeek + 6) % 7;
+  const start = new Date(now);
+  start.setDate(now.getDate() - daysSinceMonday);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return { start: start.getTime(), end: end.getTime() };
+}
+
+/** Day index 0=Mon .. 6=Sun from a timestamp. */
+function getDayIndex(ts: number): number {
+  const d = new Date(ts);
+  return (d.getDay() + 6) % 7;
+}
+
+/** Completions per day (Mon=0 .. Sun=6) for the current week only. */
+function getDayCountsThisWeek(completionTimestamps: Record<string, number>): number[] {
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  const { start, end } = getCurrentWeekRange();
+  for (const ts of Object.values(completionTimestamps)) {
+    if (ts >= start && ts <= end) counts[getDayIndex(ts)]++;
+  }
+  return counts;
+}
+
+const MODULE_CATEGORIES = [
+  'Punching',
+  'Kicking',
+  'Elbow Strikes',
+  'Palm Strikes',
+  'Defensive Moves',
+] as const;
+
+function normalizeCategory(cat: string | undefined): string {
+  return (cat ?? '').trim().toLowerCase();
+}
 
 // Get screen width for horizontal scrolling
 const screenWidth = Dimensions.get('window').width;
@@ -40,7 +81,7 @@ const moduleCardWidth = Math.floor((availableWidth - totalGapsFor4Cards) / 4); /
 const moduleCardMarginRight = gapBetweenCards;
 
 export default function DashboardScreen() {
-  const [selectedDay, setSelectedDay] = useState(0);
+  const [selectedDay, setSelectedDay] = useState(() => (new Date().getDay() + 6) % 7);
   const [showMenu, setShowMenu] = useState(false);
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
   const [userName, setUserName] = useState('User');
@@ -52,6 +93,8 @@ export default function DashboardScreen() {
   } | null>(null);
   const [recommendedModules, setRecommendedModules] = useState<Module[]>([]);
   const [completedModuleIds, setCompletedModuleIds] = useState<string[]>([]);
+  const [completionTimestamps, setCompletionTimestamps] = useState<Record<string, number>>({});
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const router = useRouter();
   const handleLogout = useLogout();
   const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
@@ -130,6 +173,7 @@ export default function DashboardScreen() {
         setModules(approved);
         setRecommendations(recs);
         setCompletedModuleIds(progress.completedModuleIds);
+        setCompletionTimestamps(progress.completionTimestamps ?? {});
         if (recs?.recommendedModuleIds?.length) {
           const recommended = await AuthController.getModulesByIds(recs.recommendedModuleIds);
           const notCompleted = recommended.filter((m) => !progress.completedModuleIds.includes(m.moduleId));
@@ -199,9 +243,13 @@ export default function DashboardScreen() {
     return () => pulseAnimation.stop();
   }, []);
 
-  // Get current day name
-  const currentDay = new Date().getDay();
-  const todayName = days[currentDay];
+  // Get current day index (Mon=0 .. Sun=6)
+  const todayIndex = (new Date().getDay() + 6) % 7;
+  const todayName = days[todayIndex];
+
+  // Calculate real weekly progress from completionTimestamps
+  const dayCounts = getDayCountsThisWeek(completionTimestamps);
+  const dayProgress = dayCounts.map((c) => Math.min(1, c / MODULES_PER_DAY_GOAL));
 
   const handleMessages = () => {
     clearUnread();
@@ -215,7 +263,14 @@ export default function DashboardScreen() {
   };
 
   // Calculate overall weekly progress
-  const weeklyProgress = progressValues.reduce((acc, val) => acc + val, 0) / days.length;
+  const weeklyProgress = dayProgress.length
+    ? dayProgress.reduce((a, b) => a + b, 0) / 7
+    : 0;
+
+  // Modules filtered by selected category
+  const modulesInCategory = selectedCategory
+    ? modules.filter((m) => normalizeCategory(m.category) === normalizeCategory(selectedCategory))
+    : modules;
 
   const CircularProgress = ({ progress }: { progress: number }) => {
     const strokeDashoffset = circumference * (1 - progress);
@@ -436,7 +491,7 @@ export default function DashboardScreen() {
                 <View>
                   <Text style={styles.weeklyGoalTitle}>Weekly Goal</Text>
                   <Text style={styles.weeklyGoalSubtitle}>
-                    Track your training progress
+                    5 modules per day • Resets every Monday
                   </Text>
                 </View>
                 <View style={styles.weeklyGoalStats}>
@@ -459,7 +514,7 @@ export default function DashboardScreen() {
                     accessibilityLabel={`Select day ${day}`}
                     accessibilityState={{ selected: selectedDay === i }}
                   >
-                    <CircularProgress progress={progressValues[i]} />
+                    <CircularProgress progress={dayProgress[i] ?? 0} />
                     <View
                       style={[
                         styles.dayLabelContainer,
@@ -474,6 +529,7 @@ export default function DashboardScreen() {
                       >
                         {day}
                       </Text>
+                      {i === todayIndex && <Text style={styles.todayBadge}>Today</Text>}
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -484,9 +540,37 @@ export default function DashboardScreen() {
             <View style={styles.trainingHeader}>
               <Text style={styles.trainingTitle}>TRAINING MODULES</Text>
               <Text style={styles.trainingSubtitle}>
-                Continue your martial arts journey
+                {selectedCategory ? `Showing ${selectedCategory} modules` : 'Choose a category, then pick a module'}
               </Text>
             </View>
+
+            {/* Category filter pills */}
+            <View style={styles.categoryFilterRow}>
+              <TouchableOpacity
+                style={[styles.categoryPill, !selectedCategory && styles.categoryPillActive]}
+                onPress={() => setSelectedCategory(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.categoryPillText, !selectedCategory && styles.categoryPillTextActive]}>All</Text>
+              </TouchableOpacity>
+              {MODULE_CATEGORIES.map((cat) => {
+                const count = modules.filter((m) => normalizeCategory(m.category) === normalizeCategory(cat)).length;
+                const isActive = selectedCategory === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.categoryPill, isActive && styles.categoryPillActive]}
+                    onPress={() => setSelectedCategory(isActive ? null : cat)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.categoryPillText, isActive && styles.categoryPillTextActive]}>
+                      {cat} ({count})
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
             <View style={styles.modulesContainer}>
               {modulesLoading ? (
                 <View style={styles.modulesLoadingContainer}>
@@ -498,8 +582,13 @@ export default function DashboardScreen() {
                   <Text style={styles.modulesEmptyText}>No modules available yet.</Text>
                   <Text style={styles.modulesEmptySubtext}>Check back later for new training content.</Text>
                 </View>
+              ) : modulesInCategory.length === 0 ? (
+                <View style={styles.modulesEmptyContainer}>
+                  <Text style={styles.modulesEmptyText}>No modules in this category yet</Text>
+                  <Text style={styles.modulesEmptySubtext}>Check back later for new content.</Text>
+                </View>
               ) : (
-                modules.map((module, index) => {
+                modulesInCategory.map((module, index) => {
                   const isEndOfRow = (index + 1) % 4 === 0;
                   const durationMin = module.videoDuration ? `${Math.ceil(module.videoDuration / 60)} min` : '';
                   const animValue = getAnimatedValue(module.moduleId);
@@ -814,6 +903,12 @@ const styles = StyleSheet.create({
   dayLabelActive: {
     color: '#041527',
   },
+  todayBadge: {
+    color: '#07bbc0',
+    fontSize: 9,
+    fontWeight: '700',
+    marginTop: 1,
+  },
   trainingHeader: {
     marginBottom: 15,
   },
@@ -827,6 +922,32 @@ const styles = StyleSheet.create({
   trainingSubtitle: {
     fontSize: 14,
     color: '#6b8693',
+  },
+  categoryFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  categoryPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#062731',
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.25)',
+  },
+  categoryPillActive: {
+    backgroundColor: '#07bbc0',
+    borderColor: '#07bbc0',
+  },
+  categoryPillText: {
+    color: '#6b8693',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  categoryPillTextActive: {
+    color: '#041527',
   },
   modulesContainer: {
     flexDirection: 'row',
