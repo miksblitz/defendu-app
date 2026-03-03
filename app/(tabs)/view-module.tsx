@@ -17,16 +17,13 @@ import {
     View,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import PoseCameraView from '../../components/PoseCameraView';
 import { useLogout } from '../../hooks/useLogout';
 import { Module } from '../_models/Module';
 import { ModuleReview } from '../_models/ModuleReview';
-import type { PoseSequence } from '../_utils/pose/types';
-import { getRequiredReps } from '../_utils/repRange';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController } from '../controllers/AuthController';
 
-type Step = 'intro' | 'video' | 'tryIt' | 'tryItPose' | 'complete';
+type Step = 'intro' | 'video' | 'tryIt' | 'complete';
 
 /**
  * Normalize video URL for reliable playback (e.g. force MP4 for Cloudinary).
@@ -79,11 +76,7 @@ export default function ViewModulePage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [showAllReviewsModal, setShowAllReviewsModal] = useState(false);
-  // Pose detection state
-  const [poseCorrectReps, setPoseCorrectReps] = useState(0);
-  const [poseCurrentRepCorrect, setPoseCurrentRepCorrect] = useState<boolean | null>(null);
-  const [referencePoseSequence, setReferencePoseSequence] = useState<PoseSequence | null>(null);
-  const [referencePoseLoading, setReferencePoseLoading] = useState(false);
+
 
   useEffect(() => {
     if (moduleId) {
@@ -165,37 +158,6 @@ export default function ViewModulePage() {
     setTryItPaused(false);
     setStep('tryIt');
   };
-
-  const handleTryWithPose = () => {
-    setPoseCorrectReps(0);
-    setPoseCurrentRepCorrect(null);
-    setReferencePoseSequence(null);
-    setStep('tryItPose');
-  };
-
-  // Load reference pose sequence when entering tryItPose step
-  useEffect(() => {
-    if (step !== 'tryItPose' || !module?.referencePoseSequenceUrl) {
-      setReferencePoseSequence(null);
-      return;
-    }
-    let cancelled = false;
-    setReferencePoseLoading(true);
-    fetch(module.referencePoseSequenceUrl)
-      .then((r) => r.json())
-      .then((data: { sequence?: PoseSequence } | PoseSequence) => {
-        if (cancelled) return;
-        const seq = Array.isArray(data) ? data : (data as any)?.sequence ?? null;
-        setReferencePoseSequence(Array.isArray(seq) && seq.length > 0 ? seq : null);
-      })
-      .catch(() => {
-        if (!cancelled) setReferencePoseSequence(null);
-      })
-      .finally(() => {
-        if (!cancelled) setReferencePoseLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [step, module?.referencePoseSequenceUrl]);
 
   // Timer tick for Try it yourself (depends only on step and pause so we don't recreate interval every second)
   useEffect(() => {
@@ -318,7 +280,7 @@ export default function ViewModulePage() {
               if (step === 'intro') router.replace('/dashboard');
               else if (step === 'video') setStep('intro');
               else if (step === 'tryIt') setStep('video');
-              else if (step === 'tryItPose') setStep('video');
+
               else if (step === 'complete') router.replace('/dashboard');
             }}
           >
@@ -428,12 +390,6 @@ export default function ViewModulePage() {
                       <Ionicons name="fitness-outline" size={22} color="#FFFFFF" style={{ marginRight: 8 }} />
                       <Text style={styles.tryItButtonText}>Try it yourself</Text>
                     </TouchableOpacity>
-                    {(module.techniqueVideoUrl ?? module.techniqueVideoLink) ? (
-                      <TouchableOpacity style={styles.tryItPoseButton} onPress={handleTryWithPose} activeOpacity={0.8}>
-                        <Ionicons name="body-outline" size={22} color="#07bbc0" style={{ marginRight: 8 }} />
-                        <Text style={styles.tryItPoseButtonText}>Try with pose</Text>
-                      </TouchableOpacity>
-                    ) : null}
                     <TouchableOpacity style={styles.continueButton} onPress={handleIntroDone} activeOpacity={0.8}>
                       <Text style={styles.continueButtonText}>Continue to Complete</Text>
                     </TouchableOpacity>
@@ -447,46 +403,10 @@ export default function ViewModulePage() {
                       <Ionicons name="fitness-outline" size={22} color="#FFFFFF" style={{ marginRight: 8 }} />
                       <Text style={styles.tryItButtonText}>Try it yourself</Text>
                     </TouchableOpacity>
-                    {(module.techniqueVideoUrl ?? module.techniqueVideoLink) ? (
-                      <TouchableOpacity style={styles.tryItPoseButton} onPress={handleTryWithPose} activeOpacity={0.8}>
-                        <Ionicons name="body-outline" size={22} color="#07bbc0" style={{ marginRight: 8 }} />
-                        <Text style={styles.tryItPoseButtonText}>Try with pose</Text>
-                      </TouchableOpacity>
-                    ) : null}
                     <TouchableOpacity style={styles.continueButton} onPress={handleIntroDone} activeOpacity={0.8}>
                       <Text style={styles.continueButtonText}>Continue to Complete</Text>
                     </TouchableOpacity>
                   </>
-                )}
-              </View>
-            )}
-
-            {step === 'tryItPose' && (
-              <View style={styles.poseFullScreenCard}>
-                {referencePoseLoading ? (
-                  <View style={styles.poseLoadingContainer}>
-                    <ActivityIndicator size="large" color="#07bbc0" />
-                    <Text style={styles.poseLoadingText}>Loading reference pose data...</Text>
-                  </View>
-                ) : (
-                  <View style={styles.poseContainer}>
-                    <PoseCameraView
-                      requiredReps={getRequiredReps(module.repRange)}
-                      correctReps={poseCorrectReps}
-                      isCurrentRepCorrect={poseCurrentRepCorrect}
-                      onBack={() => setStep('video')}
-                      onCorrectRepsUpdate={(count, lastCorrect) => {
-                        setPoseCorrectReps(count);
-                        setPoseCurrentRepCorrect(lastCorrect);
-                      }}
-                      referenceSequence={referencePoseSequence}
-                    />
-                    {poseCorrectReps >= getRequiredReps(module.repRange) && (
-                      <TouchableOpacity style={styles.continueOverlayButton} onPress={() => setStep('complete')} activeOpacity={0.8}>
-                        <Text style={styles.continueButtonText}>Continue to Complete</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
                 )}
               </View>
             )}
@@ -1043,55 +963,7 @@ const styles = StyleSheet.create({
     borderColor: '#07bbc0',
   },
   tryItButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  tryItPoseButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 10,
-    borderWidth: 2,
-    borderColor: '#07bbc0',
-  },
-  tryItPoseButtonText: { color: '#07bbc0', fontSize: 16, fontWeight: '700' },
-  poseLoadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-    gap: 12,
-  },
-  poseLoadingText: {
-    color: '#6b8693',
-    fontSize: 14,
-  },
-  poseContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  poseFullScreenCard: {
-    flex: 1,
-    minHeight: 500,
-    backgroundColor: '#011f36',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#0a3645',
-    maxWidth: 640,
-    alignSelf: 'center',
-    width: '100%',
-  },
-  continueOverlayButton: {
-    position: 'absolute',
-    bottom: 80,
-    left: 20,
-    right: 20,
-    backgroundColor: '#07bbc0',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    zIndex: 30,
-  },
+
   tryItSubtext: {
     color: '#6b8693',
     fontSize: 14,

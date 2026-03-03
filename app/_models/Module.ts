@@ -17,8 +17,6 @@ export interface Module {
   // Technique Video
   techniqueVideoUrl?: string; // Uploaded video URL
   techniqueVideoLink?: string; // External video link
-  /** Optional URL to precomputed reference pose sequence JSON (one rep) for "Try with pose". */
-  referencePoseSequenceUrl?: string;
   videoDuration?: number; // Duration in seconds
   
   // Thumbnail

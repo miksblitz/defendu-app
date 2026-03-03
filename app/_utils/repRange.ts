@@ -1,6 +1,5 @@
 /**
- * Parse repRange (e.g. "4-6 reps", "12 reps") to get required number of correct reps
- * for the pose-based "Try with pose" flow.
+ * Parse repRange (e.g. "4-6 reps", "12 reps") to get required number of reps.
  */
 export function getRequiredReps(repRange: string | undefined): number {
   if (!repRange?.trim()) return 5;
