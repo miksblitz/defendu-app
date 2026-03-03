@@ -384,12 +384,12 @@ export default function ProfilePage() {
 
           {/* Menu Options Section */}
           <View style={styles.menuOptionsSection}>
-            <TouchableOpacity style={styles.menuOption}>
+            <TouchableOpacity style={styles.menuOption} onPress={() => router.push('/settings')}>
               <Ionicons name="settings-outline" size={20} color="#07bbc0" />
               <Text style={styles.menuOptionText}>Settings</Text>
               <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuOption}>
+            <TouchableOpacity style={styles.menuOption} onPress={() => router.push('/location')}>
               <Ionicons name="location-outline" size={20} color="#07bbc0" />
               <Text style={styles.menuOptionText}>Location</Text>
               <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />

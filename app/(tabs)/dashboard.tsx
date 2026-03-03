@@ -147,6 +147,10 @@ export default function DashboardScreen() {
         router.replace('/(auth)/login');
         return;
       }
+
+      // Set first name from user's full name
+      const firstNamePart = (user.firstName || '').trim().split(' ')[0];
+      setUserName(firstNamePart || 'User');
       
       // Animate welcome section
       Animated.parallel([
