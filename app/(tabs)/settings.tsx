@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
     Platform,
@@ -37,6 +37,9 @@ export default function SettingsPage() {
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
 
+  // Track whether initial load is done to avoid saving defaults on mount
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -49,8 +52,70 @@ export default function SettingsPage() {
         console.error('Error loading user:', e);
       }
     };
+
+    const loadSettings = async () => {
+      try {
+        const s = await AuthController.loadUserSettings();
+        setPushNotifications(s.pushNotifications);
+        setEmailNotifications(s.emailNotifications);
+        setTrainingReminders(s.trainingReminders);
+        setMessageAlerts(s.messageAlerts);
+        setDarkMode(s.darkMode);
+        setAutoPlayVideos(s.autoPlayVideos);
+        setProfileVisible(s.profileVisible);
+        setShowProgress(s.showProgress);
+      } catch (e) {
+        console.error('Error loading settings:', e);
+      } finally {
+        setSettingsLoaded(true);
+      }
+    };
+
     loadUser();
+    loadSettings();
   }, []);
+
+  // Persist settings whenever a toggle changes (after initial load)
+  const persistSettings = useCallback(
+    (overrides: Record<string, boolean>) => {
+      if (!settingsLoaded) return;
+      const current = {
+        pushNotifications,
+        emailNotifications,
+        trainingReminders,
+        messageAlerts,
+        darkMode,
+        autoPlayVideos,
+        profileVisible,
+        showProgress,
+        ...overrides,
+      };
+      AuthController.saveUserSettings(current).catch((e) =>
+        console.error('Error saving settings:', e),
+      );
+    },
+    [
+      settingsLoaded,
+      pushNotifications,
+      emailNotifications,
+      trainingReminders,
+      messageAlerts,
+      darkMode,
+      autoPlayVideos,
+      profileVisible,
+      showProgress,
+    ],
+  );
+
+  // Toggle handlers that update state AND persist
+  const togglePush = (v: boolean) => { setPushNotifications(v); persistSettings({ pushNotifications: v }); };
+  const toggleEmail = (v: boolean) => { setEmailNotifications(v); persistSettings({ emailNotifications: v }); };
+  const toggleReminders = (v: boolean) => { setTrainingReminders(v); persistSettings({ trainingReminders: v }); };
+  const toggleMessages = (v: boolean) => { setMessageAlerts(v); persistSettings({ messageAlerts: v }); };
+  const toggleDarkMode = (v: boolean) => { setDarkMode(v); persistSettings({ darkMode: v }); };
+  const toggleAutoPlay = (v: boolean) => { setAutoPlayVideos(v); persistSettings({ autoPlayVideos: v }); };
+  const toggleProfileVisible = (v: boolean) => { setProfileVisible(v); persistSettings({ profileVisible: v }); };
+  const toggleShowProgress = (v: boolean) => { setShowProgress(v); persistSettings({ showProgress: v }); };
 
   const handleResetProgress = () => {
     if (Platform.OS === 'web') {
@@ -158,7 +223,7 @@ export default function SettingsPage() {
               <Text style={styles.toggleLabel}>Push Notifications</Text>
               <Switch
                 value={pushNotifications}
-                onValueChange={setPushNotifications}
+                onValueChange={togglePush}
                 trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
                 thumbColor="#FFFFFF"
               />
@@ -169,7 +234,7 @@ export default function SettingsPage() {
               <Text style={styles.toggleLabel}>Email Notifications</Text>
               <Switch
                 value={emailNotifications}
-                onValueChange={setEmailNotifications}
+                onValueChange={toggleEmail}
                 trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
                 thumbColor="#FFFFFF"
               />
@@ -180,7 +245,7 @@ export default function SettingsPage() {
               <Text style={styles.toggleLabel}>Training Reminders</Text>
               <Switch
                 value={trainingReminders}
-                onValueChange={setTrainingReminders}
+                onValueChange={toggleReminders}
                 trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
                 thumbColor="#FFFFFF"
               />
@@ -191,7 +256,7 @@ export default function SettingsPage() {
               <Text style={styles.toggleLabel}>Message Alerts</Text>
               <Switch
                 value={messageAlerts}
-                onValueChange={setMessageAlerts}
+                onValueChange={toggleMessages}
                 trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
                 thumbColor="#FFFFFF"
               />
@@ -208,7 +273,7 @@ export default function SettingsPage() {
               <Text style={styles.toggleLabel}>Dark Mode</Text>
               <Switch
                 value={darkMode}
-                onValueChange={setDarkMode}
+                onValueChange={toggleDarkMode}
                 trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
                 thumbColor="#FFFFFF"
               />
@@ -219,7 +284,7 @@ export default function SettingsPage() {
               <Text style={styles.toggleLabel}>Auto-Play Videos</Text>
               <Switch
                 value={autoPlayVideos}
-                onValueChange={setAutoPlayVideos}
+                onValueChange={toggleAutoPlay}
                 trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
                 thumbColor="#FFFFFF"
               />
@@ -236,7 +301,7 @@ export default function SettingsPage() {
               <Text style={styles.toggleLabel}>Profile Visible to Others</Text>
               <Switch
                 value={profileVisible}
-                onValueChange={setProfileVisible}
+                onValueChange={toggleProfileVisible}
                 trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
                 thumbColor="#FFFFFF"
               />
@@ -247,7 +312,7 @@ export default function SettingsPage() {
               <Text style={styles.toggleLabel}>Show Training Progress</Text>
               <Switch
                 value={showProgress}
-                onValueChange={setShowProgress}
+                onValueChange={toggleShowProgress}
                 trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
                 thumbColor="#FFFFFF"
               />

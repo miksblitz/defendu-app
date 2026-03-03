@@ -32,6 +32,8 @@ export interface User {
   currentFitnessLevel?: string;
   trainingFrequency?: string;
   currentInjuries?: string;
+  // Location
+  location?: string;
 }
 
 export interface RegisterData {

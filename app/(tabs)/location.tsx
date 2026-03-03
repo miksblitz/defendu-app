@@ -37,23 +37,14 @@ export default function LocationPage() {
           return;
         }
 
-        // Try to load from trainer application data if available
-        const trainerApp = await AuthController.getUserTrainerApplication(user.uid);
-        if (trainerApp?.physicalAddress) {
-          // Parse address into components
-          const parts = trainerApp.physicalAddress.split(',').map((p: string) => p.trim());
-          if (parts.length >= 2) {
-            setAddress(parts[0] || '');
-            setCity(parts[1] || '');
-            setCountry(parts[parts.length - 1] || '');
-            setInitialAddress(parts[0] || '');
-            setInitialCity(parts[1] || '');
-            setInitialCountry(parts[parts.length - 1] || '');
-          } else {
-            setAddress(trainerApp.physicalAddress);
-            setInitialAddress(trainerApp.physicalAddress);
-          }
-        }
+        // Load structured location from Firebase
+        const loc = await AuthController.loadUserLocation();
+        setAddress(loc.address);
+        setCity(loc.city);
+        setCountry(loc.country);
+        setInitialAddress(loc.address);
+        setInitialCity(loc.city);
+        setInitialCountry(loc.country);
       } catch (e) {
         console.error('Error loading location:', e);
       } finally {
@@ -122,11 +113,12 @@ export default function LocationPage() {
 
     setSaving(true);
     try {
-      const fullAddress = [address, city, country].filter(Boolean).join(', ');
-      // Save location to user profile
-      await AuthController.updateUserProfile({
-        location: fullAddress,
-      } as any);
+      // Save structured location to Firebase
+      await AuthController.saveUserLocation({
+        address: address.trim(),
+        city: city.trim(),
+        country: country.trim(),
+      });
       setInitialCity(city);
       setInitialCountry(country);
       setInitialAddress(address);
@@ -143,7 +135,11 @@ export default function LocationPage() {
     const query = [address, city, country].filter(Boolean).join(', ');
     if (query) {
       const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-      Linking.openURL(url);
+      if (Platform.OS === 'web') {
+        window.open(url, '_blank');
+      } else {
+        Linking.openURL(url);
+      }
     } else {
       showAlert('No Location', 'Please enter a location first.');
     }

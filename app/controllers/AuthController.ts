@@ -827,6 +827,7 @@ export class AuthController {
     lastName?: string;
     height?: number;
     weight?: number;
+    location?: string;
   }): Promise<void> {
     const currentUser = await this.getCurrentUser();
     if (!currentUser) throw new Error('User not authenticated');
@@ -835,6 +836,7 @@ export class AuthController {
     if (updates.lastName !== undefined) userUpdates.lastName = updates.lastName;
     if (updates.height !== undefined) userUpdates.height = updates.height;
     if (updates.weight !== undefined) userUpdates.weight = updates.weight;
+    if (updates.location !== undefined) userUpdates.location = updates.location;
     if (Object.keys(userUpdates).length === 0) return;
     await update(ref(db, `users/${currentUser.uid}`), userUpdates);
     // Also update height/weight in skill profile physicalAttributes if present
@@ -1975,6 +1977,145 @@ export class AuthController {
     } catch (error: any) {
       console.error('Error fetching module reviews:', error);
       throw new Error(error.message || 'Failed to fetch reviews');
+    }
+  }
+
+  // ── User Settings (notifications, display, privacy) ──────────────────
+
+  static async saveUserSettings(settings: {
+    pushNotifications?: boolean;
+    emailNotifications?: boolean;
+    trainingReminders?: boolean;
+    messageAlerts?: boolean;
+    darkMode?: boolean;
+    autoPlayVideos?: boolean;
+    profileVisible?: boolean;
+    showProgress?: boolean;
+  }): Promise<void> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) throw new Error('User not authenticated');
+    await update(ref(db, `userSettings/${currentUser.uid}`), {
+      ...settings,
+      updatedAt: Date.now(),
+    });
+    // Also cache locally for fast reads
+    await AsyncStorage.setItem(
+      `userSettings_${currentUser.uid}`,
+      JSON.stringify(settings),
+    );
+  }
+
+  static async loadUserSettings(): Promise<{
+    pushNotifications: boolean;
+    emailNotifications: boolean;
+    trainingReminders: boolean;
+    messageAlerts: boolean;
+    darkMode: boolean;
+    autoPlayVideos: boolean;
+    profileVisible: boolean;
+    showProgress: boolean;
+  }> {
+    const defaults = {
+      pushNotifications: true,
+      emailNotifications: true,
+      trainingReminders: true,
+      messageAlerts: true,
+      darkMode: true,
+      autoPlayVideos: true,
+      profileVisible: true,
+      showProgress: true,
+    };
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) return defaults;
+    try {
+      // Try remote first
+      const snap = await get(ref(db, `userSettings/${currentUser.uid}`));
+      if (snap.exists()) {
+        const data = snap.val();
+        const merged = { ...defaults, ...data };
+        // Cache locally
+        await AsyncStorage.setItem(
+          `userSettings_${currentUser.uid}`,
+          JSON.stringify(merged),
+        );
+        return merged;
+      }
+      // Fall back to local cache
+      const cached = await AsyncStorage.getItem(`userSettings_${currentUser.uid}`);
+      if (cached) return { ...defaults, ...JSON.parse(cached) };
+      return defaults;
+    } catch (e) {
+      console.error('Error loading user settings:', e);
+      // Fall back to local cache on network error
+      try {
+        const cached = await AsyncStorage.getItem(`userSettings_${currentUser.uid}`);
+        if (cached) return { ...defaults, ...JSON.parse(cached) };
+      } catch (_) { /* ignore */ }
+      return defaults;
+    }
+  }
+
+  // ── User Location helpers ────────────────────────────────────────────
+
+  static async saveUserLocation(location: {
+    address?: string;
+    city?: string;
+    country?: string;
+  }): Promise<void> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) throw new Error('User not authenticated');
+    const fullAddress = [location.address, location.city, location.country]
+      .filter(Boolean)
+      .join(', ');
+    // Save structured location AND flat string
+    await update(ref(db, `users/${currentUser.uid}`), { location: fullAddress });
+    await set(ref(db, `userLocations/${currentUser.uid}`), {
+      address: location.address || '',
+      city: location.city || '',
+      country: location.country || '',
+      fullAddress,
+      updatedAt: Date.now(),
+    });
+    // Update local cache
+    const updatedUser = { ...currentUser, location: fullAddress };
+    await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+  }
+
+  static async loadUserLocation(): Promise<{
+    address: string;
+    city: string;
+    country: string;
+  }> {
+    const defaults = { address: '', city: '', country: '' };
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) return defaults;
+    try {
+      const snap = await get(ref(db, `userLocations/${currentUser.uid}`));
+      if (snap.exists()) {
+        const data = snap.val();
+        return {
+          address: data.address || '',
+          city: data.city || '',
+          country: data.country || '',
+        };
+      }
+      // Fall back: try parsing from trainerApplication physicalAddress
+      const trainerApp = await this.getUserTrainerApplication(currentUser.uid);
+      if (trainerApp?.physicalAddress) {
+        const parts = trainerApp.physicalAddress.split(',').map((p: string) => p.trim());
+        if (parts.length >= 2) {
+          return {
+            address: parts[0] || '',
+            city: parts[1] || '',
+            country: parts[parts.length - 1] || '',
+          };
+        }
+        return { address: trainerApp.physicalAddress, city: '', country: '' };
+      }
+      return defaults;
+    } catch (e) {
+      console.error('Error loading user location:', e);
+      return defaults;
     }
   }
 }
