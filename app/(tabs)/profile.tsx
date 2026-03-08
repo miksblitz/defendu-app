@@ -1,4 +1,4 @@
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
@@ -16,10 +16,12 @@ import {
     View,
 } from 'react-native';
 import OfflineModeModal from '../../components/OfflineModeModal';
+import WalletCard from '../../components/WalletCard';
 import { useLogout } from '../../hooks/useLogout';
 import { OfflineStorage } from '../_utils/offlineStorage';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController } from '../controllers/AuthController';
+import { WalletController } from '../controllers/WalletController';
 
 const PRIVACY_URL = 'https://defendu.com/privacy';
 const TERMS_URL = 'https://defendu.com/terms';
@@ -36,6 +38,7 @@ export default function ProfilePage() {
   const [showMenu, setShowMenu] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [offlineEnabled, setOfflineEnabled] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
 
   // Height & weight editing
   const [height, setHeight] = useState<string>('');
@@ -89,6 +92,14 @@ export default function ProfilePage() {
       // Check offline mode status
       const isEnabled = await OfflineStorage.isOfflineEnabled();
       setOfflineEnabled(isEnabled);
+
+      // Load wallet balance
+      try {
+        const wallet = await WalletController.getWallet();
+        setWalletBalance(wallet.balance);
+      } catch (walletErr) {
+        console.error('Error loading wallet:', walletErr);
+      }
     } catch (error) {
       console.error('Error loading user data:', error);
       router.replace('/(auth)/login');
@@ -382,6 +393,11 @@ export default function ProfilePage() {
             </TouchableOpacity>
           </View>
 
+          {/* Wallet Card */}
+          <View style={{ marginHorizontal: 20, marginBottom: 10 }}>
+            <WalletCard balance={walletBalance} />
+          </View>
+
           {/* Menu Options Section */}
           <View style={styles.menuOptionsSection}>
             <TouchableOpacity style={styles.menuOption} onPress={() => router.push('/settings')}>
@@ -400,9 +416,9 @@ export default function ProfilePage() {
               <Text style={styles.menuOptionText}>Help & Support</Text>
               <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuOption}>
-              <MaterialIcons name="stars" size={20} color="#07bbc0" />
-              <Text style={styles.menuOptionText}>Premium</Text>
+            <TouchableOpacity style={styles.menuOption} onPress={() => router.push('/wallet')}>
+              <Ionicons name="wallet-outline" size={20} color="#07bbc0" />
+              <Text style={styles.menuOptionText}>Wallet & Credits</Text>
               <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
             </TouchableOpacity>
             <TouchableOpacity 

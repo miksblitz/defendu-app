@@ -12,8 +12,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { formatCredits } from '../../constants/credits';
 import { useLogout } from '../../hooks/useLogout';
 import { AuthController } from '../controllers/AuthController';
+import { WalletController } from '../controllers/WalletController';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -36,6 +38,7 @@ export default function SettingsPage() {
   // User's info
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
+  const [walletBalance, setWalletBalance] = useState(0);
 
   // Track whether initial load is done to avoid saving defaults on mount
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -73,6 +76,9 @@ export default function SettingsPage() {
 
     loadUser();
     loadSettings();
+    WalletController.getWallet()
+      .then(w => setWalletBalance(w.balance))
+      .catch(e => console.error('Error loading wallet:', e));
   }, []);
 
   // Persist settings whenever a toggle changes (after initial load)
@@ -209,6 +215,33 @@ export default function SettingsPage() {
             <TouchableOpacity style={styles.infoRow} onPress={() => router.push('/editprofile')}>
               <Ionicons name="create-outline" size={20} color="#07bbc0" />
               <Text style={styles.actionText}>Edit Profile</Text>
+              <Ionicons name="chevron-forward-outline" size={18} color="#6b8693" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Wallet & Credits Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Wallet & Credits</Text>
+          <View style={styles.card}>
+            <TouchableOpacity style={styles.infoRow} onPress={() => router.push('/(tabs)/wallet' as any)}>
+              <Ionicons name="wallet-outline" size={20} color="#07bbc0" />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Balance</Text>
+                <Text style={styles.infoValue}>{formatCredits(walletBalance)}</Text>
+              </View>
+              <Ionicons name="chevron-forward-outline" size={18} color="#6b8693" />
+            </TouchableOpacity>
+            <View style={styles.divider} />
+            <TouchableOpacity style={styles.infoRow} onPress={() => router.push('/(tabs)/top-up' as any)}>
+              <Ionicons name="add-circle-outline" size={20} color="#07bbc0" />
+              <Text style={styles.actionText}>Top Up Credits</Text>
+              <Ionicons name="chevron-forward-outline" size={18} color="#6b8693" />
+            </TouchableOpacity>
+            <View style={styles.divider} />
+            <TouchableOpacity style={styles.infoRow} onPress={() => router.push('/(tabs)/transaction-history' as any)}>
+              <Ionicons name="receipt-outline" size={20} color="#07bbc0" />
+              <Text style={styles.actionText}>Transaction History</Text>
               <Ionicons name="chevron-forward-outline" size={18} color="#6b8693" />
             </TouchableOpacity>
           </View>

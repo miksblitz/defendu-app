@@ -89,6 +89,36 @@
         ".read": "$uid === auth.uid",
         ".write": "$uid === auth.uid"
       }
+    },
+    "wallets": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      }
+    },
+    "walletTransactions": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      }
+    },
+    "moduleUsage": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid",
+        "$trainerId": {
+          "$moduleId": {
+            ".read": "$uid === auth.uid",
+            ".write": "$uid === auth.uid"
+          }
+        }
+      }
+    },
+    "pendingPayments": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      }
     }
   }
 }
