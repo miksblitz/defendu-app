@@ -1,30 +1,29 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  SafeAreaView,
-  Image,
-  ActivityIndicator,
-  Platform,
-  Modal,
-  PanResponder,
-  Animated,
-  useWindowDimensions,
-} from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthController } from '../controllers/AuthController';
-import { Module } from '../_models/Module';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    Image,
+    PanResponder,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View
+} from 'react-native';
 import Toast from '../../components/Toast';
-import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
+import { useToast } from '../../hooks/useToast';
+import { Module } from '../_models/Module';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { AuthController } from '../controllers/AuthController';
 
 interface UploadedFile {
   name: string;
@@ -99,6 +98,8 @@ export default function PublishModulePage() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [difficultyLevel, setDifficultyLevel] = useState('');
+  const [showDifficultyDropdown, setShowDifficultyDropdown] = useState(false);
   const [introduction, setIntroduction] = useState('');
   const [introductionType, setIntroductionType] = useState<'text' | 'video'>('text');
   const [introductionVideo, setIntroductionVideo] = useState<UploadedFile | null>(null);
@@ -942,6 +943,7 @@ export default function PublishModulePage() {
         moduleTitle: moduleTitle.trim(),
         description: description.trim(),
         category: category,
+        difficultyLevel: (difficultyLevel as 'basic' | 'intermediate' | 'advanced') || undefined,
         introductionType: introductionType,
         introduction: introductionType === 'text' ? introduction.trim() : undefined,
         introductionVideoUrl: introductionType === 'video' ? introductionVideoUrl : undefined,
@@ -967,6 +969,7 @@ export default function PublishModulePage() {
       setModuleTitle('');
       setDescription('');
       setCategory('');
+      setDifficultyLevel('');
       setIntroduction('');
       setIntroductionType('text');
       setIntroductionVideo(null);
@@ -1225,6 +1228,45 @@ export default function PublishModulePage() {
                       </>
                     )}
                     {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Difficulty Level</Text>
+                    <TouchableOpacity
+                      style={[styles.selectInput, isMobile && styles.selectInputMobile]}
+                      onPress={() => setShowDifficultyDropdown(!showDifficultyDropdown)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={difficultyLevel ? styles.selectedText : styles.placeholderText}>
+                        {difficultyLevel || 'Choose a difficulty level'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={20} color="#07bbc0" />
+                    </TouchableOpacity>
+                    {showDifficultyDropdown && (
+                      <>
+                        <TouchableOpacity
+                          style={styles.dropdownOverlay}
+                          activeOpacity={1}
+                          onPress={() => setShowDifficultyDropdown(false)}
+                        />
+                        <View style={styles.dropdown}>
+                          <ScrollView style={styles.dropdownScroll}>
+                            {['Basic', 'Intermediate', 'Advanced'].map((level) => (
+                              <TouchableOpacity
+                                key={level}
+                                style={[styles.dropdownItem, isMobile && styles.dropdownItemMobile]}
+                                onPress={() => {
+                                  setDifficultyLevel(level.toLowerCase());
+                                  setShowDifficultyDropdown(false);
+                                }}
+                              >
+                                <Text style={styles.dropdownItemText}>{level}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      </>
+                    )}
                   </View>
 
                   <View style={styles.inputGroup}>

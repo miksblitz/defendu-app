@@ -23,7 +23,7 @@ import { ModuleReview } from '../_models/ModuleReview';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController } from '../controllers/AuthController';
 
-type Step = 'intro' | 'video' | 'tryIt' | 'complete';
+type Step = 'intro' | 'safety' | 'video' | 'tryIt' | 'complete';
 
 /**
  * Normalize video URL for reliable playback (e.g. force MP4 for Cloudinary).
@@ -137,6 +137,10 @@ export default function ViewModulePage() {
   };
 
   const handleStart = () => {
+    setStep('safety');
+  };
+
+  const handleSafetyConfirm = () => {
     const hasVideoIntro = module?.introductionType === 'video' && module?.introductionVideoUrl;
     const hasTextIntro = module?.introductionType === 'text' && module?.introduction?.trim();
     if (hasVideoIntro || hasTextIntro) {
@@ -278,7 +282,8 @@ export default function ViewModulePage() {
             style={styles.backButton}
             onPress={() => {
               if (step === 'intro') router.replace('/dashboard');
-              else if (step === 'video') setStep('intro');
+              else if (step === 'safety') setStep('intro');
+              else if (step === 'video') setStep('safety');
               else if (step === 'tryIt') setStep('video');
 
               else if (step === 'complete') router.replace('/dashboard');
@@ -336,6 +341,25 @@ export default function ViewModulePage() {
                 <Text style={styles.cardDescription}>{module.description}</Text>
                 <TouchableOpacity style={styles.startButton} onPress={handleStart} activeOpacity={0.8}>
                   <Text style={styles.startButtonText}>Start</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {step === 'safety' && (
+              <View style={styles.card}>
+                <Text style={styles.safetyTitle}>Safety Protocol</Text>
+                <Text style={styles.safetyIntro}>Please read and confirm the following before starting this module:</Text>
+                <View style={styles.safetyList}>
+                  <Text style={styles.safetyItem}>• Ensure you have enough space to move safely with no obstacles.</Text>
+                  <Text style={styles.safetyItem}>• Warm up before practicing. Do not train if you feel unwell or injured.</Text>
+                  <Text style={styles.safetyItem}>• This content is for educational purposes. Train at your own risk and within your ability.</Text>
+                  <Text style={styles.safetyItem}>• If using camera-based features, make sure the area behind you is clear.</Text>
+                </View>
+                <TouchableOpacity style={styles.startButton} onPress={handleSafetyConfirm} activeOpacity={0.8}>
+                  <Text style={styles.startButtonText}>Confirm & Continue</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.continueButton} onPress={() => setStep('intro')} activeOpacity={0.8}>
+                  <Text style={styles.continueButtonText}>Back</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -885,6 +909,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   startButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  safetyTitle: {
+    color: '#07bbc0',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  safetyIntro: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  safetyList: {
+    marginBottom: 24,
+  },
+  safetyItem: {
+    color: '#6b8693',
+    fontSize: 14,
+    marginBottom: 10,
+    lineHeight: 22,
+  },
   sectionLabel: {
     color: '#FFFFFF',
     fontSize: 18,

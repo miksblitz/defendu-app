@@ -15,6 +15,7 @@ import { ModuleReview } from '../_models/ModuleReview';
 import { SkillProfile } from '../_models/SkillProfile';
 import { TrainerApplication } from '../_models/TrainerApplication';
 import { ForgotPasswordData, LoginData, RegisterData, User } from '../_models/User';
+import { SEED_TEST_MODULES } from '../_seed/testModules';
 import { auth, cloudinaryConfig, db } from '../config/firebaseConfig';
 import { MessageController } from './MessageController';
 
@@ -1526,6 +1527,7 @@ export class AuthController {
         spaceRequirements: moduleData.spaceRequirements || [],
         physicalDemandTags: moduleData.physicalDemandTags || [],
         repRange: moduleData.repRange || null,
+        difficultyLevel: moduleData.difficultyLevel ?? null,
         trainingDurationSeconds: moduleData.trainingDurationSeconds ?? null,
         status: isDraft ? 'draft' : 'pending review',
         createdAt: new Date().getTime(),
@@ -2079,6 +2081,86 @@ export class AuthController {
     // Update local cache
     const updatedUser = { ...currentUser, location: fullAddress };
     await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+  }
+
+  /** Update the public trainer profile (what shows on Trainer page). Only approved trainers. */
+  static async updateTrainerProfile(
+    uid: string,
+    updates: {
+      defenseStyles?: string[];
+      currentRank?: string;
+      aboutMe?: string;
+      aboutMeImageUrl?: string;
+    }
+  ): Promise<void> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser || currentUser.uid !== uid) throw new Error('User must be authenticated');
+    if (currentUser.role !== 'trainer' || !currentUser.trainerApproved) {
+      throw new Error('Only approved trainers can update their trainer profile');
+    }
+    const applicationRef = ref(db, `TrainerApplication/${uid}`);
+    const patch: Record<string, unknown> = {};
+    if (updates.defenseStyles !== undefined) patch.defenseStyles = updates.defenseStyles;
+    if (updates.currentRank !== undefined) patch.currentRank = updates.currentRank;
+    if (updates.aboutMe !== undefined) patch.aboutMe = updates.aboutMe;
+    if (updates.aboutMeImageUrl !== undefined) patch.aboutMeImageUrl = updates.aboutMeImageUrl;
+    if (Object.keys(patch).length === 0) return;
+    await update(ref(db, `TrainerApplication/${uid}`), patch);
+  }
+
+  /** Seed test modules (approved trainers only). Writes approved modules under current trainer. */
+  static async seedTestModules(): Promise<{ added: number }> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) throw new Error('User not authenticated');
+    if (currentUser.role !== 'trainer' || !currentUser.trainerApproved) {
+      throw new Error('Only approved trainers can seed test modules');
+    }
+    const trainerName =
+      currentUser.firstName && currentUser.lastName
+        ? `${currentUser.firstName} ${currentUser.lastName}`
+        : currentUser.username || currentUser.email;
+    const now = Date.now();
+    let added = 0;
+    for (let i = 0; i < SEED_TEST_MODULES.length; i++) {
+      const m = SEED_TEST_MODULES[i];
+      const moduleId = `module_${currentUser.uid}_seed_${now}_${i}`;
+      const payload = {
+        moduleId,
+        trainerId: currentUser.uid,
+        trainerName,
+        moduleTitle: m.moduleTitle,
+        description: m.description,
+        category: m.category,
+        difficultyLevel: m.difficultyLevel,
+        introductionType: 'text',
+        introduction: m.introduction ?? null,
+        introductionVideoUrl: null,
+        techniqueVideoUrl: null,
+        techniqueVideoLink: null,
+        videoDuration: m.videoDuration ?? null,
+        thumbnailUrl: null,
+        intensityLevel: 2,
+        spaceRequirements: [],
+        physicalDemandTags: [],
+        repRange: null,
+        trainingDurationSeconds: null,
+        status: 'approved',
+        createdAt: now,
+        updatedAt: now,
+        submittedAt: now,
+        certificationChecked: true,
+      };
+      await set(ref(db, `modules/${moduleId}`), payload);
+      await set(ref(db, `trainerModules/${currentUser.uid}/${moduleId}`), {
+        moduleId,
+        moduleTitle: m.moduleTitle,
+        status: 'approved',
+        createdAt: now,
+        updatedAt: now,
+      });
+      added++;
+    }
+    return { added };
   }
 
   static async loadUserLocation(): Promise<{

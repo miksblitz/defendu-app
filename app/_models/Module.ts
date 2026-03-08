@@ -29,6 +29,9 @@ export interface Module {
   repRange?: string; // e.g. "4-6", "8-10", "12", "15"
   trainingDurationSeconds?: number; // e.g. 30, 60, 120, ... 900 (15 min)
   
+  // Difficulty Level
+  difficultyLevel?: 'basic' | 'intermediate' | 'advanced';
+  
   // Status & Metadata
   status: 'draft' | 'pending review' | 'approved' | 'rejected';
   createdAt: Date;

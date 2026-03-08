@@ -276,6 +276,23 @@ export default function DashboardScreen() {
     ? modules.filter((m) => normalizeCategory(m.category) === normalizeCategory(selectedCategory))
     : modules;
 
+  // Group modules by difficulty level within category
+  const modulesInCategoryByLevel = (() => {
+    const basic = modulesInCategory.filter((m) => (m.difficultyLevel ?? '').toLowerCase() === 'basic');
+    const intermediate = modulesInCategory.filter((m) => (m.difficultyLevel ?? '').toLowerCase() === 'intermediate');
+    const advanced = modulesInCategory.filter((m) => (m.difficultyLevel ?? '').toLowerCase() === 'advanced');
+    const other = modulesInCategory.filter((m) => {
+      const L = (m.difficultyLevel ?? '').toLowerCase();
+      return L !== 'basic' && L !== 'intermediate' && L !== 'advanced';
+    });
+    const out: { label: string; items: typeof modulesInCategory }[] = [];
+    if (basic.length) out.push({ label: 'Basic', items: basic });
+    if (intermediate.length) out.push({ label: 'Intermediate', items: intermediate });
+    if (advanced.length) out.push({ label: 'Advanced', items: advanced });
+    if (other.length) out.push({ label: 'More', items: other });
+    return out;
+  })();
+
   const CircularProgress = ({ progress }: { progress: number }) => {
     const strokeDashoffset = circumference * (1 - progress);
     return (
@@ -592,7 +609,11 @@ export default function DashboardScreen() {
                   <Text style={styles.modulesEmptySubtext}>Check back later for new content.</Text>
                 </View>
               ) : (
-                modulesInCategory.map((module, index) => {
+                modulesInCategoryByLevel.map(({ label, items }) => (
+                  <View key={label} style={{ marginBottom: 18, width: '100%' }}>
+                    <Text style={styles.difficultySectionTitle}>{label}</Text>
+                    <View style={styles.modulesGrid}>
+                      {items.map((module, index) => {
                   const isEndOfRow = (index + 1) % 4 === 0;
                   const durationMin = module.videoDuration ? `${Math.ceil(module.videoDuration / 60)} min` : '';
                   const animValue = getAnimatedValue(module.moduleId);
@@ -664,7 +685,10 @@ export default function DashboardScreen() {
                       </TouchableOpacity>
                     </Animated.View>
                   );
-                })
+                })}
+                    </View>
+                  </View>
+                ))
               )}
             </View>
           </ScrollView>
@@ -960,6 +984,18 @@ const styles = StyleSheet.create({
     paddingRight: 12,
     paddingBottom: 10,
     justifyContent: 'flex-start',
+  },
+  modulesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
+  difficultySectionTitle: {
+    color: '#07bbc0',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+    marginTop: 4,
   },
   modulesLoadingContainer: {
     width: '100%',

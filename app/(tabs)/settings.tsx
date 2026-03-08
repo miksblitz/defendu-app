@@ -2,15 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useLogout } from '../../hooks/useLogout';
 import { AuthController } from '../controllers/AuthController';
@@ -33,7 +33,7 @@ export default function SettingsPage() {
   const [profileVisible, setProfileVisible] = useState(true);
   const [showProgress, setShowProgress] = useState(true);
 
-  // User info
+  // User's info
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
 
