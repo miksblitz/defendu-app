@@ -2,19 +2,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    FlatList,
-    Image,
-    Modal,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  Image,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import AdminTable, { AdminTableColumn } from '../../components/admin/AdminTable';
+import FilterBar from '../../components/admin/FilterBar';
+import SearchInput from '../../components/admin/SearchInput';
+import StatusBadge from '../../components/admin/StatusBadge';
 import Toast from '../../components/Toast';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
@@ -22,13 +25,20 @@ import { Module } from '../_models/Module';
 import { AuthController } from '../controllers/AuthController';
 
 const MODULE_CATEGORIES = [
-  'All',
-  'Punching',
-  'Kicking',
-  'Palm Strikes',
-  'Elbow Strikes',
-  'Knee Strikes',
-  'Defensive Moves',
+  { label: 'All', value: 'All' },
+  { label: 'Punching', value: 'Punching' },
+  { label: 'Kicking', value: 'Kicking' },
+  { label: 'Palm Strikes', value: 'Palm Strikes' },
+  { label: 'Elbow Strikes', value: 'Elbow Strikes' },
+  { label: 'Knee Strikes', value: 'Knee Strikes' },
+  { label: 'Defensive Moves', value: 'Defensive Moves' },
+];
+
+const DIFFICULTY_OPTIONS = [
+  { label: 'All', value: 'all' },
+  { label: 'Basic', value: 'basic' },
+  { label: 'Intermediate', value: 'intermediate' },
+  { label: 'Advanced', value: 'advanced' },
 ];
 
 const DELETION_REASONS = [
@@ -45,6 +55,8 @@ const DELETION_REASONS = [
 
 type FilterType = 'active' | 'pending';
 
+const PAGE_SIZE = 10;
+
 export default function ManageModulesPage() {
   const router = useRouter();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
@@ -55,54 +67,52 @@ export default function ManageModulesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('active');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
+  const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
+  const [trainerFilter, setTrainerFilter] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [moduleToDelete, setModuleToDelete] = useState<Module | null>(null);
   const [deletionReason, setDeletionReason] = useState('');
   const [customDeletionReason, setCustomDeletionReason] = useState('');
   const [deleting, setDeleting] = useState(false);
-  
-  // Animation refs
+
   const headerAnim = useRef(new Animated.Value(0)).current;
-  const filterAnim = useRef(new Animated.Value(0)).current;
-  const animatedValues = useRef<Map<string, Animated.Value>>(new Map()).current;
-  const hoverScales = useRef<Map<string, Animated.Value>>(new Map()).current;
+  const controlsAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadModules();
   }, []);
-  
+
   useEffect(() => {
     if (!loading) {
       Animated.parallel([
         Animated.timing(headerAnim, {
           toValue: 1,
-          duration: 600,
+          duration: 500,
           useNativeDriver: true,
         }),
-        Animated.timing(filterAnim, {
+        Animated.timing(controlsAnim, {
           toValue: 1,
-          duration: 600,
-          delay: 200,
+          duration: 500,
+          delay: 120,
           useNativeDriver: true,
         }),
       ]).start();
     }
-  }, [loading]);
+  }, [loading, headerAnim, controlsAnim]);
 
-  // Reset search when filter changes
   useEffect(() => {
-    setSearchQuery('');
-  }, [filterType]);
+    setCurrentPage(1);
+  }, [searchQuery, filterType, categoryFilter, difficultyFilter, trainerFilter]);
 
   const loadModules = async () => {
     try {
       setLoading(true);
-      console.log('🔵 Loading modules...');
       const allModules = await AuthController.getAllModules();
-      console.log('✅ Loaded modules:', allModules.length);
       setModules(allModules);
     } catch (error: any) {
-      console.error('❌ Error loading modules:', error);
+      console.error('Error loading modules:', error);
       showToast(error.message || 'Failed to load modules');
       setModules([]);
     } finally {
@@ -110,79 +120,67 @@ export default function ManageModulesPage() {
     }
   };
 
-  // Filter modules based on status, category, and search query
+  const trainerOptions = useMemo(() => {
+    const trainers = new Set<string>();
+    modules.forEach((module) => {
+      const trainer = module.trainerName?.trim() || module.trainerId;
+      if (trainer) trainers.add(trainer);
+    });
+
+    return [
+      { label: 'All Trainers', value: 'all' },
+      ...Array.from(trainers)
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({ label: name, value: name })),
+    ];
+  }, [modules]);
+
   const filteredModules = useMemo(() => {
     let filtered = modules;
 
-    // Filter by status
     if (filterType === 'active') {
       filtered = filtered.filter((module) => module.status === 'approved');
-    } else if (filterType === 'pending') {
+    } else {
       filtered = filtered.filter((module) => module.status === 'pending review');
     }
 
-    // Filter by category
-    if (categoryFilter && categoryFilter !== 'All') {
+    if (categoryFilter !== 'All') {
       filtered = filtered.filter((module) => module.category === categoryFilter);
     }
 
-    // Filter by search query
+    if (difficultyFilter !== 'all') {
+      filtered = filtered.filter((module) => (module.difficultyLevel || 'basic') === difficultyFilter);
+    }
+
+    if (trainerFilter !== 'all') {
+      filtered = filtered.filter((module) => {
+        const trainer = module.trainerName?.trim() || module.trainerId;
+        return trainer === trainerFilter;
+      });
+    }
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
       filtered = filtered.filter((module) => {
-        const title = module.moduleTitle.toLowerCase();
-        const category = module.category.toLowerCase();
-        const referenceCode = module.moduleId.toLowerCase();
+        const trainer = (module.trainerName || module.trainerId || '').toLowerCase();
         return (
-          title.includes(query) ||
-          category.includes(query) ||
-          referenceCode.includes(query)
+          module.moduleTitle.toLowerCase().includes(query) ||
+          module.category.toLowerCase().includes(query) ||
+          module.moduleId.toLowerCase().includes(query) ||
+          trainer.includes(query)
         );
       });
     }
 
     return filtered;
-  }, [modules, filterType, searchQuery, categoryFilter]);
-  
-  // Animate filtered modules when they change
-  useEffect(() => {
-    if (filteredModules.length > 0) {
-      const animations = filteredModules.map((module, index) => {
-        const animValue = getAnimatedValue(module.moduleId);
-        return Animated.timing(animValue, {
-          toValue: 1,
-          duration: 500,
-          delay: Math.min(index * 50, 1000),
-          useNativeDriver: true,
-        });
-      });
-      Animated.stagger(30, animations).start();
-    }
-  }, [filteredModules]);
-  
-  const getAnimatedValue = (moduleId: string) => {
-    if (!animatedValues.has(moduleId)) {
-      animatedValues.set(moduleId, new Animated.Value(0));
-    }
-    return animatedValues.get(moduleId)!;
-  };
-  
-  const getHoverScale = (moduleId: string) => {
-    if (!hoverScales.has(moduleId)) {
-      hoverScales.set(moduleId, new Animated.Value(1));
-    }
-    return hoverScales.get(moduleId)!;
-  };
-  
-  const handleCardHover = (moduleId: string, isHovering: boolean) => {
-    const scale = getHoverScale(moduleId);
-    Animated.spring(scale, {
-      toValue: isHovering ? 1.05 : 1,
-      useNativeDriver: true,
-      speed: 20,
-      bounciness: 10,
-    }).start();
-  };
+  }, [modules, filterType, categoryFilter, difficultyFilter, trainerFilter, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredModules.length / PAGE_SIZE));
+
+  const paginatedModules = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredModules.slice(start, start + PAGE_SIZE);
+  }, [filteredModules, currentPage]);
 
   const formatDate = (date: Date | undefined): string => {
     if (!date) return 'N/A';
@@ -193,11 +191,9 @@ export default function ManageModulesPage() {
     });
   };
 
-  const getReferenceCode = (moduleId: string): string => {
-    // Generate a reference code like M0101, M0102, etc.
-    // This is a simple implementation - you might want to use a different logic
-    const num = moduleId.slice(-4) || '0000';
-    return `M${num}`;
+  const formatDifficulty = (difficultyLevel?: string): string => {
+    if (!difficultyLevel) return 'Basic';
+    return difficultyLevel.charAt(0).toUpperCase() + difficultyLevel.slice(1);
   };
 
   const handleViewModule = (module: Module) => {
@@ -223,21 +219,23 @@ export default function ManageModulesPage() {
 
   const handleDeleteModule = async () => {
     if (!moduleToDelete) return;
+
     const custom = customDeletionReason.trim();
-    const finalReason =
-      custom || (deletionReason === 'Other (specify below)' ? custom : deletionReason);
+    const finalReason = custom || (deletionReason === 'Other (specify below)' ? custom : deletionReason);
+
     if (!finalReason) {
       showToast('Please select or type a reason for deletion');
       return;
     }
+
     try {
       setDeleting(true);
       await AuthController.deleteModule(moduleToDelete.moduleId, finalReason);
-      showToast('Module deleted. Trainer has been notified.');
+      showToast('Module disabled and trainer notified.');
       closeDeleteModal();
       loadModules();
     } catch (error: any) {
-      showToast(error.message || 'Failed to delete module');
+      showToast(error.message || 'Failed to disable module');
     } finally {
       setDeleting(false);
     }
@@ -246,59 +244,120 @@ export default function ManageModulesPage() {
   const activeCount = modules.filter((m) => m.status === 'approved').length;
   const pendingCount = modules.filter((m) => m.status === 'pending review').length;
 
+  const columns: AdminTableColumn<Module>[] = [
+    {
+      key: 'module',
+      title: 'Module',
+      minWidth: 260,
+      flex: 2.5,
+      render: (module) => (
+        <View style={styles.moduleCell}>
+          {module.thumbnailUrl ? (
+            <Image source={{ uri: module.thumbnailUrl }} style={styles.thumbnail} />
+          ) : (
+            <View style={styles.thumbnailFallback}>
+              <Ionicons name="fitness-outline" size={18} color="#6b8693" />
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.moduleTitle} numberOfLines={1}>{module.moduleTitle}</Text>
+            <Text style={styles.moduleSubtext}>#{module.moduleId.slice(-6)}</Text>
+          </View>
+        </View>
+      ),
+    },
+    {
+      key: 'difficulty',
+      title: 'Difficulty',
+      minWidth: 120,
+      render: (module) => <Text style={styles.cellText}>{formatDifficulty(module.difficultyLevel)}</Text>,
+    },
+    {
+      key: 'category',
+      title: 'Category',
+      minWidth: 140,
+      render: (module) => <Text style={styles.cellText}>{module.category}</Text>,
+    },
+    {
+      key: 'trainer',
+      title: 'Trainer',
+      minWidth: 160,
+      render: (module) => <Text style={styles.cellText}>{module.trainerName || module.trainerId || 'N/A'}</Text>,
+    },
+    {
+      key: 'status',
+      title: 'Status',
+      minWidth: 100,
+      render: () => <StatusBadge status="Active" tone="active" />,
+    },
+    {
+      key: 'created',
+      title: 'Created',
+      minWidth: 120,
+      render: (module) => <Text style={styles.subtleText}>{formatDate(module.createdAt)}</Text>,
+    },
+    {
+      key: 'updated',
+      title: 'Updated',
+      minWidth: 120,
+      render: (module) => <Text style={styles.subtleText}>{formatDate(module.updatedAt)}</Text>,
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      minWidth: 190,
+      align: 'right',
+      render: (module) => (
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.secondaryActionButton} onPress={() => handleViewModule(module)}>
+            <Text style={styles.secondaryActionText}>View</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.dangerActionButton} onPress={() => openDeleteModal(module)}>
+            <Text style={styles.dangerActionText}>Disable</Text>
+          </TouchableOpacity>
+        </View>
+      ),
+    },
+  ];
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Left Navigation Bar */}
         <View style={styles.leftNavBar}>
-          {/* Hamburger Menu */}
-          <TouchableOpacity
-            style={styles.navMenuButton}
-            onPress={() => setShowMenu(true)}
-          >
+          <TouchableOpacity style={styles.navMenuButton} onPress={() => setShowMenu(true)}>
             <Ionicons name="menu" size={24} color="#FFFFFF" />
           </TouchableOpacity>
 
-          {/* Bottom Icons - One Box */}
           <View style={styles.navBottomIcons}>
             <View style={styles.navIconsBox}>
               <TouchableOpacity
                 style={styles.navIconActiveButton}
                 onPress={() => router.push('/(admin)/adminManaging')}
               >
-                <Image
-                  source={require('../../assets/images/adminmanageicon.png')}
-                  style={styles.navIconImage}
-                />
+                <Image source={require('../../assets/images/adminmanageicon.png')} style={styles.navIconImage} />
               </TouchableOpacity>
 
               <TouchableOpacity onPress={() => router.push('/(admin)/adminDashboard')}>
-                <Image
-                  source={require('../../assets/images/homeicon.png')}
-                  style={styles.navIconImage}
-                />
+                <Image source={require('../../assets/images/homeicon.png')} style={styles.navIconImage} />
               </TouchableOpacity>
             </View>
           </View>
         </View>
 
-        {/* Header with Back button, DEFENDU Logo and Admin */}
-        <Animated.View style={[
-          styles.header,
-          {
-            opacity: headerAnim,
-            transform: [{
-              translateY: headerAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [-20, 0],
-              }),
-            }],
-          },
-        ]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.push('/(admin)/adminManaging')}
-          >
+        <Animated.View
+          style={[
+            styles.header,
+            {
+              opacity: headerAnim,
+              transform: [
+                {
+                  translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }),
+                },
+              ],
+            },
+          ]}
+        >
+          <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(admin)/adminManaging')}>
             <Image
               source={require('../../assets/images/backbuttonicon.png')}
               style={styles.backButtonIcon}
@@ -312,245 +371,103 @@ export default function ManageModulesPage() {
               resizeMode="contain"
             />
             <Text style={styles.headerAdminText}>Admin</Text>
+            <Text style={styles.subTitle}>
+              Active Modules {filterType === 'active' ? activeCount : pendingCount}
+            </Text>
           </View>
         </Animated.View>
 
-        {/* Main Content */}
         <View style={styles.mainContent}>
-          {/* Filter Buttons and Search */}
-          <Animated.View style={[
-            styles.topSection,
-            {
-              opacity: filterAnim,
-              transform: [{
-                translateY: filterAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0],
-                }),
-              }],
-            },
-          ]}>
-            <View style={styles.filterButtons}>
+          <Animated.View
+            style={[
+              styles.controlsWrap,
+              {
+                opacity: controlsAnim,
+                transform: [
+                  {
+                    translateY: controlsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.primaryFiltersRow}>
               <TouchableOpacity
-                style={[
-                  styles.filterButton,
-                  filterType === 'active' && styles.filterButtonActive,
-                ]}
+                style={[styles.tabButton, filterType === 'active' && styles.tabButtonActive]}
                 onPress={() => setFilterType('active')}
               >
-                <Text
-                  style={[
-                    styles.filterButtonText,
-                    filterType === 'active' && styles.filterButtonTextActive,
-                  ]}
-                >
-                  All Active Modules {activeCount}
+                <Text style={[styles.tabText, filterType === 'active' && styles.tabTextActive]}>
+                  Active {activeCount}
                 </Text>
               </TouchableOpacity>
-
               <TouchableOpacity
-                style={[
-                  styles.filterButton,
-                  filterType === 'pending' && styles.filterButtonActive,
-                ]}
+                style={[styles.tabButton, filterType === 'pending' && styles.tabButtonActive]}
                 onPress={() => setFilterType('pending')}
               >
-                <Text
-                  style={[
-                    styles.filterButtonText,
-                    filterType === 'pending' && styles.filterButtonTextActive,
-                  ]}
-                >
-                  Pending Modules {pendingCount}
+                <Text style={[styles.tabText, filterType === 'pending' && styles.tabTextActive]}>
+                  Pending {pendingCount}
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color="#FFFFFF" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search"
-                placeholderTextColor="#6b8693"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-            </View>
-          </Animated.View>
-
-          {/* Category Filter */}
-          <Animated.View style={[
-            styles.categoryFilterWrap,
-            {
-              opacity: filterAnim,
-            },
-          ]}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.categoryScroll}
-              contentContainerStyle={styles.categoryScrollContent}
-            >
-              {MODULE_CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[
-                    styles.categoryChip,
-                    (cat === 'All' ? !categoryFilter || categoryFilter === 'All' : categoryFilter === cat) && styles.categoryChipActive,
-                  ]}
-                  onPress={() => setCategoryFilter(cat === 'All' ? 'All' : cat)}
-                >
-                  <Text
-                    style={[
-                      styles.categoryChipText,
-                      (cat === 'All' ? !categoryFilter || categoryFilter === 'All' : categoryFilter === cat) && styles.categoryChipTextActive,
-                    ]}
-                  >
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </Animated.View>
-
-          {/* Modules Grid */}
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#38a6de" />
-              <Text style={styles.loadingText}>Loading modules...</Text>
-            </View>
-          ) : filteredModules.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                {searchQuery
-                  ? 'No modules found matching your search'
-                  : categoryFilter && categoryFilter !== 'All'
-                  ? `No ${filterType === 'active' ? 'active' : 'pending'} modules in ${categoryFilter}`
-                  : filterType === 'active'
-                  ? 'No active modules found'
-                  : 'No pending modules found'}
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={filteredModules}
-              keyExtractor={(item) => item.moduleId}
-              numColumns={2}
-              columnWrapperStyle={styles.row}
-              contentContainerStyle={styles.modulesGrid}
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => {
-                const animValue = getAnimatedValue(item.moduleId);
-                const hoverScale = getHoverScale(item.moduleId);
-                
-                return (
-                  <Animated.View style={[
-                    { flex: 0.5, margin: 8 },
-                    {
-                      opacity: animValue,
-                      transform: [
-                        {
-                          translateY: animValue.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [30, 0],
-                          }),
-                        },
-                        { scale: Animated.multiply(animValue, hoverScale) },
-                      ],
-                    },
-                  ]}>
-                    <TouchableOpacity 
-                      style={styles.moduleCard}
-                      onPress={() => handleViewModule(item)}
-                      onPressIn={() => handleCardHover(item.moduleId, true)}
-                      onPressOut={() => handleCardHover(item.moduleId, false)}
-                      activeOpacity={0.9}
-                    >
-                  {/* Full-width Module Image with Overlay */}
-                  <View style={styles.moduleImageContainer}>
-                    {item.thumbnailUrl ? (
-                      <Image
-                        source={{ uri: item.thumbnailUrl }}
-                        style={styles.moduleImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.moduleImagePlaceholder}>
-                        <Ionicons name="fitness-outline" size={48} color="#38a6de" />
-                      </View>
-                    )}
-                    {/* Dark gradient overlay for text readability */}
-                    <View style={styles.imageOverlay} />
-                    
-                    {/* Category Badge */}
-                    <View style={styles.categoryBadge}>
-                      <Text style={styles.categoryBadgeText}>{item.category}</Text>
-                    </View>
-                  </View>
-
-                  {/* Module Info */}
-                  <View style={styles.moduleInfo}>
-                    <Text style={styles.moduleTitle} numberOfLines={2}>
-                      {item.moduleTitle}
-                    </Text>
-
-                    <View style={styles.moduleMetaRow}>
-                      <View style={styles.metaItem}>
-                        <Ionicons name="code-outline" size={14} color="#6b8693" />
-                        <Text style={styles.metaText}>{getReferenceCode(item.moduleId)}</Text>
-                      </View>
-                      <View style={styles.metaItem}>
-                        <Ionicons name="calendar-outline" size={14} color="#6b8693" />
-                        <Text style={styles.metaText}>{formatDate(item.createdAt)}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.cardActions}>
-                      <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          openDeleteModal(item);
-                        }}
-                      >
-                        <Ionicons name="trash-outline" size={18} color="#ff4444" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              </Animated.View>
-              );
-            }}
+            <SearchInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search by title, category, trainer, or ID"
             />
-          )}
+
+            <FilterBar
+              label="Category"
+              options={MODULE_CATEGORIES}
+              selectedValue={categoryFilter}
+              onSelect={setCategoryFilter}
+            />
+            <FilterBar
+              label="Difficulty"
+              options={DIFFICULTY_OPTIONS}
+              selectedValue={difficultyFilter}
+              onSelect={setDifficultyFilter}
+            />
+            <FilterBar
+              label="Trainer"
+              options={trainerOptions}
+              selectedValue={trainerFilter}
+              onSelect={setTrainerFilter}
+            />
+          </Animated.View>
+
+          <AdminTable
+            columns={columns}
+            data={paginatedModules}
+            loading={loading}
+            keyExtractor={(module) => module.moduleId}
+            emptyTitle={searchQuery ? 'No modules match your search' : 'No modules found'}
+            emptyDescription="Try updating your filters or review module approval data in the backend."
+            pagination={{
+              currentPage,
+              totalPages,
+              onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
+              onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
+            }}
+          />
         </View>
       </View>
 
-      {/* Delete Module Modal */}
-      <Modal
-        visible={showDeleteModal}
-        transparent
-        animationType="slide"
-        onRequestClose={closeDeleteModal}
-      >
+      <Modal visible={showDeleteModal} transparent animationType="slide" onRequestClose={closeDeleteModal}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Delete Module</Text>
+            <Text style={styles.modalTitle}>Disable Module</Text>
             {moduleToDelete && (
               <Text style={styles.modalSubtitle} numberOfLines={2}>
-                Remove "{moduleToDelete.moduleTitle}"? The trainer will receive a message with your reason.
+                Disable "{moduleToDelete.moduleTitle}"? The trainer will receive a message with your reason.
               </Text>
             )}
-            <Text style={styles.reasonLabel}>Reason for deletion (select or type):</Text>
+            <Text style={styles.reasonLabel}>Reason for disabling (select or type):</Text>
             <ScrollView style={styles.reasonsList}>
               {DELETION_REASONS.map((reason) => (
                 <TouchableOpacity
                   key={reason}
-                  style={[
-                    styles.reasonOption,
-                    deletionReason === reason && styles.reasonOptionSelected,
-                  ]}
+                  style={[styles.reasonOption, deletionReason === reason && styles.reasonOptionSelected]}
                   onPress={() => setDeletionReason(reason)}
                 >
                   <View style={styles.radioButton}>
@@ -569,19 +486,8 @@ export default function ManageModulesPage() {
               multiline
               numberOfLines={3}
             />
-            {(deletionReason || customDeletionReason.trim()) && (
-              <>
-                <Text style={styles.selectedReasonLabel}>Reason for deletion:</Text>
-                <Text style={styles.selectedReasonText}>
-                  {customDeletionReason.trim() || deletionReason}
-                </Text>
-              </>
-            )}
             <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={closeDeleteModal}
-              >
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={closeDeleteModal}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -592,7 +498,7 @@ export default function ManageModulesPage() {
                 {deleting ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.confirmDeleteButtonText}>Delete & notify trainer</Text>
+                  <Text style={styles.confirmDeleteButtonText}>Disable</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -600,30 +506,18 @@ export default function ManageModulesPage() {
         </View>
       </Modal>
 
-      {/* Pop-up Menu */}
       {showMenu && (
-        <TouchableOpacity
-          style={styles.menuOverlay}
-          activeOpacity={1}
-          onPress={() => setShowMenu(false)}
-        >
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
           <View style={styles.menuContainer}>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); handleLogout(); }}>
-              <Image
-                source={require('../../assets/images/logouticon.png')}
-                style={styles.menuIcon}
-              />
+              <Image source={require('../../assets/images/logouticon.png')} style={styles.menuIcon} />
               <Text style={styles.menuText}>Logout</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       )}
-      <Toast
-        message={toastMessage}
-        visible={toastVisible}
-        onHide={hideToast}
-        duration={3000}
-      />
+
+      <Toast message={toastMessage} visible={toastVisible} onHide={hideToast} duration={3000} />
     </SafeAreaView>
   );
 }
@@ -694,7 +588,6 @@ const styles = StyleSheet.create({
     padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    cursor: 'pointer',
   },
   backButtonIcon: {
     width: 24,
@@ -713,123 +606,114 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  subTitle: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    marginTop: 4,
+    opacity: 0.9,
+  },
   mainContent: {
     flex: 1,
     paddingLeft: 100,
     paddingRight: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
-  },
-  topSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-    gap: 16,
-  },
-  filterButtons: {
-    flexDirection: 'row',
+    paddingTop: 16,
+    paddingBottom: 18,
     gap: 12,
-    flex: 1,
   },
-  filterButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+  controlsWrap: {
+    gap: 10,
+  },
+  primaryFiltersRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  tabButton: {
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 9,
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: 'rgba(126, 153, 166, 0.4)',
     backgroundColor: 'transparent',
   },
-  filterButtonActive: {
-    backgroundColor: '#38a6de',
+  tabButtonActive: {
     borderColor: '#38a6de',
+    backgroundColor: 'rgba(56, 166, 222, 0.2)',
   },
-  filterButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+  tabText: {
+    color: '#a9bdc6',
+    fontSize: 13,
+    fontWeight: '700',
   },
-  filterButtonTextActive: {
-    color: '#FFFFFF',
+  tabTextActive: {
+    color: '#e5f5ff',
   },
-  searchContainer: {
+  moduleCell: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(107, 134, 147, 0.2)',
+    gap: 10,
+    maxWidth: 360,
+  },
+  thumbnail: {
+    width: 44,
+    height: 44,
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minWidth: 200,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 14,
-  },
-  categoryFilterWrap: {
-    height: 40,
-    marginBottom: 16,
-  },
-  categoryScroll: {
-    flexGrow: 0,
-  },
-  categoryScrollContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 0,
-  },
-  categoryChip: {
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#6b8693',
-    backgroundColor: 'transparent',
-  },
-  categoryChipActive: {
-    backgroundColor: '#38a6de',
-    borderColor: '#38a6de',
-  },
-  categoryChipText: {
-    color: '#6b8693',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  categoryChipTextActive: {
-    color: '#FFFFFF',
-  },
-  cardActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(107, 134, 147, 0.2)',
-  },
-  deleteButton: {
-    flexDirection: 'row',
+  thumbnailFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#0f293f',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 68, 68, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 68, 68, 0.3)',
-    gap: 6,
-    backgroundColor: '#c62828',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    cursor: 'pointer',
   },
-  deleteButtonText: {
-    color: '#FFFFFF',
+  moduleTitle: {
+    color: '#edf7fc',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  moduleSubtext: {
+    color: '#8da8b5',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  cellText: {
+    color: '#d2e8f3',
+    fontSize: 13,
+  },
+  subtleText: {
+    color: '#a4bec9',
+    fontSize: 12,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  secondaryActionButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.5)',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(56, 166, 222, 0.1)',
+  },
+  secondaryActionText: {
+    color: '#d9f1ff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  dangerActionButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 108, 97, 0.5)',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 108, 97, 0.16)',
+  },
+  dangerActionText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,
@@ -873,7 +757,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 6,
     backgroundColor: 'rgba(56, 166, 222, 0.1)',
-    cursor: 'pointer',
   },
   reasonOptionSelected: {
     backgroundColor: 'rgba(56, 166, 222, 0.3)',
@@ -909,20 +792,6 @@ const styles = StyleSheet.create({
     minHeight: 72,
     textAlignVertical: 'top',
   },
-  selectedReasonLabel: {
-    color: '#38a6de',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  selectedReasonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    marginBottom: 16,
-    padding: 8,
-    backgroundColor: 'rgba(56, 166, 222, 0.15)',
-    borderRadius: 8,
-  },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -934,7 +803,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    cursor: 'pointer',
   },
   cancelButton: {
     backgroundColor: 'rgba(107, 134, 147, 0.3)',
@@ -951,121 +819,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#FFFFFF',
-    marginTop: 12,
-    fontSize: 16,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: '#6b8693',
-    fontSize: 16,
-  },
-  modulesGrid: {
-    paddingBottom: 20,
-  },
-  row: {
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  moduleCard: {
-    width: '48%',
-    backgroundColor: '#1a2332',
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 166, 222, 0.15)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-    cursor: 'pointer',
-  },
-  moduleImageContainer: {
-    width: '100%',
-    height: 180,
-    position: 'relative',
-    backgroundColor: '#0d1a2b',
-  },
-  moduleImage: {
-    width: '100%',
-    height: '100%',
-  },
-  moduleImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#0d1a2b',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imageOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '50%',
-    backgroundColor: 'rgba(11, 22, 37, 0.7)',
-  },
-  categoryBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(56, 166, 222, 0.95)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  categoryBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  moduleInfo: {
-    padding: 16,
-  },
-  moduleTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
-    minHeight: 48,
-    lineHeight: 24,
-  },
-  moduleMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 8,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-  },
-  metaText: {
-    color: '#6b8693',
-    fontSize: 11,
-    fontWeight: '500',
   },
   menuOverlay: {
     position: 'absolute',
@@ -1097,7 +850,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
-    cursor: 'pointer',
   },
   menuIcon: {
     width: 24,

@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
     Animated,
     Dimensions,
     Image,
@@ -11,9 +10,11 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
+import EmptyState from '../../components/admin/EmptyState';
+import LoadingSkeleton from '../../components/admin/LoadingSkeleton';
 import { useLogout } from '../../hooks/useLogout';
 import { AnalyticsController, AnalyticsData } from '../controllers/AnalyticsController';
 
@@ -175,7 +176,11 @@ export default function AdminDashboard() {
     if (data.length === 0) {
       return (
         <View style={styles.chartContainer}>
-          <Text style={styles.noDataText}>No technique data available. Graph will populate once users perform techniques.</Text>
+          <EmptyState
+            title="No technique activity yet"
+            description="This chart will populate once users start performing techniques."
+            iconName="bar-chart-outline"
+          />
         </View>
       );
     }
@@ -218,9 +223,12 @@ export default function AdminDashboard() {
   if (loading && !analytics) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#38a6de" />
-          <Text style={styles.loadingText}>Loading Analytics...</Text>
+        <View style={[styles.loadingContainer, { paddingLeft: 100, paddingRight: 20, paddingTop: 20 }]}>
+          <LoadingSkeleton rows={2} />
+          <View style={{ height: 12 }} />
+          <LoadingSkeleton rows={3} />
+          <View style={{ height: 12 }} />
+          <LoadingSkeleton rows={2} />
         </View>
       </SafeAreaView>
     );
@@ -298,6 +306,7 @@ export default function AdminDashboard() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          <Text style={styles.sectionLabel}>Overview</Text>
           {/* Active Users and Trainers Boxes */}
           <View style={styles.activeBoxesRow}>
             <Animated.View style={[
@@ -459,6 +468,7 @@ export default function AdminDashboard() {
             </Animated.View>
           </View>
 
+          <Text style={styles.sectionLabel}>Performance</Text>
           {/* Top Performed Techniques Chart */}
           <Animated.View style={[
             styles.chartCard,
@@ -485,6 +495,7 @@ export default function AdminDashboard() {
             </TouchableOpacity>
           </Animated.View>
 
+          <Text style={styles.sectionLabel}>Revenue</Text>
           {/* Revenue Card */}
           <Animated.View style={[
             styles.revenueCard,
@@ -674,6 +685,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
     marginBottom: 24,
+  },
+  sectionLabel: {
+    color: '#96b1be',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    marginBottom: 10,
   },
   activeBox: {
     flex: 1,

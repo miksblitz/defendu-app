@@ -2,20 +2,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  Image,
+  Modal,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import AdminTable, { AdminTableColumn } from '../../components/admin/AdminTable';
+import SearchInput from '../../components/admin/SearchInput';
+import StatusBadge from '../../components/admin/StatusBadge';
 import { useLogout } from '../../hooks/useLogout';
 import { User } from '../_models/User';
 import { AuthController } from '../controllers/AuthController';
+
+const PAGE_SIZE = 12;
 
 export default function ManageUsersPage() {
   const router = useRouter();
@@ -23,123 +27,47 @@ export default function ManageUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
-  const [openMenuUserId, setOpenMenuUserId] = useState<string | null>(null);
-  const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [displayedCount, setDisplayedCount] = useState(10);
-  
-  // Animation refs
+  const [currentPage, setCurrentPage] = useState(1);
+  const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
+  const [userToToggleBlock, setUserToToggleBlock] = useState<User | null>(null);
+
   const headerAnim = useRef(new Animated.Value(0)).current;
-  const searchAnim = useRef(new Animated.Value(0)).current;
-  const tableHeaderAnim = useRef(new Animated.Value(0)).current;
-  const animatedValues = useRef<Map<string, Animated.Value>>(new Map()).current;
-  const hoverScales = useRef<Map<string, Animated.Value>>(new Map()).current;
+  const controlsAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadUsers();
   }, []);
-  
+
   useEffect(() => {
     if (!loading) {
       Animated.parallel([
         Animated.timing(headerAnim, {
           toValue: 1,
-          duration: 600,
+          duration: 500,
           useNativeDriver: true,
         }),
-        Animated.timing(searchAnim, {
+        Animated.timing(controlsAnim, {
           toValue: 1,
-          duration: 600,
-          delay: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(tableHeaderAnim, {
-          toValue: 1,
-          duration: 600,
-          delay: 300,
+          duration: 500,
+          delay: 120,
           useNativeDriver: true,
         }),
       ]).start();
     }
-  }, [loading]);
+  }, [loading, headerAnim, controlsAnim]);
 
-  // Reset displayed count when search query changes
   useEffect(() => {
-    setDisplayedCount(10);
+    setCurrentPage(1);
   }, [searchQuery]);
-
-  // Filter users based on search query
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return users;
-    }
-    const query = searchQuery.toLowerCase().trim();
-    return users.filter((user) => {
-      const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
-      const email = user.email.toLowerCase();
-      return fullName.includes(query) || email.includes(query);
-    });
-  }, [users, searchQuery]);
-
-  // Get displayed users (paginated)
-  const displayedUsers = useMemo(() => {
-    return filteredUsers.slice(0, displayedCount);
-  }, [filteredUsers, displayedCount]);
-  
-  // Animate displayed users when they change
-  useEffect(() => {
-    if (displayedUsers.length > 0) {
-      const animations = displayedUsers.map((user, index) => {
-        const animValue = getAnimatedValue(user.uid);
-        return Animated.timing(animValue, {
-          toValue: 1,
-          duration: 400,
-          delay: Math.min(index * 30, 500),
-          useNativeDriver: true,
-        });
-      });
-      Animated.stagger(20, animations).start();
-    }
-  }, [displayedUsers]);
-  
-  const getAnimatedValue = (uid: string) => {
-    if (!animatedValues.has(uid)) {
-      animatedValues.set(uid, new Animated.Value(0));
-    }
-    return animatedValues.get(uid)!;
-  };
-  
-  const getHoverScale = (uid: string) => {
-    if (!hoverScales.has(uid)) {
-      hoverScales.set(uid, new Animated.Value(1));
-    }
-    return hoverScales.get(uid)!;
-  };
-  
-  const handleRowHover = (uid: string, isHovering: boolean) => {
-    const scale = getHoverScale(uid);
-    Animated.spring(scale, {
-      toValue: isHovering ? 1.02 : 1,
-      useNativeDriver: true,
-      speed: 25,
-      bounciness: 8,
-    }).start();
-  };
-
-  const hasMoreUsers = displayedCount < filteredUsers.length;
 
   const loadUsers = async () => {
     try {
       setLoading(true);
-      console.log('🔵 Loading users...');
       const allUsers = await AuthController.getAllUsers();
-      console.log('✅ Loaded users:', allUsers.length);
       setUsers(allUsers);
     } catch (error: any) {
-      console.error('❌ Error loading users:', error);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error stack:', error.stack);
-      // Show error to user
+      console.error('Error loading users:', error);
       alert(`Failed to load users: ${error.message || 'Unknown error'}`);
       setUsers([]);
     } finally {
@@ -147,137 +75,195 @@ export default function ManageUsersPage() {
     }
   };
 
-  const formatDate = (date: Date | undefined): string => {
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return users;
+    const query = searchQuery.toLowerCase().trim();
+    return users.filter((user) => {
+      const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
+      return fullName.includes(query) || user.email.toLowerCase().includes(query);
+    });
+  }, [users, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredUsers.slice(start, start + PAGE_SIZE);
+  }, [filteredUsers, currentPage]);
+
+  const formatLastActive = (date: Date | undefined): string => {
     if (!date) return 'Never';
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) {
-      return 'Today';
-    } else if (diffDays === 1) {
-      return 'Yesterday';
-    } else if (diffDays < 7) {
-      return `${diffDays} days ago`;
-    } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
-      });
-    }
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const formatDateAdded = (date: Date): string => {
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
-    });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const getRoleDisplay = (role: string): string => {
     if (role === 'individual') return 'Individual';
     if (role === 'trainer') return 'Trainer';
-    return role.charAt(0).toUpperCase() + role.slice(1);
+    if (role === 'admin') return 'Admin';
+    return role;
   };
 
-  const getRoleColor = (role: string): string => {
-    if (role === 'trainer') return '#38a6de';
-    if (role === 'admin') return '#1a5f8a';
-    return '#5a9bc4';
+  const getWalletDisplay = (user: User): string => {
+    const dynamicUser = user as any;
+    const value = dynamicUser.creditsBalance ?? dynamicUser.credits ?? dynamicUser.walletBalance;
+    if (value === undefined || value === null || value === '') return 'N/A';
+    if (typeof value === 'number') return value.toLocaleString();
+    return String(value);
   };
 
-  const handleBlockUser = async (userId: string) => {
+  const requestToggleBlock = (user: User) => {
+    setUserToToggleBlock(user);
+  };
+
+  const handleToggleBlock = async () => {
+    if (!userToToggleBlock) return;
+
     try {
+      const userId = userToToggleBlock.uid;
       setBlockingUserId(userId);
-      await AuthController.blockUser(userId);
-      // Reload users to reflect the change
+
+      if (userToToggleBlock.blocked) {
+        await AuthController.unblockUser(userId);
+      } else {
+        await AuthController.blockUser(userId);
+      }
+
       await loadUsers();
-      setOpenMenuUserId(null);
+      setUserToToggleBlock(null);
     } catch (error) {
-      console.error('Error blocking user:', error);
-      alert('Failed to block user. Please try again.');
+      console.error('Error updating user status:', error);
+      alert('Failed to update user status. Please try again.');
     } finally {
       setBlockingUserId(null);
     }
   };
 
-  const handleUnblockUser = async (userId: string) => {
-    try {
-      setBlockingUserId(userId);
-      await AuthController.unblockUser(userId);
-      // Reload users to reflect the change
-      await loadUsers();
-      setOpenMenuUserId(null);
-    } catch (error) {
-      console.error('Error unblocking user:', error);
-      alert('Failed to unblock user. Please try again.');
-    } finally {
-      setBlockingUserId(null);
-    }
-  };
-
-  const toggleUserMenu = (userId: string) => {
-    setOpenMenuUserId(openMenuUserId === userId ? null : userId);
-  };
+  const columns: AdminTableColumn<User>[] = [
+    {
+      key: 'user',
+      title: 'User',
+      flex: 2.5,
+      minWidth: 240,
+      render: (user) => (
+        <View>
+          <Text style={styles.nameText}>{user.firstName} {user.lastName}</Text>
+          <Text style={styles.emailText}>{user.email}</Text>
+        </View>
+      ),
+    },
+    {
+      key: 'role',
+      title: 'Access / Role',
+      flex: 1.1,
+      minWidth: 130,
+      render: (user) => <StatusBadge status={getRoleDisplay(user.role)} tone="info" />,
+    },
+    {
+      key: 'wallet',
+      title: 'Wallet / Credits',
+      flex: 1,
+      minWidth: 130,
+      align: 'right',
+      render: (user) => <Text style={styles.valueText}>{getWalletDisplay(user)}</Text>,
+    },
+    {
+      key: 'last-active',
+      title: 'Last Active',
+      flex: 1,
+      minWidth: 130,
+      render: (user) => <Text style={styles.subtleText}>{formatLastActive(user.lastActive)}</Text>,
+    },
+    {
+      key: 'date-joined',
+      title: 'Date Joined',
+      flex: 1,
+      minWidth: 125,
+      render: (user) => <Text style={styles.subtleText}>{formatDateAdded(user.createdAt)}</Text>,
+    },
+    {
+      key: 'status',
+      title: 'Status',
+      flex: 1,
+      minWidth: 120,
+      render: (user) => <StatusBadge status={user.blocked ? 'Disabled' : 'Active'} tone={user.blocked ? 'disabled' : 'active'} />,
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      minWidth: 140,
+      align: 'right',
+      render: (user) => (
+        <TouchableOpacity
+          style={[styles.actionButton, user.blocked ? styles.enableButton : styles.disableButton]}
+          onPress={() => requestToggleBlock(user)}
+          disabled={blockingUserId === user.uid}
+        >
+          {blockingUserId === user.uid ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.actionText}>{user.blocked ? 'Enable' : 'Disable'}</Text>
+          )}
+        </TouchableOpacity>
+      ),
+    },
+  ];
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Left Navigation Bar */}
         <View style={styles.leftNavBar}>
-          {/* Hamburger Menu */}
-          <TouchableOpacity 
-            style={styles.navMenuButton}
-            onPress={() => setShowMenu(true)}
-          >
+          <TouchableOpacity style={styles.navMenuButton} onPress={() => setShowMenu(true)}>
             <Ionicons name="menu" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          
-          {/* Bottom Icons - One Box */}
+
           <View style={styles.navBottomIcons}>
             <View style={styles.navIconsBox}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.navIconActiveButton}
                 onPress={() => router.push('/(admin)/adminManaging')}
-                disabled={true}
+                disabled
               >
                 <Image
                   source={require('../../assets/images/adminmanageicon.png')}
                   style={styles.navIconImage}
                 />
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                onPress={() => router.push('/(admin)/adminDashboard')}
-              >
-                <Image
-                  source={require('../../assets/images/homeicon.png')}
-                  style={styles.navIconImage}
-                />
+
+              <TouchableOpacity onPress={() => router.push('/(admin)/adminDashboard')}>
+                <Image source={require('../../assets/images/homeicon.png')} style={styles.navIconImage} />
               </TouchableOpacity>
             </View>
           </View>
         </View>
 
-        {/* Header with DEFENDU Logo and Admin */}
-        <Animated.View style={[
-          styles.header,
-          {
-            opacity: headerAnim,
-            transform: [{
-              translateY: headerAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [-20, 0],
-              }),
-            }],
-          },
-        ]}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.push('/(admin)/adminManaging')}
-          >
+        <Animated.View
+          style={[
+            styles.header,
+            {
+              opacity: headerAnim,
+              transform: [
+                {
+                  translateY: headerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-20, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(admin)/adminManaging')}>
             <Image
               source={require('../../assets/images/backbuttonicon.png')}
               style={styles.backButtonIcon}
@@ -292,233 +278,83 @@ export default function ManageUsersPage() {
             />
             <Text style={styles.headerAdminText}>Admin</Text>
             <Text style={styles.subTitle}>
-              All Users {searchQuery ? `${filteredUsers.length} of ${users.length}` : users.length}
+              Manage Users {searchQuery ? `${filteredUsers.length} of ${users.length}` : users.length}
             </Text>
           </View>
         </Animated.View>
 
-        {/* Main Content */}
         <View style={styles.mainContent}>
-          {/* Search Bar */}
-          <Animated.View style={[
-            styles.searchContainer,
-            {
-              opacity: searchAnim,
-              transform: [{
-                translateY: searchAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0],
-                }),
-              }],
-            },
-          ]}>
-            <Ionicons name="search" size={20} color="#6b8693" style={styles.searchIcon} />
-            <TextInput
-              style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-              placeholder="Search by name or email..."
-              placeholderTextColor="#6b8693"
+          <Animated.View
+            style={[
+              styles.controlsRow,
+              {
+                opacity: controlsAnim,
+                transform: [
+                  {
+                    translateY: controlsAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [18, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <SearchInput
               value={searchQuery}
               onChangeText={setSearchQuery}
+              placeholder="Search by name or email"
             />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setSearchQuery('')}
-                style={styles.clearButton}
-              >
-                <Ionicons name="close-circle" size={20} color="#6b8693" />
-              </TouchableOpacity>
-            )}
           </Animated.View>
 
-          {/* Users Table */}
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#38a6de" />
-              <Text style={styles.loadingText}>Loading users...</Text>
-            </View>
-          ) : filteredUsers.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                {searchQuery ? 'No users found matching your search' : 'No users found'}
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.tableWrapper}>
-              <ScrollView 
-                style={styles.tableContainer}
-                showsVerticalScrollIndicator={false}
-              >
-              {/* Table Header */}
-              <Animated.View style={[
-                styles.tableHeader,
-                {
-                  opacity: tableHeaderAnim,
-                  transform: [{
-                    translateY: tableHeaderAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [10, 0],
-                    }),
-                  }],
-                },
-              ]}>
-                <Text style={[styles.headerCell, styles.nameHeader]}>Name</Text>
-                <Text style={[styles.headerCell, styles.emailHeader]}>Email</Text>
-                <Text style={[styles.headerCell, styles.accessHeader]}>Access</Text>
-                <Text style={[styles.headerCell, styles.lastActiveHeader]}>Last Active</Text>
-                <Text style={[styles.headerCell, styles.dateAddedHeader]}>Date Added</Text>
-                <View style={[styles.headerCell, styles.actionsHeader]} />
-              </Animated.View>
-
-              {/* Table Rows */}
-              {displayedUsers.map((user) => {
-                const animValue = getAnimatedValue(user.uid);
-                const hoverScale = getHoverScale(user.uid);
-                
-                return (
-                  <Animated.View
-                    key={user.uid}
-                    style={[
-                      styles.tableRow,
-                      {
-                        opacity: animValue,
-                        transform: [
-                          {
-                            translateY: animValue.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [20, 0],
-                            }),
-                          },
-                          { scale: hoverScale },
-                        ],
-                      },
-                    ]}
-                  >
-                    <TouchableOpacity
-                      style={{ flex: 1 }}
-                      activeOpacity={1}
-                      onPressIn={() => handleRowHover(user.uid, true)}
-                      onPressOut={() => handleRowHover(user.uid, false)}
-                    >
-                  <View style={[styles.tableCell, styles.nameCell]}>
-                    <Text style={styles.nameText} numberOfLines={1}>
-                      {user.firstName} {user.lastName}
-                    </Text>
-                  </View>
-                  
-                  <View style={[styles.tableCell, styles.emailCell]}>
-                    <Text style={styles.emailText} numberOfLines={1}>
-                      {user.email}
-                    </Text>
-                  </View>
-                  
-                  <View style={[styles.tableCell, styles.accessCell]}>
-                    <View 
-                      style={[
-                        styles.roleBadge, 
-                        { backgroundColor: getRoleColor(user.role) }
-                      ]}
-                    >
-                      <Text style={styles.roleText}>
-                        {getRoleDisplay(user.role)}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={[styles.tableCell, styles.lastActiveCell]}>
-                    <Text style={[styles.dateText, styles.lastActiveText]} numberOfLines={1}>
-                      {formatDate(user.lastActive)}
-                    </Text>
-                  </View>
-                  
-                  <View style={[styles.tableCell, styles.dateAddedCell]}>
-                    <Text style={styles.dateText} numberOfLines={1}>
-                      {formatDateAdded(user.createdAt)}
-                    </Text>
-                  </View>
-                  
-                  <View style={[styles.tableCell, styles.actionsCell]}>
-                    <TouchableOpacity
-                      style={styles.actionMenuButton}
-                      onPress={() => toggleUserMenu(user.uid)}
-                      disabled={blockingUserId === user.uid}
-                    >
-                      {blockingUserId === user.uid ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <Ionicons name="ellipsis-vertical" size={20} color="#FFFFFF" />
-                      )}
-                    </TouchableOpacity>
-                    
-                    {/* Dropdown Menu */}
-                    {openMenuUserId === user.uid && (
-                      <View style={styles.dropdownMenu}>
-                        {user.blocked ? (
-                          <TouchableOpacity
-                            style={styles.dropdownItem}
-                            onPress={() => handleUnblockUser(user.uid)}
-                          >
-                            <Ionicons name="checkmark-circle" size={18} color="#38a6de" />
-                            <Text style={styles.dropdownItemText}>Unblock user</Text>
-                          </TouchableOpacity>
-                        ) : (
-                          <TouchableOpacity
-                            style={styles.dropdownItem}
-                            onPress={() => handleBlockUser(user.uid)}
-                          >
-                            <Ionicons name="ban" size={18} color="#ff4444" />
-                            <Text style={[styles.dropdownItemText, styles.blockText]}>Block user</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                </Animated.View>
-              );
-              })}
-              
-              {/* Load More Button */}
-              {hasMoreUsers && (
-                <View style={styles.loadMoreContainer}>
-                  <TouchableOpacity
-                    style={styles.loadMoreButton}
-                    onPress={() => setDisplayedCount(prev => prev + 10)}
-                  >
-                    <Text style={styles.loadMoreText}>Load More</Text>
-                    <Ionicons name="chevron-down" size={20} color="#38a6de" />
-                  </TouchableOpacity>
-                </View>
-              )}
-              </ScrollView>
-              {/* Overlay to close dropdown when clicking outside */}
-              {openMenuUserId && (
-                <TouchableOpacity
-                  style={styles.overlay}
-                  activeOpacity={1}
-                  onPress={() => setOpenMenuUserId(null)}
-                />
-              )}
-            </View>
-          )}
+          <AdminTable
+            columns={columns}
+            data={paginatedUsers}
+            loading={loading}
+            keyExtractor={(user) => user.uid}
+            emptyTitle={searchQuery ? 'No users match your search' : 'No users available'}
+            emptyDescription="Try clearing filters or check if users are properly loaded from the database."
+            pagination={{
+              currentPage,
+              totalPages,
+              onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
+              onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
+            }}
+          />
         </View>
       </View>
 
-      {/* Pop-up Menu */}
+      <Modal
+        visible={!!userToToggleBlock}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setUserToToggleBlock(null)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmModal}>
+            <Text style={styles.confirmTitle}>{userToToggleBlock?.blocked ? 'Enable User' : 'Disable User'}</Text>
+            <Text style={styles.confirmText}>
+              {userToToggleBlock?.blocked
+                ? 'This user will regain access to the platform.'
+                : 'This user will no longer be able to access the platform until re-enabled.'}
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity style={styles.modalSecondaryButton} onPress={() => setUserToToggleBlock(null)}>
+                <Text style={styles.modalSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalPrimaryButton} onPress={handleToggleBlock}>
+                <Text style={styles.modalPrimaryText}>{userToToggleBlock?.blocked ? 'Enable' : 'Disable'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {showMenu && (
-        <TouchableOpacity 
-          style={styles.menuOverlay}
-          activeOpacity={1}
-          onPress={() => setShowMenu(false)}
-        >
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
           <View style={styles.menuContainer}>
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => { setShowMenu(false); handleLogout(); }}
-            >
-              <Image
-                source={require('../../assets/images/logouticon.png')}
-                style={styles.menuIcon}
-              />
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); handleLogout(); }}>
+              <Image source={require('../../assets/images/logouticon.png')} style={styles.menuIcon} />
               <Text style={styles.menuText}>Logout</Text>
             </TouchableOpacity>
           </View>
@@ -616,7 +452,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '500',
     color: '#FFFFFF',
-    fontFamily: 'system-ui',
     marginTop: 4,
     opacity: 0.9,
   },
@@ -624,207 +459,110 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingLeft: 100,
     paddingRight: 20,
-    paddingTop: 20,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#011f36',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(107, 134, 147, 0.3)',
-  },
-  searchIcon: {
-    marginRight: 12,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'system-ui',
-  },
-  clearButton: {
-    padding: 4,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#FFFFFF',
-    marginTop: 16,
-    fontSize: 16,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    opacity: 0.7,
-  },
-  tableWrapper: {
-    flex: 1,
-    position: 'relative',
-  },
-  tableContainer: {
-    flex: 1,
-    backgroundColor: '#011f36',
-    borderRadius: 12,
-    padding: 16,
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(107, 134, 147, 0.3)',
-    marginBottom: 8,
-  },
-  headerCell: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'system-ui',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    opacity: 0.8,
-    textAlign: 'left',
-  },
-  nameHeader: {
-    flex: 2,
-  },
-  emailHeader: {
-    flex: 2.5,
-  },
-  accessHeader: {
-    flex: 1.2,
-  },
-  lastActiveHeader: {
-    flex: 1.3,
-  },
-  dateAddedHeader: {
-    flex: 1.3,
-  },
-  actionsHeader: {
-    flex: 0.5,
-    minWidth: 50,
-  },
-  tableRow: {
-    flexDirection: 'row',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(107, 134, 147, 0.1)',
-    alignItems: 'center',
-  },
-  tableCell: {
-    paddingHorizontal: 8,
-    justifyContent: 'center',
-  },
-  nameCell: {
-    flex: 2,
-    minWidth: 120,
-  },
-  emailCell: {
-    flex: 2.5,
-    minWidth: 150,
-  },
-  accessCell: {
-    flex: 1.2,
-    minWidth: 90,
-  },
-  lastActiveCell: {
-    flex: 1.3,
-    minWidth: 100,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  dateAddedCell: {
-    flex: 1.3,
-    minWidth: 100,
-    justifyContent: 'center',
-  },
-  actionsCell: {
-    flex: 0.5,
-    minWidth: 50,
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionMenuButton: {
-    padding: 8,
-  },
-  dropdownMenu: {
-    position: 'absolute',
-    top: 40,
-    right: 0,
-    backgroundColor: '#011f36',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#6b8693',
-    minWidth: 160,
-    zIndex: 1000,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 18,
     gap: 12,
   },
-  dropdownItemText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'system-ui',
-  },
-  blockText: {
-    color: '#ff4444',
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   nameText: {
-    color: '#FFFFFF',
+    color: '#f0f8fc',
     fontSize: 14,
-    fontWeight: '500',
-    fontFamily: 'system-ui',
+    fontWeight: '600',
   },
   emailText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontFamily: 'system-ui',
-    opacity: 0.8,
-  },
-  roleBadge: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  roleText: {
-    color: '#FFFFFF',
+    color: '#9db3be',
     fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'system-ui',
+    marginTop: 2,
   },
-  dateText: {
-    color: '#FFFFFF',
+  valueText: {
+    color: '#d9edf8',
     fontSize: 13,
-    fontFamily: 'system-ui',
-    opacity: 0.8,
-    textAlign: 'left',
+    fontWeight: '700',
   },
-  lastActiveText: {
-    textAlign: 'left',
-    alignSelf: 'flex-start',
-    marginLeft: 2,
+  subtleText: {
+    color: '#aac0ca',
+    fontSize: 13,
+  },
+  actionButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minWidth: 90,
+    alignItems: 'center',
+  },
+  disableButton: {
+    borderColor: 'rgba(255, 108, 97, 0.5)',
+    backgroundColor: 'rgba(255, 108, 97, 0.15)',
+  },
+  enableButton: {
+    borderColor: 'rgba(67, 209, 127, 0.5)',
+    backgroundColor: 'rgba(67, 209, 127, 0.15)',
+  },
+  actionText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 10, 18, 0.68)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  confirmModal: {
+    width: '100%',
+    maxWidth: 460,
+    backgroundColor: '#0f263a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(107, 134, 147, 0.4)',
+    padding: 20,
+  },
+  confirmTitle: {
+    color: '#f0f8fc',
+    fontSize: 19,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  confirmText: {
+    color: '#9db3be',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 20,
+  },
+  modalSecondaryButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#728b97',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  modalSecondaryText: {
+    color: '#bed0d8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalPrimaryButton: {
+    borderRadius: 8,
+    backgroundColor: '#38a6de',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  modalPrimaryText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   menuOverlay: {
     position: 'absolute',
@@ -867,36 +605,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '500',
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 999,
-  },
-  loadMoreContainer: {
-    paddingVertical: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadMoreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(56, 166, 222, 0.1)',
-    borderWidth: 1,
-    borderColor: '#38a6de',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    gap: 8,
-  },
-  loadMoreText: {
-    color: '#38a6de',
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: 'system-ui',
   },
 });

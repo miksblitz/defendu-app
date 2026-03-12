@@ -10,10 +10,12 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
+import AdminTable, { AdminTableColumn } from '../../components/admin/AdminTable';
+import SearchInput from '../../components/admin/SearchInput';
+import StatusBadge from '../../components/admin/StatusBadge';
 import Toast from '../../components/Toast';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
@@ -27,6 +29,8 @@ type ExtendedTrainerApplication = TrainerApplication & {
   specialty?: string;
 };
 
+const PAGE_SIZE = 10;
+
 export default function ManageTrainersPage() {
   const router = useRouter();
   const [applications, setApplications] = useState<ExtendedTrainerApplication[]>([]);
@@ -38,14 +42,13 @@ export default function ManageTrainersPage() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectingUid, setRejectingUid] = useState<string | null>(null);
   const [selectedRejectionReason, setSelectedRejectionReason] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
   
   // Animation refs
   const headerAnim = useRef(new Animated.Value(0)).current;
   const searchAnim = useRef(new Animated.Value(0)).current;
-  const animatedValues = useRef<Map<string, Animated.Value>>(new Map()).current;
-  const hoverScales = useRef<Map<string, Animated.Value>>(new Map()).current;
 
   // Rejection reasons
   const rejectionReasons = [
@@ -93,46 +96,16 @@ export default function ManageTrainersPage() {
       return fullName.includes(query) || email.includes(query) || specialty.includes(query);
     });
   }, [applications, searchQuery]);
-  
-  // Animate filtered applications when they change
+
   useEffect(() => {
-    if (filteredApplications.length > 0) {
-      const animations = filteredApplications.map((app, index) => {
-        const animValue = getAnimatedValue(app.uid);
-        return Animated.timing(animValue, {
-          toValue: 1,
-          duration: 500,
-          delay: Math.min(index * 50, 1000),
-          useNativeDriver: true,
-        });
-      });
-      Animated.stagger(30, animations).start();
-    }
-  }, [filteredApplications]);
-  
-  const getAnimatedValue = (uid: string) => {
-    if (!animatedValues.has(uid)) {
-      animatedValues.set(uid, new Animated.Value(0));
-    }
-    return animatedValues.get(uid)!;
-  };
-  
-  const getHoverScale = (uid: string) => {
-    if (!hoverScales.has(uid)) {
-      hoverScales.set(uid, new Animated.Value(1));
-    }
-    return hoverScales.get(uid)!;
-  };
-  
-  const handleCardHover = (uid: string, isHovering: boolean) => {
-    const scale = getHoverScale(uid);
-    Animated.spring(scale, {
-      toValue: isHovering ? 1.05 : 1,
-      useNativeDriver: true,
-      speed: 20,
-      bounciness: 10,
-    }).start();
-  };
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredApplications.length / PAGE_SIZE));
+  const paginatedApplications = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredApplications.slice(start, start + PAGE_SIZE);
+  }, [filteredApplications, currentPage]);
 
   const loadApplications = async () => {
     try {
@@ -252,6 +225,75 @@ export default function ManageTrainersPage() {
   const handleBackToList = () => {
     setSelectedApplication(null);
   };
+
+  const columns: AdminTableColumn<ExtendedTrainerApplication>[] = [
+    {
+      key: 'trainer',
+      title: 'Trainer',
+      minWidth: 250,
+      flex: 2,
+      render: (application) => (
+        <View style={styles.trainerCell}>
+          {application.profilePicture ? (
+            <Image source={{ uri: application.profilePicture }} style={styles.trainerAvatar} />
+          ) : (
+            <View style={styles.trainerAvatarFallback}>
+              <Ionicons name="person" size={16} color="#6b8693" />
+            </View>
+          )}
+          <View>
+            <Text style={styles.trainerNameText}>{application.firstName} {application.lastName}</Text>
+            <Text style={styles.trainerEmailText}>{application.email}</Text>
+          </View>
+        </View>
+      ),
+    },
+    {
+      key: 'specialty',
+      title: 'Specialty',
+      minWidth: 150,
+      render: (application) => <Text style={styles.cellText}>{application.specialty || 'N/A'}</Text>,
+    },
+    {
+      key: 'status',
+      title: 'Status',
+      minWidth: 130,
+      render: (application) => <StatusBadge status={application.status.replace('awaiting review', 'Pending')} tone={application.status === 'approved' ? 'approved' : application.status === 'rejected' ? 'rejected' : 'pending'} />,
+    },
+    {
+      key: 'submitted',
+      title: 'Submitted',
+      minWidth: 140,
+      render: (application) => <Text style={styles.cellSubtleText}>{formatDate(application.appliedDate)}</Text>,
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      minWidth: 240,
+      align: 'right',
+      render: (application) => (
+        <View style={styles.actionButtonsRow}>
+          <TouchableOpacity style={styles.viewButtonSmall} onPress={() => handleViewApplication(application)}>
+            <Text style={styles.viewButtonSmallText}>View</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.approveButtonSmall}
+            onPress={() => handleApprove(application.uid)}
+            disabled={processingApplication === application.uid}
+          >
+            <Text style={styles.actionButtonSmallText}>Approve</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.rejectButtonSmall}
+            onPress={() => handleRejectClick(application.uid)}
+            disabled={processingApplication === application.uid}
+          >
+            <Text style={styles.actionButtonSmallText}>Reject</Text>
+          </TouchableOpacity>
+        </View>
+      ),
+    },
+  ];
 
   // Detail View
   if (selectedApplication) {
@@ -689,7 +731,6 @@ export default function ManageTrainersPage() {
 
         {/* Main Content */}
         <View style={styles.mainContent}>
-          {/* Search Bar */}
           <Animated.View style={[
             styles.searchContainer,
             {
@@ -702,110 +743,27 @@ export default function ManageTrainersPage() {
               }],
             },
           ]}>
-            <Ionicons name="search" size={20} color="#6b8693" style={styles.searchIcon} />
-            <TextInput
-              style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-              placeholder="Search by name, email, or specialty..."
-              placeholderTextColor="#6b8693"
+            <SearchInput
               value={searchQuery}
               onChangeText={setSearchQuery}
+              placeholder="Search by name, email, or specialty"
             />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setSearchQuery('')}
-                style={styles.clearButton}
-              >
-                <Ionicons name="close-circle" size={20} color="#6b8693" />
-              </TouchableOpacity>
-            )}
           </Animated.View>
 
-          {/* Applications Grid */}
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#38a6de" />
-              <Text style={styles.loadingText}>Loading applications...</Text>
-            </View>
-          ) : filteredApplications.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                {searchQuery ? 'No applications found matching your search' : 'No trainer applications found'}
-              </Text>
-            </View>
-          ) : (
-            <ScrollView 
-              style={styles.gridContainer}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.grid}>
-                {filteredApplications.map((application) => {
-                  const animValue = getAnimatedValue(application.uid);
-                  const hoverScale = getHoverScale(application.uid);
-                  
-                  return (
-                    <Animated.View
-                      key={application.uid}
-                      style={[
-                        styles.applicationCard,
-                        {
-                          opacity: animValue,
-                          transform: [
-                            {
-                              translateY: animValue.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [30, 0],
-                              }),
-                            },
-                            { scale: Animated.multiply(animValue, hoverScale) },
-                          ],
-                        },
-                      ]}
-                    >
-                      <TouchableOpacity
-                        onPressIn={() => handleCardHover(application.uid, true)}
-                        onPressOut={() => handleCardHover(application.uid, false)}
-                        onPress={() => handleViewApplication(application)}
-                        activeOpacity={1}
-                      >
-                        <View style={styles.cardHeader}>
-                {application.profilePicture ? (
-                  <Image
-                    source={{ uri: application.profilePicture }}
-                    style={styles.cardProfilePicture}
-                  />
-                ) : (
-                  <View style={styles.cardProfilePicture}>
-                    <Ionicons name="person" size={30} color="#6b8693" />
-                  </View>
-                )}
-                      <Text style={styles.cardName}>
-                        {application.firstName} {application.lastName}
-                      </Text>
-                    </View>
-                    <View style={styles.cardInfo}>
-                      <Text style={styles.cardInfoLine}>
-                        Applied: <Text style={styles.cardHighlight}>{formatDate(application.appliedDate)}</Text>
-                      </Text>
-                      <Text style={styles.cardInfoLine}>
-                        Specialty: <Text style={styles.cardHighlight}>{application.specialty || 'N/A'}</Text>
-                      </Text>
-                      <Text style={styles.cardInfoLine}>
-                        Status: <Text style={styles.cardHighlight}>{application.status}</Text>
-                      </Text>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.viewButton}
-                          onPress={() => handleViewApplication(application)}
-                        >
-                          <Text style={styles.viewButtonText}>View full application</Text>
-                        </TouchableOpacity>
-                      </TouchableOpacity>
-                    </Animated.View>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          )}
+          <AdminTable
+            columns={columns}
+            data={paginatedApplications}
+            loading={loading}
+            keyExtractor={(application) => application.uid}
+            emptyTitle={searchQuery ? 'No applications match your search' : 'No trainer applications found'}
+            emptyDescription="Applications will appear here when trainers submit their profiles."
+            pagination={{
+              currentPage,
+              totalPages,
+              onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
+              onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
+            }}
+          />
         </View>
       </View>
 
@@ -942,27 +900,82 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   searchContainer: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  trainerCell: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#011f36',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 16,
+    gap: 10,
+    maxWidth: 320,
+  },
+  trainerAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  trainerAvatarFallback: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#15344a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trainerNameText: {
+    color: '#edf6fb',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  trainerEmailText: {
+    color: '#97aeb9',
+    fontSize: 12,
+  },
+  cellText: {
+    color: '#d5eaf4',
+    fontSize: 13,
+  },
+  cellSubtleText: {
+    color: '#a4bec9',
+    fontSize: 12,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  viewButtonSmall: {
     borderWidth: 1,
-    borderColor: 'rgba(107, 134, 147, 0.3)',
+    borderColor: 'rgba(56, 166, 222, 0.5)',
+    backgroundColor: 'rgba(56, 166, 222, 0.1)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
-  searchIcon: {
-    marginRight: 12,
+  viewButtonSmallText: {
+    color: '#def2ff',
+    fontSize: 12,
+    fontWeight: '700',
   },
-  searchInput: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'system-ui',
+  approveButtonSmall: {
+    backgroundColor: 'rgba(67, 209, 127, 0.18)',
+    borderColor: 'rgba(67, 209, 127, 0.55)',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
-  clearButton: {
-    padding: 4,
+  rejectButtonSmall: {
+    backgroundColor: 'rgba(255, 108, 97, 0.18)',
+    borderColor: 'rgba(255, 108, 97, 0.55)',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  actionButtonSmallText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   loadingContainer: {
     flex: 1,
