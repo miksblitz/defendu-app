@@ -2,19 +2,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Image,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    Image,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from 'react-native';
-import AdminTable, { AdminTableColumn } from '../../components/admin/AdminTable';
+import AdminTable, {
+    AdminTableColumn,
+    AdminTableSortState,
+} from '../../components/admin/AdminTable';
 import FilterBar from '../../components/admin/FilterBar';
 import SearchInput from '../../components/admin/SearchInput';
 import StatusBadge from '../../components/admin/StatusBadge';
@@ -58,6 +62,8 @@ type FilterType = 'active' | 'pending';
 const PAGE_SIZE = 10;
 
 export default function ManageModulesPage() {
+  const { width } = useWindowDimensions();
+  const isCompact = width < 1100;
   const router = useRouter();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
@@ -70,6 +76,10 @@ export default function ManageModulesPage() {
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
   const [trainerFilter, setTrainerFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortState, setSortState] = useState<AdminTableSortState>({
+    columnKey: 'created',
+    direction: 'desc',
+  });
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [moduleToDelete, setModuleToDelete] = useState<Module | null>(null);
@@ -175,12 +185,45 @@ export default function ManageModulesPage() {
     return filtered;
   }, [modules, filterType, categoryFilter, difficultyFilter, trainerFilter, searchQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredModules.length / PAGE_SIZE));
+  const sortedModules = useMemo(() => {
+    const result = [...filteredModules];
+    const multiplier = sortState.direction === 'asc' ? 1 : -1;
+
+    result.sort((a, b) => {
+      if (sortState.columnKey === 'status') {
+        return a.status.localeCompare(b.status) * multiplier;
+      }
+      if (sortState.columnKey === 'updated') {
+        return ((a.updatedAt?.getTime?.() ?? 0) - (b.updatedAt?.getTime?.() ?? 0)) * multiplier;
+      }
+      return ((a.createdAt?.getTime?.() ?? 0) - (b.createdAt?.getTime?.() ?? 0)) * multiplier;
+    });
+
+    return result;
+  }, [filteredModules, sortState]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedModules.length / PAGE_SIZE));
 
   const paginatedModules = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredModules.slice(start, start + PAGE_SIZE);
-  }, [filteredModules, currentPage]);
+    return sortedModules.slice(start, start + PAGE_SIZE);
+  }, [sortedModules, currentPage]);
+
+  const handleSortChange = (columnKey: string) => {
+    setSortState((prev) => {
+      if (prev.columnKey === columnKey) {
+        return {
+          columnKey,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return {
+        columnKey,
+        direction: columnKey === 'created' || columnKey === 'updated' ? 'desc' : 'asc',
+      };
+    });
+    setCurrentPage(1);
+  };
 
   const formatDate = (date: Date | undefined): string => {
     if (!date) return 'N/A';
@@ -288,18 +331,26 @@ export default function ManageModulesPage() {
       key: 'status',
       title: 'Status',
       minWidth: 100,
-      render: () => <StatusBadge status="Active" tone="active" />,
+      sortable: true,
+      render: (module) => (
+        <StatusBadge
+          status={module.status === 'approved' ? 'Active' : 'Pending'}
+          tone={module.status === 'approved' ? 'active' : 'pending'}
+        />
+      ),
     },
     {
       key: 'created',
       title: 'Created',
       minWidth: 120,
+      sortable: true,
       render: (module) => <Text style={styles.subtleText}>{formatDate(module.createdAt)}</Text>,
     },
     {
       key: 'updated',
       title: 'Updated',
       minWidth: 120,
+      sortable: true,
       render: (module) => <Text style={styles.subtleText}>{formatDate(module.updatedAt)}</Text>,
     },
     {
@@ -308,12 +359,12 @@ export default function ManageModulesPage() {
       minWidth: 190,
       align: 'right',
       render: (module) => (
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.secondaryActionButton} onPress={() => handleViewModule(module)}>
+        <View style={[styles.actionRow, isCompact && styles.actionRowCompact]}>
+          <TouchableOpacity style={[styles.secondaryActionButton, isCompact && styles.secondaryActionButtonCompact]} onPress={() => handleViewModule(module)}>
             <Text style={styles.secondaryActionText}>View</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.dangerActionButton} onPress={() => openDeleteModal(module)}>
-            <Text style={styles.dangerActionText}>Disable</Text>
+          <TouchableOpacity style={[styles.dangerActionButton, isCompact && styles.dangerActionButtonCompact]} onPress={() => openDeleteModal(module)}>
+            <Text style={styles.dangerActionText}>{isCompact ? 'Dis.' : 'Disable'}</Text>
           </TouchableOpacity>
         </View>
       ),
@@ -377,7 +428,7 @@ export default function ManageModulesPage() {
           </View>
         </Animated.View>
 
-        <View style={styles.mainContent}>
+        <View style={[styles.mainContent, isCompact && styles.mainContentCompact]}>
           <Animated.View
             style={[
               styles.controlsWrap,
@@ -440,7 +491,10 @@ export default function ManageModulesPage() {
             columns={columns}
             data={paginatedModules}
             loading={loading}
+            compact={isCompact}
             keyExtractor={(module) => module.moduleId}
+            sortState={sortState}
+            onSortChange={handleSortChange}
             emptyTitle={searchQuery ? 'No modules match your search' : 'No modules found'}
             emptyDescription="Try updating your filters or review module approval data in the backend."
             pagination={{
@@ -621,6 +675,11 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
     gap: 12,
   },
+  mainContentCompact: {
+    paddingLeft: 86,
+    paddingRight: 12,
+    gap: 10,
+  },
   controlsWrap: {
     gap: 10,
   },
@@ -689,6 +748,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  actionRowCompact: {
+    gap: 6,
+  },
   secondaryActionButton: {
     borderRadius: 8,
     borderWidth: 1,
@@ -696,6 +758,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: 'rgba(56, 166, 222, 0.1)',
+  },
+  secondaryActionButtonCompact: {
+    paddingHorizontal: 9,
+    paddingVertical: 7,
   },
   secondaryActionText: {
     color: '#d9f1ff',
@@ -709,6 +775,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: 'rgba(255, 108, 97, 0.16)',
+  },
+  dangerActionButtonCompact: {
+    paddingHorizontal: 9,
+    paddingVertical: 7,
   },
   dangerActionText: {
     color: '#ffffff',

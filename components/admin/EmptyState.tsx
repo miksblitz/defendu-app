@@ -24,8 +24,8 @@ const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 44,
-    paddingHorizontal: 20,
+    paddingVertical: 48,
+    paddingHorizontal: 22,
   },
   iconWrap: {
     width: 56,
@@ -38,16 +38,16 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#eaf2f6',
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 7,
     textAlign: 'center',
   },
   description: {
     color: '#91a7b3',
-    fontSize: 13,
+    fontSize: 14,
     textAlign: 'center',
     maxWidth: 460,
-    lineHeight: 20,
+    lineHeight: 21,
   },
 });

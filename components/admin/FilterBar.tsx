@@ -38,7 +38,7 @@ export default function FilterBar({ label, options, selectedValue, onSelect }: F
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    gap: 8,
+    gap: 7,
   },
   label: {
     color: '#9db3be',
@@ -53,10 +53,10 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: 'rgba(126, 153, 166, 0.45)',
+    borderColor: 'rgba(126, 153, 166, 0.5)',
     backgroundColor: 'transparent',
   },
   chipSelected: {
@@ -64,9 +64,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(56, 166, 222, 0.22)',
   },
   chipText: {
-    color: '#a8bcc6',
-    fontSize: 13,
+    color: '#b2c6cf',
+    fontSize: 12,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   chipTextSelected: {
     color: '#e8f4fa',

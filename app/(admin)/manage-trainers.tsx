@@ -11,9 +11,13 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
+    useWindowDimensions,
     View
 } from 'react-native';
-import AdminTable, { AdminTableColumn } from '../../components/admin/AdminTable';
+import AdminTable, {
+    AdminTableColumn,
+    AdminTableSortState,
+} from '../../components/admin/AdminTable';
 import SearchInput from '../../components/admin/SearchInput';
 import StatusBadge from '../../components/admin/StatusBadge';
 import Toast from '../../components/Toast';
@@ -32,6 +36,8 @@ type ExtendedTrainerApplication = TrainerApplication & {
 const PAGE_SIZE = 10;
 
 export default function ManageTrainersPage() {
+  const { width } = useWindowDimensions();
+  const isCompact = width < 1100;
   const router = useRouter();
   const [applications, setApplications] = useState<ExtendedTrainerApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +49,10 @@ export default function ManageTrainersPage() {
   const [rejectingUid, setRejectingUid] = useState<string | null>(null);
   const [selectedRejectionReason, setSelectedRejectionReason] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortState, setSortState] = useState<AdminTableSortState>({
+    columnKey: 'submitted',
+    direction: 'desc',
+  });
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
   
@@ -102,10 +112,41 @@ export default function ManageTrainersPage() {
   }, [searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredApplications.length / PAGE_SIZE));
+  const sortedApplications = useMemo(() => {
+    const result = [...filteredApplications];
+    const multiplier = sortState.direction === 'asc' ? 1 : -1;
+
+    result.sort((a, b) => {
+      if (sortState.columnKey === 'status') {
+        return a.status.localeCompare(b.status) * multiplier;
+      }
+      return ((a.appliedDate?.getTime?.() ?? 0) - (b.appliedDate?.getTime?.() ?? 0)) * multiplier;
+    });
+
+    return result;
+  }, [filteredApplications, sortState]);
+
+  const sortedTotalPages = Math.max(1, Math.ceil(sortedApplications.length / PAGE_SIZE));
   const paginatedApplications = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredApplications.slice(start, start + PAGE_SIZE);
-  }, [filteredApplications, currentPage]);
+    return sortedApplications.slice(start, start + PAGE_SIZE);
+  }, [sortedApplications, currentPage]);
+
+  const handleSortChange = (columnKey: string) => {
+    setSortState((prev) => {
+      if (prev.columnKey === columnKey) {
+        return {
+          columnKey,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return {
+        columnKey,
+        direction: columnKey === 'submitted' ? 'desc' : 'asc',
+      };
+    });
+    setCurrentPage(1);
+  };
 
   const loadApplications = async () => {
     try {
@@ -258,12 +299,14 @@ export default function ManageTrainersPage() {
       key: 'status',
       title: 'Status',
       minWidth: 130,
+      sortable: true,
       render: (application) => <StatusBadge status={application.status.replace('awaiting review', 'Pending')} tone={application.status === 'approved' ? 'approved' : application.status === 'rejected' ? 'rejected' : 'pending'} />,
     },
     {
       key: 'submitted',
       title: 'Submitted',
       minWidth: 140,
+      sortable: true,
       render: (application) => <Text style={styles.cellSubtleText}>{formatDate(application.appliedDate)}</Text>,
     },
     {
@@ -272,19 +315,19 @@ export default function ManageTrainersPage() {
       minWidth: 240,
       align: 'right',
       render: (application) => (
-        <View style={styles.actionButtonsRow}>
-          <TouchableOpacity style={styles.viewButtonSmall} onPress={() => handleViewApplication(application)}>
+        <View style={[styles.actionButtonsRow, isCompact && styles.actionButtonsRowCompact]}>
+          <TouchableOpacity style={[styles.viewButtonSmall, isCompact && styles.actionButtonSmallCompact]} onPress={() => handleViewApplication(application)}>
             <Text style={styles.viewButtonSmallText}>View</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.approveButtonSmall}
+            style={[styles.approveButtonSmall, isCompact && styles.actionButtonSmallCompact]}
             onPress={() => handleApprove(application.uid)}
             disabled={processingApplication === application.uid}
           >
-            <Text style={styles.actionButtonSmallText}>Approve</Text>
+            <Text style={styles.actionButtonSmallText}>{isCompact ? 'Appr.' : 'Approve'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.rejectButtonSmall}
+            style={[styles.rejectButtonSmall, isCompact && styles.actionButtonSmallCompact]}
             onPress={() => handleRejectClick(application.uid)}
             disabled={processingApplication === application.uid}
           >
@@ -730,7 +773,7 @@ export default function ManageTrainersPage() {
         </View>
 
         {/* Main Content */}
-        <View style={styles.mainContent}>
+        <View style={[styles.mainContent, isCompact && styles.mainContentCompact]}>
           <Animated.View style={[
             styles.searchContainer,
             {
@@ -754,14 +797,17 @@ export default function ManageTrainersPage() {
             columns={columns}
             data={paginatedApplications}
             loading={loading}
+            compact={isCompact}
             keyExtractor={(application) => application.uid}
+            sortState={sortState}
+            onSortChange={handleSortChange}
             emptyTitle={searchQuery ? 'No applications match your search' : 'No trainer applications found'}
             emptyDescription="Applications will appear here when trainers submit their profiles."
             pagination={{
               currentPage,
-              totalPages,
+              totalPages: sortedTotalPages,
               onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
-              onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
+              onNext: () => setCurrentPage((p) => Math.min(sortedTotalPages, p + 1)),
             }}
           />
         </View>
@@ -899,6 +945,11 @@ const styles = StyleSheet.create({
     paddingRight: 20,
     paddingTop: 20,
   },
+  mainContentCompact: {
+    paddingLeft: 86,
+    paddingRight: 12,
+    paddingTop: 14,
+  },
   searchContainer: {
     width: '100%',
     marginBottom: 16,
@@ -942,6 +993,13 @@ const styles = StyleSheet.create({
   actionButtonsRow: {
     flexDirection: 'row',
     gap: 6,
+  },
+  actionButtonsRowCompact: {
+    gap: 5,
+  },
+  actionButtonSmallCompact: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   viewButtonSmall: {
     borderWidth: 1,

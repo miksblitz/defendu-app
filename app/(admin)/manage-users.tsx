@@ -2,17 +2,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Image,
-  Modal,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    Image,
+    Modal,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from 'react-native';
-import AdminTable, { AdminTableColumn } from '../../components/admin/AdminTable';
+import AdminTable, {
+    AdminTableColumn,
+    AdminTableSortState,
+} from '../../components/admin/AdminTable';
 import SearchInput from '../../components/admin/SearchInput';
 import StatusBadge from '../../components/admin/StatusBadge';
 import { useLogout } from '../../hooks/useLogout';
@@ -22,6 +26,8 @@ import { AuthController } from '../controllers/AuthController';
 const PAGE_SIZE = 12;
 
 export default function ManageUsersPage() {
+  const { width } = useWindowDimensions();
+  const isCompact = width < 1100;
   const router = useRouter();
   const handleLogout = useLogout();
   const [users, setUsers] = useState<User[]>([]);
@@ -29,6 +35,10 @@ export default function ManageUsersPage() {
   const [showMenu, setShowMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortState, setSortState] = useState<AdminTableSortState>({
+    columnKey: 'date-joined',
+    direction: 'desc',
+  });
   const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
   const [userToToggleBlock, setUserToToggleBlock] = useState<User | null>(null);
 
@@ -84,12 +94,49 @@ export default function ManageUsersPage() {
     });
   }, [users, searchQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const sortedUsers = useMemo(() => {
+    const result = [...filteredUsers];
+    const multiplier = sortState.direction === 'asc' ? 1 : -1;
+
+    result.sort((a, b) => {
+      if (sortState.columnKey === 'role') {
+        return a.role.localeCompare(b.role) * multiplier;
+      }
+      if (sortState.columnKey === 'status') {
+        const left = a.blocked ? 'disabled' : 'active';
+        const right = b.blocked ? 'disabled' : 'active';
+        return left.localeCompare(right) * multiplier;
+      }
+      const leftDate = a.createdAt?.getTime?.() ?? 0;
+      const rightDate = b.createdAt?.getTime?.() ?? 0;
+      return (leftDate - rightDate) * multiplier;
+    });
+
+    return result;
+  }, [filteredUsers, sortState]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedUsers.length / PAGE_SIZE));
 
   const paginatedUsers = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredUsers.slice(start, start + PAGE_SIZE);
-  }, [filteredUsers, currentPage]);
+    return sortedUsers.slice(start, start + PAGE_SIZE);
+  }, [sortedUsers, currentPage]);
+
+  const handleSortChange = (columnKey: string) => {
+    setSortState((prev) => {
+      if (prev.columnKey === columnKey) {
+        return {
+          columnKey,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return {
+        columnKey,
+        direction: columnKey === 'date-joined' ? 'desc' : 'asc',
+      };
+    });
+    setCurrentPage(1);
+  };
 
   const formatLastActive = (date: Date | undefined): string => {
     if (!date) return 'Never';
@@ -167,6 +214,7 @@ export default function ManageUsersPage() {
       title: 'Access / Role',
       flex: 1.1,
       minWidth: 130,
+      sortable: true,
       render: (user) => <StatusBadge status={getRoleDisplay(user.role)} tone="info" />,
     },
     {
@@ -189,6 +237,7 @@ export default function ManageUsersPage() {
       title: 'Date Joined',
       flex: 1,
       minWidth: 125,
+      sortable: true,
       render: (user) => <Text style={styles.subtleText}>{formatDateAdded(user.createdAt)}</Text>,
     },
     {
@@ -196,6 +245,7 @@ export default function ManageUsersPage() {
       title: 'Status',
       flex: 1,
       minWidth: 120,
+      sortable: true,
       render: (user) => <StatusBadge status={user.blocked ? 'Disabled' : 'Active'} tone={user.blocked ? 'disabled' : 'active'} />,
     },
     {
@@ -205,7 +255,7 @@ export default function ManageUsersPage() {
       align: 'right',
       render: (user) => (
         <TouchableOpacity
-          style={[styles.actionButton, user.blocked ? styles.enableButton : styles.disableButton]}
+          style={[styles.actionButton, isCompact && styles.actionButtonCompact, user.blocked ? styles.enableButton : styles.disableButton]}
           onPress={() => requestToggleBlock(user)}
           disabled={blockingUserId === user.uid}
         >
@@ -283,7 +333,7 @@ export default function ManageUsersPage() {
           </View>
         </Animated.View>
 
-        <View style={styles.mainContent}>
+        <View style={[styles.mainContent, isCompact && styles.mainContentCompact]}>
           <Animated.View
             style={[
               styles.controlsRow,
@@ -311,7 +361,10 @@ export default function ManageUsersPage() {
             columns={columns}
             data={paginatedUsers}
             loading={loading}
+            compact={isCompact}
             keyExtractor={(user) => user.uid}
+            sortState={sortState}
+            onSortChange={handleSortChange}
             emptyTitle={searchQuery ? 'No users match your search' : 'No users available'}
             emptyDescription="Try clearing filters or check if users are properly loaded from the database."
             pagination={{
@@ -463,6 +516,11 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
     gap: 12,
   },
+  mainContentCompact: {
+    paddingLeft: 86,
+    paddingRight: 12,
+    gap: 10,
+  },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -494,6 +552,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     minWidth: 90,
     alignItems: 'center',
+  },
+  actionButtonCompact: {
+    minWidth: 72,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   disableButton: {
     borderColor: 'rgba(255, 108, 97, 0.5)',
