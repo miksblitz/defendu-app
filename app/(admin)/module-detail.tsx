@@ -11,6 +11,8 @@ import {
   TextInput,
   Modal,
   Linking,
+  Share,
+  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +21,34 @@ import { Module } from '../_models/Module';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
+
+/** Slug for extract output filename: alphanumeric only (e.g. "Jab fundamentals" -> "Jabfundamentals"). */
+function slugForExtract(s: string): string {
+  if (!s || typeof s !== 'string') return 'module';
+  return s.replace(/[^a-zA-Z0-9]/g, '').trim() || 'module';
+}
+
+/** Category -> folder name for pose extract (punching, kicking, elbow_strikes, etc.). */
+function categoryFolderForExtract(category: string): string {
+  if (!category?.trim()) return 'other';
+  const key = category.trim().toLowerCase();
+  const map: Record<string, string> = {
+    punching: 'punching',
+    kicking: 'kicking',
+    'elbow strikes': 'elbow_strikes',
+    'knee strikes': 'knee_strikes',
+    'defensive moves': 'defensive_moves',
+  };
+  return map[key] ?? (key.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'other');
+}
+
+/** Output path for pose extract: e.g. punching/Jab_MikelAboyme_pose_data.csv */
+function getExtractOutputPath(title: string, trainer: string, category: string): string {
+  const folder = categoryFolderForExtract(category);
+  const titleSlug = slugForExtract(title) || 'module';
+  const trainerSlug = slugForExtract(trainer) || 'trainer';
+  return `${folder}/${titleSlug}_${trainerSlug}_pose_data.csv`;
+}
 
 /** Force Cloudinary video URLs to MP4 for reliable playback. */
 function getPlayableVideoUrl(url: string | undefined): string {
@@ -56,6 +86,7 @@ export default function ModuleDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletionReason, setDeletionReason] = useState('');
   const [customDeletionReason, setCustomDeletionReason] = useState('');
+  const [showExtractModal, setShowExtractModal] = useState(false);
 
   const deletionReasons = [
     'Inappropriate content',
@@ -206,6 +237,30 @@ export default function ModuleDetailPage() {
       console.error('Failed to open URL:', err);
       showToast('Failed to open video URL');
     });
+  };
+
+  const techniqueVideoForExtract = module?.techniqueVideoUrl
+    ? getPlayableVideoUrl(module.techniqueVideoUrl) || module.techniqueVideoUrl
+    : module?.techniqueVideoUrl2 || '';
+
+  const extractOutputPath = module
+    ? getExtractOutputPath(module.moduleTitle, module.trainerName ?? '', module.category)
+    : 'pose_data.csv';
+
+  const extractCommand = techniqueVideoForExtract
+    ? `python extract_pose_data.py --video "${techniqueVideoForExtract}" --title "${(module?.moduleTitle ?? '').replace(/"/g, '\\"')}" --trainer "${(module?.trainerName ?? '').replace(/"/g, '\\"')}" --category "${(module?.category ?? '').replace(/"/g, '\\"')}"`
+    : '';
+
+  const handleShareExtractCommand = async () => {
+    const message = `Run on your computer (in pose-data-extractor folder):\n\n${extractCommand}\n\nOutput: ${extractOutputPath}\n\nKeys: U=good_rep, J=jab, H=hook, P=positive, N=bad, Space=pause, Q=quit`;
+    try {
+      await Share.share({
+        message: message + '\n\nVideo: ' + techniqueVideoForExtract,
+        title: 'Extract pose data',
+      });
+    } catch {
+      showToast('Share not available');
+    }
   };
 
   if (loading) {
@@ -401,6 +456,15 @@ export default function ModuleDetailPage() {
             {module.videoDuration && (
               <Text style={styles.durationText}>Duration: {formatDuration(module.videoDuration)}</Text>
             )}
+            {(module.techniqueVideoUrl || module.techniqueVideoUrl2) && (
+              <TouchableOpacity
+                style={styles.extractDataButton}
+                onPress={() => setShowExtractModal(true)}
+              >
+                <Ionicons name="download-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.extractDataButtonText}>Extract pose data</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Thumbnail Section */}
@@ -520,6 +584,45 @@ export default function ModuleDetailPage() {
           <View style={styles.bottomSpacing} />
         </ScrollView>
       </View>
+
+      {/* Extract pose data Modal */}
+      <Modal
+        visible={showExtractModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowExtractModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Extract pose data</Text>
+            <Text style={styles.modalSubtitle}>
+              On your computer, run the Python tool to play this video with MediaPipe overlay and press keys to save pose landmarks to Excel for training.
+            </Text>
+            <Text style={styles.extractCommandLabel}>Video URL:</Text>
+            <Text style={styles.extractUrlText} selectable numberOfLines={3}>
+              {techniqueVideoForExtract}
+            </Text>
+            <Text style={styles.extractCommandLabel}>Command (in pose-data-extractor folder):</Text>
+            <Text style={styles.extractCommandText} selectable>
+              {extractCommand}
+            </Text>
+            <Text style={styles.extractCommandLabel}>Output file (CSV):</Text>
+            <Text style={styles.extractUrlText} selectable numberOfLines={1}>
+              {extractOutputPath}
+            </Text>
+            <Text style={styles.extractKeysText}>
+              Keys: U=good_rep, J=jab, H=hook, P=positive, N=bad, Space=pause, Q=quit & save
+            </Text>
+            <TouchableOpacity style={styles.shareExtractButton} onPress={handleShareExtractCommand}>
+              <Ionicons name="share-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.shareExtractButtonText}>Share URL & command</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setShowExtractModal(false)}>
+              <Text style={styles.cancelButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Delete Module Modal */}
       <Modal
@@ -959,6 +1062,66 @@ const styles = StyleSheet.create({
   deleteModuleButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  extractDataButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#0a3645',
+    borderWidth: 1,
+    borderColor: '#38a6de',
+  },
+  extractDataButtonText: {
+    color: '#38a6de',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  extractCommandLabel: {
+    color: '#38a6de',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  extractUrlText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  extractCommandText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  extractKeysText: {
+    color: '#6b8693',
+    fontSize: 12,
+    marginBottom: 12,
+  },
+  shareExtractButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#38a6de',
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  shareExtractButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '600',
   },
   confirmDeleteButton: {

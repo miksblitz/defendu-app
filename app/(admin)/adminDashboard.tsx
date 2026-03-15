@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import EmptyState from '../../components/admin/EmptyState';
-import LoadingSkeleton from '../../components/admin/LoadingSkeleton';
+import LoadingSkeleton from './LoadingSkeleton';
 import { useLogout } from '../../hooks/useLogout';
 import { AnalyticsController, AnalyticsData } from '../controllers/AnalyticsController';
 

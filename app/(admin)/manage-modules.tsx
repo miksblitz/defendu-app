@@ -395,116 +395,123 @@ export default function ManageModulesPage() {
           </View>
         </View>
 
-        <Animated.View
-          style={[
-            styles.header,
-            {
-              opacity: headerAnim,
-              transform: [
-                {
-                  translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }),
-                },
-              ],
-            },
-          ]}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={true}
+          keyboardShouldPersistTaps="handled"
         >
-          <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(admin)/adminManaging')}>
-            <Image
-              source={require('../../assets/images/backbuttonicon.png')}
-              style={styles.backButtonIcon}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Image
-              source={require('../../assets/images/defendudashboardlogo.png')}
-              style={styles.headerLogoImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.headerAdminText}>Admin</Text>
-            <Text style={styles.subTitle}>
-              Active Modules {filterType === 'active' ? activeCount : pendingCount}
-            </Text>
-          </View>
-        </Animated.View>
-
-        <View style={[styles.mainContent, isCompact && styles.mainContentCompact]}>
           <Animated.View
             style={[
-              styles.controlsWrap,
+              styles.header,
               {
-                opacity: controlsAnim,
+                opacity: headerAnim,
                 transform: [
                   {
-                    translateY: controlsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }),
+                    translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }),
                   },
                 ],
               },
             ]}
           >
-            <View style={styles.primaryFiltersRow}>
-              <TouchableOpacity
-                style={[styles.tabButton, filterType === 'active' && styles.tabButtonActive]}
-                onPress={() => setFilterType('active')}
-              >
-                <Text style={[styles.tabText, filterType === 'active' && styles.tabTextActive]}>
-                  Active {activeCount}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tabButton, filterType === 'pending' && styles.tabButtonActive]}
-                onPress={() => setFilterType('pending')}
-              >
-                <Text style={[styles.tabText, filterType === 'pending' && styles.tabTextActive]}>
-                  Pending {pendingCount}
-                </Text>
-              </TouchableOpacity>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(admin)/adminManaging')}>
+              <Image
+                source={require('../../assets/images/backbuttonicon.png')}
+                style={styles.backButtonIcon}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+            <View style={styles.headerContent}>
+              <Image
+                source={require('../../assets/images/defendudashboardlogo.png')}
+                style={styles.headerLogoImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.headerAdminText}>Admin</Text>
+              <Text style={styles.subTitle}>
+                Active Modules {filterType === 'active' ? activeCount : pendingCount}
+              </Text>
             </View>
-
-            <SearchInput
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search by title, category, trainer, or ID"
-            />
-
-            <FilterBar
-              label="Category"
-              options={MODULE_CATEGORIES}
-              selectedValue={categoryFilter}
-              onSelect={setCategoryFilter}
-            />
-            <FilterBar
-              label="Difficulty"
-              options={DIFFICULTY_OPTIONS}
-              selectedValue={difficultyFilter}
-              onSelect={setDifficultyFilter}
-            />
-            <FilterBar
-              label="Trainer"
-              options={trainerOptions}
-              selectedValue={trainerFilter}
-              onSelect={setTrainerFilter}
-            />
           </Animated.View>
 
-          <AdminTable
-            columns={columns}
-            data={paginatedModules}
-            loading={loading}
-            compact={isCompact}
-            keyExtractor={(module) => module.moduleId}
-            sortState={sortState}
-            onSortChange={handleSortChange}
-            emptyTitle={searchQuery ? 'No modules match your search' : 'No modules found'}
-            emptyDescription="Try updating your filters or review module approval data in the backend."
-            pagination={{
-              currentPage,
-              totalPages,
-              onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
-              onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
-            }}
-          />
-        </View>
+          <View style={[styles.mainContent, isCompact && styles.mainContentCompact]}>
+            <Animated.View
+              style={[
+                styles.controlsWrap,
+                {
+                  opacity: controlsAnim,
+                  transform: [
+                    {
+                      translateY: controlsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <View style={styles.primaryFiltersRow}>
+                <TouchableOpacity
+                  style={[styles.tabButton, filterType === 'active' && styles.tabButtonActive]}
+                  onPress={() => setFilterType('active')}
+                >
+                  <Text style={[styles.tabText, filterType === 'active' && styles.tabTextActive]}>
+                    Active {activeCount}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tabButton, filterType === 'pending' && styles.tabButtonActive]}
+                  onPress={() => setFilterType('pending')}
+                >
+                  <Text style={[styles.tabText, filterType === 'pending' && styles.tabTextActive]}>
+                    Pending {pendingCount}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <SearchInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search by title, category, trainer, or ID"
+              />
+
+              <FilterBar
+                label="Category"
+                options={MODULE_CATEGORIES}
+                selectedValue={categoryFilter}
+                onSelect={setCategoryFilter}
+              />
+              <FilterBar
+                label="Difficulty"
+                options={DIFFICULTY_OPTIONS}
+                selectedValue={difficultyFilter}
+                onSelect={setDifficultyFilter}
+              />
+              <FilterBar
+                label="Trainer"
+                options={trainerOptions}
+                selectedValue={trainerFilter}
+                onSelect={setTrainerFilter}
+              />
+            </Animated.View>
+
+            <AdminTable
+              columns={columns}
+              data={paginatedModules}
+              loading={loading}
+              compact={isCompact}
+              keyExtractor={(module) => module.moduleId}
+              sortState={sortState}
+              onSortChange={handleSortChange}
+              emptyTitle={searchQuery ? 'No modules match your search' : 'No modules found'}
+              emptyDescription="Try updating your filters or review module approval data in the backend."
+              pagination={{
+                currentPage,
+                totalPages,
+                onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
+                onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
+              }}
+            />
+          </View>
+        </ScrollView>
       </View>
 
       <Modal visible={showDeleteModal} transparent animationType="slide" onRequestClose={closeDeleteModal}>
@@ -629,10 +636,17 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  scrollView: {
+    flex: 1,
+    marginLeft: 80,
+  },
+  scrollContent: {
+    paddingBottom: 32,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingLeft: 100,
+    paddingLeft: 20,
     paddingRight: 20,
     paddingTop: 20,
     paddingBottom: 12,
@@ -668,15 +682,14 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   mainContent: {
-    flex: 1,
-    paddingLeft: 100,
+    paddingLeft: 20,
     paddingRight: 20,
     paddingTop: 16,
     paddingBottom: 18,
     gap: 12,
   },
   mainContentCompact: {
-    paddingLeft: 86,
+    paddingLeft: 12,
     paddingRight: 12,
     gap: 10,
   },
