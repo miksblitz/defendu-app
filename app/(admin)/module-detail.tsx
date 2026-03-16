@@ -14,6 +14,7 @@ import {
   Share,
   Platform,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
@@ -62,7 +63,7 @@ function getPlayableVideoUrl(url: string | undefined): string {
 
 export default function ModuleDetailPage() {
   const router = useRouter();
-  const { moduleId } = useLocalSearchParams<{ moduleId: string }>();
+  const { moduleId, mode } = useLocalSearchParams<{ moduleId: string; mode?: string }>();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
   const [module, setModule] = useState<Module | null>(null);
@@ -88,6 +89,14 @@ export default function ModuleDetailPage() {
   const [customDeletionReason, setCustomDeletionReason] = useState('');
   const [showExtractModal, setShowExtractModal] = useState(false);
 
+  const [isEditing, setIsEditing] = useState(mode === 'edit');
+  const [editTitle, setEditTitle] = useState('');
+  const [editDifficulty, setEditDifficulty] = useState<Module['difficultyLevel']>('basic');
+  const [editThumbnailUrl, setEditThumbnailUrl] = useState('');
+  const [editIntensity, setEditIntensity] = useState<number>(1);
+  const [editSpaceRequirements, setEditSpaceRequirements] = useState<string[]>([]);
+  const [editPhysicalDemandTags, setEditPhysicalDemandTags] = useState<string[]>([]);
+
   const deletionReasons = [
     'Inappropriate content',
     'Incomplete information',
@@ -105,6 +114,80 @@ export default function ModuleDetailPage() {
       loadModule();
     }
   }, [moduleId]);
+
+  useEffect(() => {
+    if (module) {
+      setEditTitle(module.moduleTitle);
+      setEditDifficulty(module.difficultyLevel || 'basic');
+      setEditThumbnailUrl(module.thumbnailUrl || '');
+      setEditIntensity(module.intensityLevel || 1);
+      setEditSpaceRequirements(module.spaceRequirements || []);
+      setEditPhysicalDemandTags(module.physicalDemandTags || []);
+      if (module.status !== 'approved') setIsEditing(false);
+    }
+  }, [module]);
+
+  const toggleEditSpaceRequirement = (requirement: string) => {
+    setEditSpaceRequirements((prev) =>
+      prev.includes(requirement) ? prev.filter((r) => r !== requirement) : [...prev, requirement]
+    );
+  };
+
+  const toggleEditPhysicalDemandTag = (tag: string) => {
+    setEditPhysicalDemandTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const handlePickThumbnail = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const localUri = result.assets[0].uri;
+        setProcessing(true);
+        const url = await AuthController.uploadFileToCloudinary(localUri, 'image', 'module_thumbnail');
+        setEditThumbnailUrl(url);
+        showToast('Thumbnail updated');
+      }
+    } catch (error: any) {
+      console.error('Error picking thumbnail:', error);
+      showToast(error.message || 'Failed to update thumbnail');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleCaptureThumbnail = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (permission.status !== 'granted') {
+        showToast('Camera permission is required to take a photo');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const localUri = result.assets[0].uri;
+        setProcessing(true);
+        const url = await AuthController.uploadFileToCloudinary(localUri, 'image', 'module_thumbnail');
+        setEditThumbnailUrl(url);
+        showToast('Thumbnail updated');
+      }
+    } catch (error: any) {
+      console.error('Error capturing thumbnail:', error);
+      showToast(error.message || 'Failed to update thumbnail');
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const loadModule = async () => {
     try {
@@ -125,6 +208,44 @@ export default function ModuleDetailPage() {
       router.back();
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveEdits = async () => {
+    if (!module || !moduleId) return;
+    const trimmedTitle = editTitle.trim();
+    if (!trimmedTitle) {
+      showToast('Title cannot be empty');
+      return;
+    }
+    try {
+      setProcessing(true);
+      await AuthController.updateModuleMetadata(moduleId, {
+        moduleTitle: trimmedTitle,
+        difficultyLevel: editDifficulty,
+        thumbnailUrl: editThumbnailUrl.trim() || undefined,
+        intensityLevel: editIntensity,
+        spaceRequirements: editSpaceRequirements,
+        physicalDemandTags: editPhysicalDemandTags,
+      });
+      const updated: Module = {
+        ...module,
+        moduleTitle: trimmedTitle,
+        difficultyLevel: editDifficulty,
+        thumbnailUrl: editThumbnailUrl.trim() || undefined,
+        intensityLevel: editIntensity,
+        spaceRequirements: editSpaceRequirements,
+        physicalDemandTags: editPhysicalDemandTags,
+        updatedAt: new Date(),
+      };
+      setModule(updated);
+      setIsEditing(false);
+      showToast('Module updated');
+    } catch (error: any) {
+      console.error('Error updating module:', error);
+      showToast(error.message || 'Failed to update module');
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -360,7 +481,158 @@ export default function ModuleDetailPage() {
           </View>
 
           {/* Module Title */}
-          <Text style={styles.moduleTitle}>{module.moduleTitle}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.moduleTitle}>{module.moduleTitle}</Text>
+            {isApproved && (
+              <TouchableOpacity
+                style={styles.editToggleButton}
+                onPress={() => setIsEditing((prev) => !prev)}
+              >
+                <Ionicons name="create-outline" size={18} color="#38a6de" />
+                <Text style={styles.editToggleText}>{isEditing ? 'Cancel' : 'Edit'}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {isApproved && isEditing && (
+            <View style={styles.editSection}>
+              <Text style={styles.editLabel}>Title</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editTitle}
+                onChangeText={setEditTitle}
+                placeholder="Module title"
+                placeholderTextColor="#6b8693"
+              />
+
+              <Text style={styles.editLabel}>Difficulty</Text>
+              <View style={styles.difficultyRow}>
+                {(['basic', 'intermediate', 'advanced'] as Module['difficultyLevel'][]).map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={[
+                      styles.difficultyChip,
+                      editDifficulty === level && styles.difficultyChipActive,
+                    ]}
+                    onPress={() => setEditDifficulty(level)}
+                  >
+                    <Text
+                      style={[
+                        styles.difficultyChipText,
+                        editDifficulty === level && styles.difficultyChipTextActive,
+                      ]}
+                    >
+                      {level.charAt(0).toUpperCase() + level.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.editLabel}>Thumbnail URL</Text>
+              {editThumbnailUrl ? (
+                <Image
+                  source={{ uri: editThumbnailUrl }}
+                  style={styles.editThumbnailPreview}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View style={styles.thumbnailButtonsRow}>
+                <TouchableOpacity
+                  style={styles.thumbnailButton}
+                  onPress={handlePickThumbnail}
+                  disabled={processing}
+                >
+                  <Ionicons name="images-outline" size={18} color="#38a6de" />
+                  <Text style={styles.thumbnailButtonText}>Choose from gallery</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.thumbnailButton}
+                  onPress={handleCaptureThumbnail}
+                  disabled={processing}
+                >
+                  <Ionicons name="camera-outline" size={18} color="#38a6de" />
+                  <Text style={styles.thumbnailButtonText}>Take photo</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.editLabel}>Intensity (1 = easy, 5 = very hard)</Text>
+              <View style={styles.intensityEditRow}>
+                {[1, 2, 3, 4, 5].map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={[
+                      styles.intensityDotEdit,
+                      level <= editIntensity && styles.intensityDotEditActive,
+                    ]}
+                    onPress={() => setEditIntensity(level)}
+                  />
+                ))}
+                <Text style={styles.intensityEditText}>{editIntensity}/5</Text>
+              </View>
+
+              <Text style={styles.editLabel}>Space Requirements</Text>
+              <View style={styles.tagsRow}>
+                {['Stationary', 'Arm/Leg Span (Medium Space)', 'Mobility (Large Space)'].map(
+                  (req) => (
+                    <TouchableOpacity
+                      key={req}
+                      style={[
+                        styles.tag,
+                        editSpaceRequirements.includes(req) && styles.tagActive,
+                      ]}
+                      onPress={() => toggleEditSpaceRequirement(req)}
+                    >
+                      <Text
+                        style={[
+                          styles.tagText,
+                          editSpaceRequirements.includes(req) && styles.tagTextActive,
+                        ]}
+                      >
+                        {req}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                )}
+              </View>
+
+              <Text style={styles.editLabel}>Physical Demand Tags</Text>
+              <View style={styles.tagsRow}>
+                {['Flexibility', 'Strength', 'Endurance', 'Balance', 'Coordination', 'Speed', 'Agility', 'Power'].map(
+                  (tag) => (
+                    <TouchableOpacity
+                      key={tag}
+                      style={[
+                        styles.tag,
+                        editPhysicalDemandTags.includes(tag) && styles.tagActive,
+                      ]}
+                      onPress={() => toggleEditPhysicalDemandTag(tag)}
+                    >
+                      <Text
+                        style={[
+                          styles.tagText,
+                          editPhysicalDemandTags.includes(tag) && styles.tagTextActive,
+                        ]}
+                      >
+                        {tag}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.saveEditsButton, processing && styles.saveEditsButtonDisabled]}
+                onPress={handleSaveEdits}
+                disabled={processing}
+              >
+                {processing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveEditsButtonText}>Save changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Basic Information Section */}
           <View style={styles.section}>
@@ -374,6 +646,15 @@ export default function ModuleDetailPage() {
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Category:</Text>
               <Text style={styles.infoValue}>{module.category}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Difficulty:</Text>
+              <Text style={styles.infoValue}>
+                {module.difficultyLevel
+                  ? module.difficultyLevel.charAt(0).toUpperCase() + module.difficultyLevel.slice(1)
+                  : 'Basic'}
+              </Text>
             </View>
 
             <View style={styles.infoRow}>
@@ -914,8 +1195,155 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 24,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   section: {
     marginBottom: 32,
+  },
+  editToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#38a6de',
+    backgroundColor: 'rgba(56, 166, 222, 0.15)',
+  },
+  editToggleText: {
+    color: '#38a6de',
+    fontSize: 14,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  editSection: {
+    marginBottom: 28,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#0b1d2d',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.3)',
+  },
+  editLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 6,
+    marginTop: 8,
+  },
+  editInput: {
+    backgroundColor: 'rgba(5, 18, 32, 0.9)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: '#FFFFFF',
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#1c3850',
+  },
+  difficultyRow: {
+    flexDirection: 'row',
+    marginTop: 4,
+    gap: 8,
+  },
+  difficultyChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1c3850',
+    backgroundColor: '#0b1625',
+  },
+  difficultyChipActive: {
+    borderColor: '#38a6de',
+    backgroundColor: 'rgba(56, 166, 222, 0.25)',
+  },
+  difficultyChipText: {
+    color: '#9eb9c9',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  difficultyChipTextActive: {
+    color: '#e6f6ff',
+  },
+  saveEditsButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#38a6de',
+  },
+  saveEditsButtonDisabled: {
+    opacity: 0.7,
+  },
+  saveEditsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  editThumbnailPreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    backgroundColor: '#1a2332',
+  },
+  thumbnailButtonsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  thumbnailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#38a6de',
+    backgroundColor: 'rgba(56, 166, 222, 0.12)',
+  },
+  thumbnailButtonText: {
+    color: '#38a6de',
+    fontSize: 13,
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+  intensityEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  intensityDotEdit: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#1a2332',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#38a6de',
+  },
+  intensityDotEditActive: {
+    backgroundColor: '#38a6de',
+  },
+  intensityEditText: {
+    color: '#38a6de',
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
   },
   sectionTitle: {
     color: '#38a6de',
@@ -1009,6 +1437,13 @@ const styles = StyleSheet.create({
   tagText: {
     color: '#38a6de',
     fontSize: 14,
+  },
+  tagActive: {
+    backgroundColor: 'rgba(56, 166, 222, 0.35)',
+  },
+  tagTextActive: {
+    color: '#e6f6ff',
+    fontWeight: '600',
   },
   rejectionReasonText: {
     color: '#ff6b6b',

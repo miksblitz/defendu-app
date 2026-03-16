@@ -1156,6 +1156,71 @@ export class AuthController {
     }
   }
 
+  /** Update module metadata (admin only, no video changes). */
+  static async updateModuleMetadata(
+    moduleId: string,
+    updates: {
+      moduleTitle?: string;
+      difficultyLevel?: Module['difficultyLevel'];
+      thumbnailUrl?: string;
+      description?: string;
+      category?: string;
+      intensityLevel?: number;
+      spaceRequirements?: string[];
+      physicalDemandTags?: string[];
+      repRange?: string;
+      trainingDurationSeconds?: number;
+    }
+  ): Promise<void> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+      if (currentUser.role !== 'admin') {
+        throw new Error('Permission denied. Admin access required.');
+      }
+
+      const existingModule = await this.getModuleById(moduleId);
+      if (!existingModule) {
+        throw new Error('Module not found');
+      }
+
+      const patch: Record<string, unknown> = {};
+      if (updates.moduleTitle !== undefined) patch.moduleTitle = updates.moduleTitle;
+      if (updates.difficultyLevel !== undefined) patch.difficultyLevel = updates.difficultyLevel;
+      if (updates.thumbnailUrl !== undefined) patch.thumbnailUrl = updates.thumbnailUrl || null;
+      if (updates.description !== undefined) patch.description = updates.description;
+      if (updates.category !== undefined) patch.category = updates.category;
+      if (updates.intensityLevel !== undefined) patch.intensityLevel = updates.intensityLevel;
+      if (updates.spaceRequirements !== undefined) patch.spaceRequirements = updates.spaceRequirements || [];
+      if (updates.physicalDemandTags !== undefined) patch.physicalDemandTags = updates.physicalDemandTags || [];
+      if (updates.repRange !== undefined) patch.repRange = updates.repRange || null;
+      if (updates.trainingDurationSeconds !== undefined) {
+        patch.trainingDurationSeconds = updates.trainingDurationSeconds ?? null;
+      }
+      if (Object.keys(patch).length === 0) return;
+
+      const now = Date.now();
+      patch.updatedAt = now;
+
+      await update(ref(db, `modules/${moduleId}`), patch);
+
+      // Keep trainerModules reference in sync for title/status metadata
+      const trainerId = existingModule.trainerId;
+      const trainerModulePatch: Record<string, unknown> = {
+        updatedAt: now,
+      };
+      if (updates.moduleTitle !== undefined) {
+        trainerModulePatch.moduleTitle = updates.moduleTitle;
+      }
+      await update(ref(db, `trainerModules/${trainerId}/${moduleId}`), trainerModulePatch);
+    } catch (error: any) {
+      console.error('❌ Error updating module metadata:', error);
+      throw new Error(error.message || 'Failed to update module');
+    }
+  }
+
   // Get user's existing trainer application
   static async getUserTrainerApplication(uid: string): Promise<TrainerApplication | null> {
     try {

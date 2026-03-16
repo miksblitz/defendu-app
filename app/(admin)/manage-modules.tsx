@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Animated,
@@ -93,6 +94,12 @@ export default function ManageModulesPage() {
   useEffect(() => {
     loadModules();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadModules();
+    }, [])
+  );
 
   useEffect(() => {
     if (!loading) {
@@ -246,6 +253,13 @@ export default function ManageModulesPage() {
     });
   };
 
+  const handleEditModule = (module: Module) => {
+    router.push({
+      pathname: '/(admin)/module-detail',
+      params: { moduleId: module.moduleId, mode: 'edit' },
+    });
+  };
+
   const openDeleteModal = (module: Module) => {
     setModuleToDelete(module);
     setDeletionReason('');
@@ -360,9 +374,20 @@ export default function ManageModulesPage() {
       align: 'right',
       render: (module) => (
         <View style={[styles.actionRow, isCompact && styles.actionRowCompact]}>
-          <TouchableOpacity style={[styles.secondaryActionButton, isCompact && styles.secondaryActionButtonCompact]} onPress={() => handleViewModule(module)}>
+          <TouchableOpacity
+            style={[styles.secondaryActionButton, isCompact && styles.secondaryActionButtonCompact]}
+            onPress={() => handleViewModule(module)}
+          >
             <Text style={styles.secondaryActionText}>View</Text>
           </TouchableOpacity>
+          {module.status === 'approved' && (
+            <TouchableOpacity
+              style={[styles.secondaryActionButton, isCompact && styles.secondaryActionButtonCompact]}
+              onPress={() => handleEditModule(module)}
+            >
+              <Text style={styles.secondaryActionText}>Edit</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={[styles.dangerActionButton, isCompact && styles.dangerActionButtonCompact]} onPress={() => openDeleteModal(module)}>
             <Text style={styles.dangerActionText}>{isCompact ? 'Dis.' : 'Disable'}</Text>
           </TouchableOpacity>
