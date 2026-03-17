@@ -194,13 +194,11 @@ export default function AdminDashboard() {
       );
     }
 
-    // Calculate rounded max for Y-axis (round up to nearest 5)
-    const roundedMax = Math.ceil(maxValue / 5) * 5 || 20;
-    const yAxisLabels = Array.from({ length: 5 }, (_, index) => {
-      const ratio = 1 - index / 4;
-      return Math.round(roundedMax * ratio);
-    });
-    const chartHeight = 200;
+    const chartData = data.slice(0, 5);
+    const axisMax = Math.max(4, Math.ceil(maxValue / 4) * 4);
+    const step = axisMax / 4;
+    const yAxisLabels = [axisMax, axisMax - step, axisMax - step * 2, axisMax - step * 3, 0];
+    const chartHeight = 160;
 
     return (
       <View style={styles.chartContainer}>
@@ -213,12 +211,19 @@ export default function AdminDashboard() {
         
         {/* Chart area */}
         <View style={styles.barChartArea}>
-          {data.slice(0, 5).map((item, index) => {
-            const barHeight = maxValue > 0 ? (item.count / roundedMax) * chartHeight : 0;
+          <View style={styles.chartGrid}>
+            {yAxisLabels.map((_, index) => (
+              <View key={index} style={styles.chartGridLine} />
+            ))}
+          </View>
+          {chartData.map((item, index) => {
+            const barHeight = maxValue > 0 ? (item.count / axisMax) * chartHeight : 0;
             return (
               <View key={index} style={styles.barChartItem}>
                 <View style={styles.barWrapper}>
-                  <View style={[styles.bar, { height: Math.max(barHeight, 4) }]} />
+                  <View style={[styles.bar, { height: Math.max(barHeight, 4) }]}>
+                    <View style={styles.barCap} />
+                  </View>
                   <Text style={styles.barCount}>{item.count}</Text>
                 </View>
                 <Text style={styles.barChartLabel} numberOfLines={2}>{item.technique}</Text>
@@ -251,6 +256,10 @@ export default function AdminDashboard() {
   const userOnlineRate = getPercent(data.activeUsersOnline, data.totalActiveUsers);
   const trainerOnlineRate = getPercent(data.activeTrainersOnline, data.activeTrainers);
   const topTechnique = data.topPerformedTechniques[0];
+  const totalTechniqueRuns = data.topPerformedTechniques.reduce((sum, item) => sum + item.count, 0);
+  const topTechniqueShare = totalTechniqueRuns > 0 && topTechnique
+    ? Math.round((topTechnique.count / totalTechniqueRuns) * 100)
+    : 0;
   const registrationSummary = `${formatNumber(data.totalRegistrations)} accounts in total`;
 
   return (
@@ -525,12 +534,29 @@ export default function AdminDashboard() {
               onPressIn={() => handleCardHover(chartScale, true)}
               onPressOut={() => handleCardHover(chartScale, false)}
             >
-              <Text style={styles.chartTitle}>Top Performed Techniques</Text>
-              <Text style={styles.chartSubtitle}>
-                {topTechnique
-                  ? `${topTechnique.technique} leads with ${topTechnique.count} total runs`
-                  : 'No activity captured yet'}
-              </Text>
+              <View style={styles.chartHeaderRow}>
+                <View style={styles.chartTitleGroup}>
+                  <View style={styles.chartTitleRow}>
+                    <Ionicons name="pulse-outline" size={18} color="#8fd8ff" />
+                    <Text style={styles.chartTitle}>Top Performed Techniques</Text>
+                  </View>
+                  <Text style={styles.chartSubtitle}>
+                    {topTechnique
+                      ? `${topTechnique.technique} leads with ${topTechnique.count} runs (${topTechniqueShare}%)`
+                      : 'No activity captured yet'}
+                  </Text>
+                </View>
+                <View style={styles.chartMetricCluster}>
+                  <View style={styles.chartMetricChip}>
+                    <Text style={styles.chartMetricValue}>{totalTechniqueRuns}</Text>
+                    <Text style={styles.chartMetricLabel}>runs</Text>
+                  </View>
+                  <View style={styles.chartMetricChip}>
+                    <Text style={styles.chartMetricValue}>{data.topPerformedTechniques.length}</Text>
+                    <Text style={styles.chartMetricLabel}>techniques</Text>
+                  </View>
+                </View>
+              </View>
               <BarChart data={data.topPerformedTechniques} maxValue={maxTechniqueCount} />
             </TouchableOpacity>
           </Animated.View>
@@ -883,12 +909,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   chartCard: {
-    backgroundColor: '#0f2538',
+    backgroundColor: '#0d2335',
     borderRadius: 20,
     padding: 24,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(107, 180, 216, 0.26)',
+    borderColor: 'rgba(105, 190, 226, 0.3)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -898,69 +924,137 @@ const styles = StyleSheet.create({
   },
   chartTitle: {
     color: '#FFFFFF',
-    fontSize: 19,
+    fontSize: 28,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 0,
     letterSpacing: 0.5,
+  },
+  chartHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+    marginBottom: 14,
+  },
+  chartTitleGroup: {
+    flex: 1,
+    minWidth: 240,
+  },
+  chartTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
   },
   chartSubtitle: {
     color: '#9cbfd1',
-    fontSize: 12,
-    marginBottom: 16,
+    fontSize: 14,
+    marginBottom: 0,
+  },
+  chartMetricCluster: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+  },
+  chartMetricChip: {
+    backgroundColor: 'rgba(143, 216, 255, 0.12)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(143, 216, 255, 0.22)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    minWidth: 82,
+  },
+  chartMetricValue: {
+    color: '#bceeff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  chartMetricLabel: {
+    color: '#8db9ce',
+    fontSize: 11,
+    marginTop: 2,
   },
   chartContainer: {
     flexDirection: 'row',
-    minHeight: 220,
+    minHeight: 190,
   },
   yAxisContainer: {
     justifyContent: 'space-between',
-    paddingRight: 12,
-    paddingBottom: 20,
-    paddingTop: 10,
+    paddingRight: 10,
+    paddingBottom: 26,
+    paddingTop: 2,
   },
   yAxisLabel: {
-    color: '#9cb8c7',
-    fontSize: 12,
+    color: '#88adbf',
+    fontSize: 11,
     fontWeight: '500',
-    height: 40,
+    height: 35,
     textAlign: 'right',
   },
   barChartArea: {
     flex: 1,
+    position: 'relative',
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: 'space-around',
-    paddingBottom: 20,
-    paddingTop: 10,
+    justifyContent: 'space-between',
+    paddingBottom: 26,
+    paddingTop: 2,
+    gap: 10,
+  },
+  chartGrid: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
+    top: 2,
+    bottom: 26,
+  },
+  chartGridLine: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(130, 180, 203, 0.18)',
   },
   barChartItem: {
     alignItems: 'center',
     flex: 1,
+    minWidth: 64,
   },
   barWrapper: {
     alignItems: 'center',
     justifyContent: 'flex-end',
-    height: 200,
-    marginBottom: 8,
+    height: 160,
+    marginBottom: 10,
   },
   bar: {
-    width: 40,
-    backgroundColor: '#58c2ee',
-    borderRadius: 4,
+    width: 50,
+    backgroundColor: '#57bde8',
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
     minHeight: 4,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+  },
+  barCap: {
+    marginTop: 4,
+    width: '66%',
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(196, 241, 255, 0.7)',
   },
   barCount: {
-    color: '#8dd8f8',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
+    color: '#a9e7ff',
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 8,
+    lineHeight: 24,
   },
   barChartLabel: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '500',
+    color: '#d9eef9',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 18,
     textAlign: 'center',
-    maxWidth: 60,
+    maxWidth: 90,
   },
   noDataText: {
     color: '#B0BEC5',
