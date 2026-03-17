@@ -3,29 +3,31 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     Animated,
-    Dimensions,
     Image,
     SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
+    useWindowDimensions,
     View
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import EmptyState from '../../components/admin/EmptyState';
-import LoadingSkeleton from './LoadingSkeleton';
 import { useLogout } from '../../hooks/useLogout';
 import { AnalyticsController, AnalyticsData } from '../controllers/AnalyticsController';
-
-const { width: screenWidth } = Dimensions.get('window');
+import LoadingSkeleton from './LoadingSkeleton';
 
 export default function AdminDashboard() {
   const router = useRouter();
   const handleLogout = useLogout();
+  const { width } = useWindowDimensions();
   const [showMenu, setShowMenu] = useState(false);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const navWidth = width < 680 ? 66 : 80;
+  const contentPadding = navWidth + 20;
   
   // Animation values
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -142,6 +144,13 @@ export default function AdminDashboard() {
     }).format(amount);
   };
 
+  const getPercent = (active: number, total: number): number => {
+    if (!total) {
+      return 0;
+    }
+    return Math.min(100, Math.round((active / total) * 100));
+  };
+
   // Mini Line Chart Component for Total Registrations
   const MiniLineChart = () => {
     // Sample data for the mini chart (12 weeks)
@@ -187,10 +196,11 @@ export default function AdminDashboard() {
 
     // Calculate rounded max for Y-axis (round up to nearest 5)
     const roundedMax = Math.ceil(maxValue / 5) * 5 || 20;
-    const yAxisLabels = [0, 5, 10, 15, 20].filter(val => val <= roundedMax);
+    const yAxisLabels = Array.from({ length: 5 }, (_, index) => {
+      const ratio = 1 - index / 4;
+      return Math.round(roundedMax * ratio);
+    });
     const chartHeight = 200;
-    const barWidth = 60;
-    const spacing = 40;
 
     return (
       <View style={styles.chartContainer}>
@@ -238,12 +248,16 @@ export default function AdminDashboard() {
   const maxTechniqueCount = data.topPerformedTechniques.length > 0
     ? Math.max(...data.topPerformedTechniques.map(t => t.count))
     : 1;
+  const userOnlineRate = getPercent(data.activeUsersOnline, data.totalActiveUsers);
+  const trainerOnlineRate = getPercent(data.activeTrainersOnline, data.activeTrainers);
+  const topTechnique = data.topPerformedTechniques[0];
+  const registrationSummary = `${formatNumber(data.totalRegistrations)} accounts in total`;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         {/* Left Navigation Bar */}
-        <View style={styles.leftNavBar}>
+        <View style={[styles.leftNavBar, { width: navWidth }]}>
           {/* Hamburger Menu */}
           <TouchableOpacity 
             style={styles.navMenuButton}
@@ -281,6 +295,7 @@ export default function AdminDashboard() {
         {/* Header with DEFENDU Logo and Admin */}
         <Animated.View style={[
           styles.header,
+          { paddingLeft: contentPadding },
           {
             opacity: headerAnim,
             transform: [{
@@ -298,12 +313,13 @@ export default function AdminDashboard() {
               resizeMode="contain"
             />
             <Text style={styles.headerAdminText}>Admin</Text>
+            <Text style={styles.headerSubText}>Platform operations and live health</Text>
           </View>
         </Animated.View>
 
         <ScrollView 
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingLeft: contentPadding }]}
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.sectionLabel}>Overview</Text>
@@ -326,6 +342,7 @@ export default function AdminDashboard() {
             ]}>
               <TouchableOpacity
                 style={styles.activeBox}
+                onPress={() => router.push('/(admin)/manage-users')}
                 activeOpacity={1}
                 onPressIn={() => handleCardHover(activeBox1Scale, true)}
                 onPressOut={() => handleCardHover(activeBox1Scale, false)}
@@ -333,7 +350,10 @@ export default function AdminDashboard() {
                 <Text style={styles.activeBoxLabel}>Active Users</Text>
                 <Text style={styles.activeBoxSubLabel}>Individual</Text>
                 <Text style={styles.activeBoxValue}>{data.totalActiveUsers}</Text>
-                <Text style={styles.activeBoxOnline}>{data.activeUsersOnline} Online</Text>
+                <Text style={styles.activeBoxOnline}>{data.activeUsersOnline} Online ({userOnlineRate}%)</Text>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${userOnlineRate}%` }]} />
+                </View>
               </TouchableOpacity>
             </Animated.View>
 
@@ -354,6 +374,7 @@ export default function AdminDashboard() {
             ]}>
               <TouchableOpacity
                 style={styles.activeBox}
+                onPress={() => router.push('/(admin)/manage-trainers')}
                 activeOpacity={1}
                 onPressIn={() => handleCardHover(activeBox2Scale, true)}
                 onPressOut={() => handleCardHover(activeBox2Scale, false)}
@@ -361,7 +382,10 @@ export default function AdminDashboard() {
                 <Text style={styles.activeBoxLabel}>Active Trainers</Text>
                 <Text style={styles.activeBoxSubLabel}>Verified</Text>
                 <Text style={styles.activeBoxValue}>{data.activeTrainers}</Text>
-                <Text style={styles.activeBoxOnline}>{data.activeTrainersOnline} Online</Text>
+                <Text style={styles.activeBoxOnline}>{data.activeTrainersOnline} Online ({trainerOnlineRate}%)</Text>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${trainerOnlineRate}%` }]} />
+                </View>
               </TouchableOpacity>
             </Animated.View>
           </View>
@@ -386,6 +410,7 @@ export default function AdminDashboard() {
             ]}>
               <TouchableOpacity
                 style={styles.kpiCard}
+                onPress={() => router.push('/(admin)/manage-users')}
                 activeOpacity={1}
                 onPressIn={() => handleCardHover(kpiCard1Scale, true)}
                 onPressOut={() => handleCardHover(kpiCard1Scale, false)}
@@ -394,7 +419,7 @@ export default function AdminDashboard() {
                   <Text style={styles.kpiTitle}>Total Registrations</Text>
                 </View>
                 <Text style={styles.kpiValue}>{formatNumber(data.totalRegistrations)}</Text>
-                <Text style={styles.kpiSubtext}>Online</Text>
+                <Text style={styles.kpiSubtext}>{registrationSummary}</Text>
                 <View style={styles.kpiTrend}>
                   <Ionicons name="trending-up" size={14} color="#4CAF50" />
                   <Text style={styles.kpiTrendText}>+15% this month</Text>
@@ -423,6 +448,7 @@ export default function AdminDashboard() {
             ]}>
               <TouchableOpacity
                 style={styles.kpiCard}
+                onPress={() => router.push('/(admin)/manage-trainers')}
                 activeOpacity={1}
                 onPressIn={() => handleCardHover(kpiCard2Scale, true)}
                 onPressOut={() => handleCardHover(kpiCard2Scale, false)}
@@ -432,7 +458,11 @@ export default function AdminDashboard() {
                   <Text style={styles.kpiTitle}>Verifications</Text>
                 </View>
                 <Text style={styles.kpiValue}>{data.pendingTrainerVerifications}</Text>
-                <Text style={styles.kpiSubtext}>Applications</Text>
+                <Text style={styles.kpiSubtext}>Applications awaiting review</Text>
+                <View style={styles.warningPill}>
+                  <Ionicons name="time-outline" size={14} color="#ffb454" />
+                  <Text style={styles.warningPillText}>Queue is active</Text>
+                </View>
               </TouchableOpacity>
             </Animated.View>
 
@@ -454,6 +484,7 @@ export default function AdminDashboard() {
             ]}>
               <TouchableOpacity
                 style={styles.kpiCard}
+                onPress={() => router.push('/(admin)/manage-modules')}
                 activeOpacity={1}
                 onPressIn={() => handleCardHover(kpiCard3Scale, true)}
                 onPressOut={() => handleCardHover(kpiCard3Scale, false)}
@@ -463,7 +494,11 @@ export default function AdminDashboard() {
                   <Text style={styles.kpiTitle}>Reviews</Text>
                 </View>
                 <Text style={styles.kpiValue}>{data.pendingModuleReviews}</Text>
-                <Text style={styles.kpiSubtext}>New Modules</Text>
+                <Text style={styles.kpiSubtext}>New modules awaiting approval</Text>
+                <View style={styles.infoPill}>
+                  <Ionicons name="checkmark-done-outline" size={14} color="#9be6b3" />
+                  <Text style={styles.infoPillText}>Keep SLA under 24h</Text>
+                </View>
               </TouchableOpacity>
             </Animated.View>
           </View>
@@ -491,6 +526,11 @@ export default function AdminDashboard() {
               onPressOut={() => handleCardHover(chartScale, false)}
             >
               <Text style={styles.chartTitle}>Top Performed Techniques</Text>
+              <Text style={styles.chartSubtitle}>
+                {topTechnique
+                  ? `${topTechnique.technique} leads with ${topTechnique.count} total runs`
+                  : 'No activity captured yet'}
+              </Text>
               <BarChart data={data.topPerformedTechniques} maxValue={maxTechniqueCount} />
             </TouchableOpacity>
           </Animated.View>
@@ -598,14 +638,15 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 80,
-    backgroundColor: '#000E1C',
+    backgroundColor: '#071321',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 20,
+    paddingTop: 18,
     paddingBottom: 30,
     zIndex: 10,
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(122, 183, 211, 0.18)',
   },
   navMenuButton: {
     padding: 12,
@@ -616,11 +657,11 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   navIconsBox: {
-    backgroundColor: 'rgba(56, 166, 222, 0.1)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(61, 145, 185, 0.14)',
+    borderRadius: 14,
     padding: 8,
     borderWidth: 1,
-    borderColor: 'rgba(56, 166, 222, 0.2)',
+    borderColor: 'rgba(138, 205, 235, 0.24)',
     flexDirection: 'column',
     gap: 12,
     alignItems: 'center',
@@ -629,7 +670,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingLeft: 100,
-    paddingRight: 20,
+    paddingRight: 18,
     paddingTop: 20,
     paddingBottom: 12,
   },
@@ -642,9 +683,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerAdminText: {
-    color: '#FFFFFF',
+    color: '#f7fbff',
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  headerSubText: {
+    color: '#8db1c4',
+    fontSize: 12,
+    marginTop: 3,
+    letterSpacing: 0.3,
   },
   navIconButton: {
     width: 48,
@@ -667,7 +714,7 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   navIconActiveButton: {
-    backgroundColor: '#024446',
+    backgroundColor: 'rgba(41, 125, 167, 0.35)',
     borderRadius: 8,
     padding: 8,
     width: '100%',
@@ -678,11 +725,12 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingLeft: 100,
-    paddingRight: 20,
+    paddingRight: 18,
     paddingBottom: 100,
   },
   activeBoxesRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 16,
     marginBottom: 24,
   },
@@ -696,11 +744,12 @@ const styles = StyleSheet.create({
   },
   activeBox: {
     flex: 1,
-    backgroundColor: '#0D1C2C',
-    borderRadius: 12,
-    padding: 16,
+    minWidth: 240,
+    backgroundColor: '#0f2133',
+    borderRadius: 16,
+    padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(56, 166, 222, 0.2)',
+    borderColor: 'rgba(103, 177, 214, 0.28)',
     cursor: 'pointer',
   },
   activeBoxLabel: {
@@ -715,28 +764,42 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   activeBoxValue: {
-    color: '#38a6de',
-    fontSize: 28,
+    color: '#8fd8ff',
+    fontSize: 30,
     fontWeight: '700',
     marginBottom: 4,
   },
   activeBoxOnline: {
-    color: '#4CAF50',
+    color: '#8ad79f',
     fontSize: 12,
     fontWeight: '500',
+    marginBottom: 10,
+  },
+  progressTrack: {
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#4dc7b4',
   },
   kpiRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 16,
     marginBottom: 24,
   },
   kpiCard: {
     flex: 1,
-    backgroundColor: '#0D1C2C',
-    borderRadius: 12,
-    padding: 16,
+    minWidth: 220,
+    backgroundColor: '#11273d',
+    borderRadius: 16,
+    padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(56, 166, 222, 0.2)',
+    borderColor: 'rgba(99, 171, 206, 0.25)',
     minHeight: 180,
     cursor: 'pointer',
   },
@@ -750,10 +813,10 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   kpiValue: {
-    color: '#38a6de',
-    fontSize: 24,
+    color: '#9be0ff',
+    fontSize: 28,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   kpiSubtext: {
     color: '#B0BEC5',
@@ -767,9 +830,41 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   kpiTrendText: {
-    color: '#4CAF50',
+    color: '#9de7b4',
     fontSize: 11,
     fontWeight: '500',
+  },
+  warningPill: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 180, 84, 0.12)',
+  },
+  warningPillText: {
+    color: '#ffd08c',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  infoPill: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(94, 194, 139, 0.16)',
+  },
+  infoPillText: {
+    color: '#b6f1ca',
+    fontSize: 11,
+    fontWeight: '600',
   },
   kpiChartContainer: {
     marginTop: 8,
@@ -788,12 +883,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   chartCard: {
-    backgroundColor: 'rgba(30, 30, 30, 0.8)',
+    backgroundColor: '#0f2538',
     borderRadius: 20,
     padding: 24,
     marginBottom: 24,
-    borderWidth: 2,
-    borderColor: 'rgba(56, 166, 222, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(107, 180, 216, 0.26)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -803,10 +898,15 @@ const styles = StyleSheet.create({
   },
   chartTitle: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '700',
-    marginBottom: 20,
+    marginBottom: 6,
     letterSpacing: 0.5,
+  },
+  chartSubtitle: {
+    color: '#9cbfd1',
+    fontSize: 12,
+    marginBottom: 16,
   },
   chartContainer: {
     flexDirection: 'row',
@@ -819,7 +919,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   yAxisLabel: {
-    color: '#B0BEC5',
+    color: '#9cb8c7',
     fontSize: 12,
     fontWeight: '500',
     height: 40,
@@ -845,12 +945,12 @@ const styles = StyleSheet.create({
   },
   bar: {
     width: 40,
-    backgroundColor: '#38a6de',
+    backgroundColor: '#58c2ee',
     borderRadius: 4,
     minHeight: 4,
   },
   barCount: {
-    color: '#38a6de',
+    color: '#8dd8f8',
     fontSize: 12,
     fontWeight: '600',
     marginTop: 4,
@@ -871,12 +971,12 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   revenueCard: {
-    backgroundColor: '#0D1C2C',
+    backgroundColor: '#15283b',
     borderRadius: 20,
     padding: 24,
     marginBottom: 24,
-    borderWidth: 2,
-    borderColor: 'rgba(156, 39, 176, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(102, 196, 188, 0.28)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -931,7 +1031,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   revenueAmount: {
-    color: '#9C27B0',
+    color: '#6ad9c6',
     fontSize: 16,
     fontWeight: '600',
   },
