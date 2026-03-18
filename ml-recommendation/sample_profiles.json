@@ -1,0 +1,37 @@
+[
+  {
+    "uid": "user1",
+    "physicalAttributes": { "height": 175, "weight": 70, "age": 28, "gender": "Male" },
+    "preferences": { "preferredTechnique": ["Punching", "Kicking"], "trainingGoal": ["Personal Safety", "Fitness"] },
+    "pastExperience": { "experienceLevel": "Complete Beginner", "martialArtsBackground": [], "previousTrainingDetails": "None" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "1-2 times per week" }
+  },
+  {
+    "uid": "user2",
+    "physicalAttributes": { "height": 165, "weight": 58, "age": 24, "gender": "Female" },
+    "preferences": { "preferredTechnique": ["Defensive Moves", "Palm Strikes"], "trainingGoal": ["Personal Safety", "Confidence Building"] },
+    "pastExperience": { "experienceLevel": "Some Experience", "martialArtsBackground": ["Krav Maga"], "previousTrainingDetails": "1-6 months" },
+    "fitnessCapabilities": { "currentFitnessLevel": "High", "trainingFrequency": "3-4 times per week" }
+  },
+  {
+    "uid": "user3",
+    "physicalAttributes": { "height": 180, "weight": 82, "age": 35, "gender": "Male" },
+    "preferences": { "preferredTechnique": ["Punching", "Elbow Strikes", "Knee Strikes"], "trainingGoal": ["Fitness"] },
+    "pastExperience": { "experienceLevel": "Experienced", "martialArtsBackground": ["Muay Thai", "Boxing"], "previousTrainingDetails": "3-5 years" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Athlete", "trainingFrequency": "Daily" }
+  },
+  {
+    "uid": "user4",
+    "physicalAttributes": { "height": 170, "weight": 65, "age": 22, "gender": "Male" },
+    "preferences": { "preferredTechnique": ["Kicking", "Punching"], "trainingGoal": ["Personal Safety", "Fitness"] },
+    "pastExperience": { "experienceLevel": "Complete Beginner", "martialArtsBackground": [], "previousTrainingDetails": "None" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Low", "trainingFrequency": "Never" }
+  },
+  {
+    "uid": "user5",
+    "physicalAttributes": { "height": 160, "weight": 55, "age": 30, "gender": "Female" },
+    "preferences": { "preferredTechnique": ["Defensive Moves"], "trainingGoal": ["Personal Safety", "Confidence Building"] },
+    "pastExperience": { "experienceLevel": "Some Experience", "martialArtsBackground": ["Aikido"], "previousTrainingDetails": "7-12 months" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "1-2 times per week" }
+  }
+]

@@ -1,0 +1,142 @@
+[
+  {
+    "uid": "profile_injury_knee",
+    "physicalAttributes": { "height": 172, "weight": 78, "age": 45, "gender": "Male", "limitations": "Chronic knee injury, avoid high impact and jumping" },
+    "preferences": { "preferredTechnique": ["Punching", "Palm Strikes", "Defensive Moves"], "trainingGoal": ["Fitness", "Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Some Experience", "martialArtsBackground": ["Karate"], "previousTrainingDetails": "1-2 years" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "1-2 times per week", "injuries": "Knee pain, doctor advised low impact" }
+  },
+  {
+    "uid": "profile_adaptive_no_legs",
+    "physicalAttributes": { "height": 165, "weight": 70, "age": 32, "gender": "Male", "limitations": "No use of legs, wheelchair user, upper body only" },
+    "preferences": { "preferredTechnique": ["Punching", "Palm Strikes", "Elbow Strikes"], "trainingGoal": ["Personal Safety", "Confidence Building"] },
+    "pastExperience": { "experienceLevel": "Complete Beginner", "martialArtsBackground": [], "previousTrainingDetails": "None" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "3-4 times per week", "injuries": null }
+  },
+  {
+    "uid": "profile_adaptive_no_arms",
+    "physicalAttributes": { "height": 178, "weight": 82, "age": 28, "gender": "Male", "limitations": "No use of arms, lower body and evasion only" },
+    "preferences": { "preferredTechnique": ["Kicking", "Defensive Moves"], "trainingGoal": ["Personal Safety", "Fitness", "Confidence Building"] },
+    "pastExperience": { "experienceLevel": "Some Experience", "martialArtsBackground": ["Taekwondo (TKD)"], "previousTrainingDetails": "7-12 months" },
+    "fitnessCapabilities": { "currentFitnessLevel": "High", "trainingFrequency": "3-4 times per week", "injuries": null }
+  },
+  {
+    "uid": "profile_adaptive_limited_both",
+    "physicalAttributes": { "height": 160, "weight": 55, "age": 38, "gender": "Female", "limitations": "Limited mobility in both arms and legs, need seated or minimal-movement options" },
+    "preferences": { "preferredTechnique": ["Defensive Moves", "Palm Strikes"], "trainingGoal": ["Confidence Building", "Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Complete Beginner", "martialArtsBackground": [], "previousTrainingDetails": "None" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Low", "trainingFrequency": "Never", "injuries": "Multiple joint limitations" }
+  },
+  {
+    "uid": "profile_injury_back",
+    "physicalAttributes": { "height": 175, "weight": 88, "age": 52, "gender": "Male", "limitations": "Lower back pain, avoid heavy twisting and impact" },
+    "preferences": { "preferredTechnique": ["Punching", "Defensive Moves"], "trainingGoal": ["Fitness", "Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Experienced", "martialArtsBackground": ["Boxing", "Krav Maga"], "previousTrainingDetails": "3-5 years" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "1-2 times per week", "injuries": "Chronic lower back strain" }
+  },
+  {
+    "uid": "profile_injury_shoulder",
+    "physicalAttributes": { "height": 168, "weight": 65, "age": 35, "gender": "Female", "limitations": "Recovering from shoulder surgery, limited overhead and heavy pushing" },
+    "preferences": { "preferredTechnique": ["Kicking", "Defensive Moves", "Knee Strikes"], "trainingGoal": ["Fitness", "Confidence Building"] },
+    "pastExperience": { "experienceLevel": "Some Experience", "martialArtsBackground": ["Kickboxing"], "previousTrainingDetails": "1-2 years" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "1-2 times per week", "injuries": "Shoulder rehab, avoid heavy upper body" }
+  },
+  {
+    "uid": "profile_young_athlete_muaythai",
+    "physicalAttributes": { "height": 180, "weight": 75, "age": 22, "gender": "Male", "limitations": null },
+    "preferences": { "preferredTechnique": ["Punching", "Kicking", "Knee Strikes", "Elbow Strikes"], "trainingGoal": ["Fitness", "Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Some Experience", "martialArtsBackground": ["Muay Thai"], "previousTrainingDetails": "1-2 years" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Athlete", "trainingFrequency": "Daily", "injuries": null }
+  },
+  {
+    "uid": "profile_older_safety_krav",
+    "physicalAttributes": { "height": 170, "weight": 72, "age": 58, "gender": "Male", "limitations": "Prefer standing techniques, no ground work" },
+    "preferences": { "preferredTechnique": ["Defensive Moves", "Palm Strikes", "Punching"], "trainingGoal": ["Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Experienced", "martialArtsBackground": ["Krav Maga"], "previousTrainingDetails": "5-10 years" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "1-2 times per week", "injuries": null }
+  },
+  {
+    "uid": "profile_beginner_no_limits",
+    "physicalAttributes": { "height": 165, "weight": 60, "age": 25, "gender": "Female", "limitations": null },
+    "preferences": { "preferredTechnique": ["Punching", "Kicking", "Defensive Moves"], "trainingGoal": ["Personal Safety", "Fitness", "Confidence Building"] },
+    "pastExperience": { "experienceLevel": "Complete Beginner", "martialArtsBackground": [], "previousTrainingDetails": "None" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "1-2 times per week", "injuries": null }
+  },
+  {
+    "uid": "profile_woman_selfdefense",
+    "physicalAttributes": { "height": 162, "weight": 58, "age": 30, "gender": "Female", "limitations": null },
+    "preferences": { "preferredTechnique": ["Defensive Moves", "Punching", "Palm Strikes"], "trainingGoal": ["Personal Safety", "Confidence Building"] },
+    "pastExperience": { "experienceLevel": "Complete Beginner", "martialArtsBackground": [], "previousTrainingDetails": "None" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Low", "trainingFrequency": "Never", "injuries": null }
+  },
+  {
+    "uid": "profile_bjj_fan",
+    "physicalAttributes": { "height": 178, "weight": 85, "age": 26, "gender": "Male", "limitations": null },
+    "preferences": { "preferredTechnique": ["Defensive Moves", "Knee Strikes"], "trainingGoal": ["Fitness", "Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Experienced", "martialArtsBackground": ["Brazilian Jiu-Jitsu (BJJ)", "Judo"], "previousTrainingDetails": "3-5 years" },
+    "fitnessCapabilities": { "currentFitnessLevel": "High", "trainingFrequency": "3-4 times per week", "injuries": null }
+  },
+  {
+    "uid": "profile_boxing_only",
+    "physicalAttributes": { "height": 175, "weight": 70, "age": 29, "gender": "Male", "limitations": null },
+    "preferences": { "preferredTechnique": ["Punching"], "trainingGoal": ["Fitness", "Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Some Experience", "martialArtsBackground": ["Boxing"], "previousTrainingDetails": "1-2 years" },
+    "fitnessCapabilities": { "currentFitnessLevel": "High", "trainingFrequency": "3-4 times per week", "injuries": null }
+  },
+  {
+    "uid": "profile_sedentary_starter",
+    "physicalAttributes": { "height": 182, "weight": 95, "age": 42, "gender": "Male", "limitations": null },
+    "preferences": { "preferredTechnique": ["Punching", "Defensive Moves"], "trainingGoal": ["Personal Safety", "Fitness"] },
+    "pastExperience": { "experienceLevel": "Complete Beginner", "martialArtsBackground": [], "previousTrainingDetails": "None" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Low", "trainingFrequency": "Never", "injuries": null }
+  },
+  {
+    "uid": "profile_karate_kids_parent",
+    "physicalAttributes": { "height": 168, "weight": 62, "age": 36, "gender": "Female", "limitations": null },
+    "preferences": { "preferredTechnique": ["Kicking", "Punching", "Defensive Moves"], "trainingGoal": ["Fitness", "Confidence Building"] },
+    "pastExperience": { "experienceLevel": "Some Experience", "martialArtsBackground": ["Karate", "Taekwondo (TKD)"], "previousTrainingDetails": "7-12 months" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "1-2 times per week", "injuries": null }
+  },
+  {
+    "uid": "profile_expert_instructor",
+    "physicalAttributes": { "height": 176, "weight": 80, "age": 44, "gender": "Male", "limitations": null },
+    "preferences": { "preferredTechnique": ["Punching", "Kicking", "Elbow Strikes", "Knee Strikes", "Defensive Moves"], "trainingGoal": ["Fitness", "Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Expert/Instructor", "martialArtsBackground": ["MMA (Mixed Martial Arts)", "Muay Thai", "Boxing"], "previousTrainingDetails": "Over 10 years" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Athlete", "trainingFrequency": "Daily", "injuries": null }
+  },
+  {
+    "uid": "profile_asthma_moderate",
+    "physicalAttributes": { "height": 170, "weight": 68, "age": 27, "gender": "Other", "limitations": "Asthma, need to pace intensity" },
+    "preferences": { "preferredTechnique": ["Palm Strikes", "Defensive Moves"], "trainingGoal": ["Confidence Building", "Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Complete Beginner", "martialArtsBackground": [], "previousTrainingDetails": "None" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Low", "trainingFrequency": "Never", "injuries": "Asthma, avoid very high intensity" }
+  },
+  {
+    "uid": "profile_wheelchair_upper",
+    "physicalAttributes": { "height": 170, "weight": 72, "age": 34, "gender": "Male", "limitations": "Wheelchair user, upper body and core only, no standing" },
+    "preferences": { "preferredTechnique": ["Punching", "Elbow Strikes", "Palm Strikes"], "trainingGoal": ["Personal Safety", "Fitness", "Confidence Building"] },
+    "pastExperience": { "experienceLevel": "Some Experience", "martialArtsBackground": ["Boxing"], "previousTrainingDetails": "1-6 months" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "3-4 times per week", "injuries": null }
+  },
+  {
+    "uid": "profile_taekwondo_learner",
+    "physicalAttributes": { "height": 158, "weight": 52, "age": 19, "gender": "Female", "limitations": null },
+    "preferences": { "preferredTechnique": ["Kicking", "Punching"], "trainingGoal": ["Fitness", "Confidence Building"] },
+    "pastExperience": { "experienceLevel": "Complete Beginner", "martialArtsBackground": [], "previousTrainingDetails": "None" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Moderate", "trainingFrequency": "1-2 times per week", "injuries": null }
+  },
+  {
+    "uid": "profile_mma_enthusiast",
+    "physicalAttributes": { "height": 180, "weight": 82, "age": 24, "gender": "Male", "limitations": null },
+    "preferences": { "preferredTechnique": ["Punching", "Kicking", "Elbow Strikes", "Knee Strikes", "Defensive Moves"], "trainingGoal": ["Fitness", "Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Experienced", "martialArtsBackground": ["MMA (Mixed Martial Arts)", "Brazilian Jiu-Jitsu (BJJ)"], "previousTrainingDetails": "3-5 years" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Athlete", "trainingFrequency": "Daily", "injuries": null }
+  },
+  {
+    "uid": "profile_senior_confidence",
+    "physicalAttributes": { "height": 165, "weight": 70, "age": 65, "gender": "Female", "limitations": "Arthritis in hands, prefer low-impact and balance work" },
+    "preferences": { "preferredTechnique": ["Defensive Moves", "Palm Strikes"], "trainingGoal": ["Confidence Building", "Personal Safety"] },
+    "pastExperience": { "experienceLevel": "Complete Beginner", "martialArtsBackground": [], "previousTrainingDetails": "None" },
+    "fitnessCapabilities": { "currentFitnessLevel": "Low", "trainingFrequency": "Never", "injuries": "Arthritis, avoid heavy impact on hands" }
+  }
+]

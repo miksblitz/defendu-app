@@ -1,0 +1,27 @@
+{
+  "input_dim": 53,
+  "latent_dim": 32,
+  "num_profiles_trained": 20,
+  "uids": [
+    "profile_injury_knee",
+    "profile_adaptive_no_legs",
+    "profile_adaptive_no_arms",
+    "profile_adaptive_limited_both",
+    "profile_injury_back",
+    "profile_injury_shoulder",
+    "profile_young_athlete_muaythai",
+    "profile_older_safety_krav",
+    "profile_beginner_no_limits",
+    "profile_woman_selfdefense",
+    "profile_bjj_fan",
+    "profile_boxing_only",
+    "profile_sedentary_starter",
+    "profile_karate_kids_parent",
+    "profile_expert_instructor",
+    "profile_asthma_moderate",
+    "profile_wheelchair_upper",
+    "profile_taekwondo_learner",
+    "profile_mma_enthusiast",
+    "profile_senior_confidence"
+  ]
+}

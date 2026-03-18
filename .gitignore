@@ -1,0 +1,29 @@
+.DS_Store
+Thumbs.db
+
+# Node / Expo
+**/node_modules/
+**/.expo/
+**/.expo-shared/
+**/dist/
+**/build/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/venv/
+**/.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Env / secrets
+**/.env
+**/.env.*
+
+# Explicit secret files
+defendu-app/API KEYS.txt
+**/*API KEYS*.txt
+

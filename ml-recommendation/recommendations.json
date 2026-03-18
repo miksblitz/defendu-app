@@ -1,0 +1,202 @@
+{
+  "profile_injury_knee": {
+    "similarUserIds": [
+      "profile_older_safety_krav",
+      "profile_injury_back",
+      "profile_karate_kids_parent",
+      "profile_mma_enthusiast",
+      "profile_injury_shoulder"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_adaptive_no_legs": {
+    "similarUserIds": [
+      "profile_expert_instructor",
+      "profile_mma_enthusiast",
+      "profile_young_athlete_muaythai",
+      "profile_older_safety_krav",
+      "profile_boxing_only"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_adaptive_no_arms": {
+    "similarUserIds": [
+      "profile_karate_kids_parent",
+      "profile_young_athlete_muaythai",
+      "profile_older_safety_krav",
+      "profile_injury_shoulder",
+      "profile_bjj_fan"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_adaptive_limited_both": {
+    "similarUserIds": [
+      "profile_expert_instructor",
+      "profile_woman_selfdefense",
+      "profile_asthma_moderate",
+      "profile_senior_confidence",
+      "profile_sedentary_starter"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_injury_back": {
+    "similarUserIds": [
+      "profile_older_safety_krav",
+      "profile_injury_knee",
+      "profile_karate_kids_parent",
+      "profile_mma_enthusiast",
+      "profile_bjj_fan"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_injury_shoulder": {
+    "similarUserIds": [
+      "profile_karate_kids_parent",
+      "profile_expert_instructor",
+      "profile_adaptive_no_arms",
+      "profile_injury_back",
+      "profile_older_safety_krav"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_young_athlete_muaythai": {
+    "similarUserIds": [
+      "profile_expert_instructor",
+      "profile_mma_enthusiast",
+      "profile_boxing_only",
+      "profile_adaptive_no_arms",
+      "profile_older_safety_krav"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_older_safety_krav": {
+    "similarUserIds": [
+      "profile_injury_back",
+      "profile_injury_knee",
+      "profile_bjj_fan",
+      "profile_mma_enthusiast",
+      "profile_karate_kids_parent"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_beginner_no_limits": {
+    "similarUserIds": [
+      "profile_karate_kids_parent",
+      "profile_expert_instructor",
+      "profile_taekwondo_learner",
+      "profile_mma_enthusiast",
+      "profile_young_athlete_muaythai"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_woman_selfdefense": {
+    "similarUserIds": [
+      "profile_expert_instructor",
+      "profile_adaptive_limited_both",
+      "profile_senior_confidence",
+      "profile_asthma_moderate",
+      "profile_karate_kids_parent"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_bjj_fan": {
+    "similarUserIds": [
+      "profile_older_safety_krav",
+      "profile_mma_enthusiast",
+      "profile_injury_back",
+      "profile_adaptive_no_arms",
+      "profile_expert_instructor"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_boxing_only": {
+    "similarUserIds": [
+      "profile_expert_instructor",
+      "profile_mma_enthusiast",
+      "profile_young_athlete_muaythai",
+      "profile_adaptive_no_legs",
+      "profile_wheelchair_upper"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_sedentary_starter": {
+    "similarUserIds": [
+      "profile_mma_enthusiast",
+      "profile_expert_instructor",
+      "profile_woman_selfdefense",
+      "profile_young_athlete_muaythai",
+      "profile_asthma_moderate"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_karate_kids_parent": {
+    "similarUserIds": [
+      "profile_injury_shoulder",
+      "profile_adaptive_no_arms",
+      "profile_injury_back",
+      "profile_injury_knee",
+      "profile_older_safety_krav"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_expert_instructor": {
+    "similarUserIds": [
+      "profile_mma_enthusiast",
+      "profile_young_athlete_muaythai",
+      "profile_boxing_only",
+      "profile_adaptive_no_legs",
+      "profile_woman_selfdefense"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_asthma_moderate": {
+    "similarUserIds": [
+      "profile_woman_selfdefense",
+      "profile_senior_confidence",
+      "profile_adaptive_limited_both",
+      "profile_sedentary_starter",
+      "profile_expert_instructor"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_wheelchair_upper": {
+    "similarUserIds": [
+      "profile_adaptive_no_arms",
+      "profile_boxing_only",
+      "profile_karate_kids_parent",
+      "profile_expert_instructor",
+      "profile_young_athlete_muaythai"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_taekwondo_learner": {
+    "similarUserIds": [
+      "profile_karate_kids_parent",
+      "profile_expert_instructor",
+      "profile_injury_shoulder",
+      "profile_beginner_no_limits",
+      "profile_mma_enthusiast"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_mma_enthusiast": {
+    "similarUserIds": [
+      "profile_expert_instructor",
+      "profile_young_athlete_muaythai",
+      "profile_older_safety_krav",
+      "profile_injury_back",
+      "profile_boxing_only"
+    ],
+    "recommendedModuleIds": []
+  },
+  "profile_senior_confidence": {
+    "similarUserIds": [
+      "profile_woman_selfdefense",
+      "profile_expert_instructor",
+      "profile_asthma_moderate",
+      "profile_adaptive_limited_both",
+      "profile_sedentary_starter"
+    ],
+    "recommendedModuleIds": []
+  }
+}
