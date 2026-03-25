@@ -7,7 +7,7 @@ import {
   FitnessCapabilities,
   SkillProfile,
 } from '../_models/SkillProfile';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 
 interface SkillProfileContextType {
   physicalAttributes: PhysicalAttributes | null;

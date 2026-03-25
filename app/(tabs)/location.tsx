@@ -14,7 +14,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 
 export default function LocationPage() {
   const router = useRouter();

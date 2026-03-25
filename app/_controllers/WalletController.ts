@@ -3,7 +3,7 @@ import { get, push, ref, set, update } from 'firebase/database';
 import { CREDITS_PER_USE, FREE_USAGE_LIMITS } from '../../constants/credits';
 import { Module } from '../_models/Module';
 import { ModuleUsage, PaymentMethod, Wallet, WalletTransaction } from '../_models/Wallet';
-import { auth, db } from '../config/firebaseConfig';
+import { auth, db } from '../_config/firebaseConfig';
 
 export class WalletController {
   // ---------- Auth helper ----------

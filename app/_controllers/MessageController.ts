@@ -1,5 +1,5 @@
 import { ref, get, set, update, push, onValue, off } from 'firebase/database';
-import { db } from '../config/firebaseConfig';
+import { db } from '../_config/firebaseConfig';
 
 export interface MessageAttachment {
   url: string;

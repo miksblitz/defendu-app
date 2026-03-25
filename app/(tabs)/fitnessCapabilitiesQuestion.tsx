@@ -15,8 +15,8 @@ import {
   FontAwesome,
 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useSkillProfile } from '../contexts/SkillProfileContext';
-import { AuthController } from '../controllers/AuthController';
+import { useSkillProfile } from '../_contexts/SkillProfileContext';
+import { AuthController } from '../_controllers/AuthController';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 

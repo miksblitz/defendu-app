@@ -2,9 +2,9 @@
 import { useCallback } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { AuthController } from '../app/controllers/AuthController';
+import { AuthController } from '../app/_controllers/AuthController';
 import { OfflineStorage } from '../app/_utils/offlineStorage';
-import { useLogoutContext } from '../app/contexts/LogoutContext';
+import { useLogoutContext } from '../app/_contexts/LogoutContext';
 
 /**
  * Returns a function that shows "Are you sure you want to log out?" (Yes/No),

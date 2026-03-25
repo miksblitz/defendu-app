@@ -16,7 +16,7 @@ import { SkillProfile } from '../_models/SkillProfile';
 import { TrainerApplication } from '../_models/TrainerApplication';
 import { ForgotPasswordData, LoginData, RegisterData, User } from '../_models/User';
 import { SEED_TEST_MODULES } from '../_seed/testModules';
-import { auth, cloudinaryConfig, db } from '../config/firebaseConfig';
+import { auth, cloudinaryConfig, db } from '../_config/firebaseConfig';
 import { MessageController } from './MessageController';
 
 export class AuthController {

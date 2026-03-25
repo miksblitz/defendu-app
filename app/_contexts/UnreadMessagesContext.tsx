@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AuthController } from '../controllers/AuthController';
-import { MessageController } from '../controllers/MessageController';
+import { AuthController } from '../_controllers/AuthController';
+import { MessageController } from '../_controllers/MessageController';
 
 const STORAGE_KEY = 'messagesLastReadAt';
 const MAX_BADGE = 99;

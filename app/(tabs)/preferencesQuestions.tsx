@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useSkillProfile } from '../contexts/SkillProfileContext';
-import { AuthController } from '../controllers/AuthController';
+import { useSkillProfile } from '../_contexts/SkillProfileContext';
+import { AuthController } from '../_controllers/AuthController';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 

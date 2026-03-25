@@ -18,8 +18,8 @@ import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { TrainerApplication } from '../_models/TrainerApplication';
 import { User } from '../_models/User';
-import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
-import { AuthController } from '../controllers/AuthController';
+import { useUnreadMessages } from '../_contexts/UnreadMessagesContext';
+import { AuthController } from '../_controllers/AuthController';
 
 interface TrainerWithData extends User {
   applicationData?: TrainerApplication | null;

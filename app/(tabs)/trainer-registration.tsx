@@ -14,13 +14,13 @@ import {
     useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 import { TrainerApplication } from '../_models/TrainerApplication';
 import * as DocumentPicker from 'expo-document-picker';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
-import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { useUnreadMessages } from '../_contexts/UnreadMessagesContext';
 
 const MOBILE_BREAKPOINT = 768;
 

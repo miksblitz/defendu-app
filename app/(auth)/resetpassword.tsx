@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
-import { auth } from '../config/firebaseConfig';
+import { auth } from '../_config/firebaseConfig';
 
 export default function ResetPasswordScreen() {
   const [password, setPassword] = useState('');

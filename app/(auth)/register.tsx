@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 
 export default function SignUpScreen() {
   const [form, setForm] = useState({

@@ -17,7 +17,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 import { Module } from '../_models/Module';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';

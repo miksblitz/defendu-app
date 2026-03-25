@@ -14,8 +14,8 @@ import {
 } from 'react-native';
 import { formatCredits } from '../../constants/credits';
 import { useLogout } from '../../hooks/useLogout';
-import { AuthController } from '../controllers/AuthController';
-import { WalletController } from '../controllers/WalletController';
+import { AuthController } from '../_controllers/AuthController';
+import { WalletController } from '../_controllers/WalletController';
 
 export default function SettingsPage() {
   const router = useRouter();

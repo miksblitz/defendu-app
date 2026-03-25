@@ -19,18 +19,18 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 import { User } from '../_models/User';
 import {
   MessageController,
   ConversationSummary,
   ChatMessage,
   MessageAttachment,
-} from '../controllers/MessageController';
+} from '../_controllers/MessageController';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
-import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { useUnreadMessages } from '../_contexts/UnreadMessagesContext';
 
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_CHATS = 150;

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { formatPHP } from '../../constants/credits';
 import { WalletTransaction } from '../_models/Wallet';
-import { WalletController } from '../controllers/WalletController';
+import { WalletController } from '../_controllers/WalletController';
 
 export default function TransactionHistoryPage() {
   const router = useRouter();

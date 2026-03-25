@@ -24,7 +24,7 @@ import Toast from '../../components/Toast';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { TrainerApplication } from '../_models/TrainerApplication';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 
 type ExtendedTrainerApplication = TrainerApplication & { 
   firstName?: string; 

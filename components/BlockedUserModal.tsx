@@ -8,7 +8,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { AuthController } from '../app/controllers/AuthController';
+import { AuthController } from '../app/_controllers/AuthController';
 
 interface BlockedUserModalProps {
   visible: boolean;

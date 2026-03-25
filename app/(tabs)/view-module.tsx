@@ -22,9 +22,9 @@ import { formatCredits, getDifficultyColor, getDifficultyLabel } from '../../con
 import { useLogout } from '../../hooks/useLogout';
 import { Module } from '../_models/Module';
 import { ModuleReview } from '../_models/ModuleReview';
-import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
-import { AuthController } from '../controllers/AuthController';
-import { WalletController } from '../controllers/WalletController';
+import { useUnreadMessages } from '../_contexts/UnreadMessagesContext';
+import { AuthController } from '../_controllers/AuthController';
+import { WalletController } from '../_controllers/WalletController';
 
 type Step = 'intro' | 'safety' | 'video' | 'tryIt' | 'complete';
 

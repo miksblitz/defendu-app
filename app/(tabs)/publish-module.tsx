@@ -22,8 +22,8 @@ import Toast from '../../components/Toast';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { Module } from '../_models/Module';
-import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
-import { AuthController } from '../controllers/AuthController';
+import { useUnreadMessages } from '../_contexts/UnreadMessagesContext';
+import { AuthController } from '../_controllers/AuthController';
 
 interface UploadedFile {
   name: string;

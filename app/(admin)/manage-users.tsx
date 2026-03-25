@@ -21,7 +21,7 @@ import SearchInput from '../../components/admin/SearchInput';
 import StatusBadge from '../../components/admin/StatusBadge';
 import { useLogout } from '../../hooks/useLogout';
 import { User } from '../_models/User';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 
 const PAGE_SIZE = 12;
 

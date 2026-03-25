@@ -16,11 +16,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
-import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { useUnreadMessages } from '../_contexts/UnreadMessagesContext';
 
 export default function EditProfilePage() {
   const [username, setUsername] = useState('@');

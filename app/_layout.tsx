@@ -2,10 +2,10 @@
 import { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { SkillProfileProvider } from './contexts/SkillProfileContext';
-import { LogoutProvider } from './contexts/LogoutContext';
-import { UnreadMessagesProvider } from './contexts/UnreadMessagesContext';
-import { AuthController } from './controllers/AuthController';
+import { SkillProfileProvider } from './_contexts/SkillProfileContext';
+import { LogoutProvider } from './_contexts/LogoutContext';
+import { UnreadMessagesProvider } from './_contexts/UnreadMessagesContext';
+import { AuthController } from './_controllers/AuthController';
 import BlockedUserModal from '../components/BlockedUserModal';
 
 export default function RootLayout() {

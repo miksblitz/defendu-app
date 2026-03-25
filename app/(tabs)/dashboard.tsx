@@ -16,8 +16,8 @@ import {
 import Svg, { Circle } from 'react-native-svg';
 import { useLogout } from '../../hooks/useLogout';
 import { Module } from '../_models/Module';
-import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
-import { AuthController } from '../controllers/AuthController';
+import { useUnreadMessages } from '../_contexts/UnreadMessagesContext';
+import { AuthController } from '../_controllers/AuthController';
 
 const circleSize = 40;
 const strokeWidth = 4;

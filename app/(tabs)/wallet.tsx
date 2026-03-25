@@ -15,7 +15,7 @@ import {
 import WalletCard from '../../components/WalletCard';
 import { CREDITS_PER_USE, formatCredits, FREE_USAGE_LIMITS, getDifficultyColor, getDifficultyLabel } from '../../constants/credits';
 import { Wallet, WalletTransaction } from '../_models/Wallet';
-import { WalletController } from '../controllers/WalletController';
+import { WalletController } from '../_controllers/WalletController';
 
 export default function WalletPage() {
   const router = useRouter();

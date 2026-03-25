@@ -1,7 +1,7 @@
 // app/contexts/LogoutContext.tsx
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 import { OfflineStorage } from '../_utils/offlineStorage';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 

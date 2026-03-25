@@ -15,7 +15,7 @@ import {
 import Svg, { Polyline } from 'react-native-svg';
 import EmptyState from '../../components/admin/EmptyState';
 import { useLogout } from '../../hooks/useLogout';
-import { AnalyticsController, AnalyticsData } from '../controllers/AnalyticsController';
+import { AnalyticsController, AnalyticsData } from '../_controllers/AnalyticsController';
 import LoadingSkeleton from './LoadingSkeleton';
 
 export default function AdminDashboard() {

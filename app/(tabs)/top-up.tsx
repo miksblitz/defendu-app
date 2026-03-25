@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { formatCredits, formatPHP, TOP_UP_PACKAGES } from '../../constants/credits';
 import { PaymentMethod, TopUpPackage } from '../_models/Wallet';
-import { WalletController } from '../controllers/WalletController';
+import { WalletController } from '../_controllers/WalletController';
 
 const PAYMENT_METHODS: { id: PaymentMethod; label: string; icon: string; color: string }[] = [
   { id: 'gcash', label: 'GCash', icon: 'phone-portrait-outline', color: '#007DFE' },

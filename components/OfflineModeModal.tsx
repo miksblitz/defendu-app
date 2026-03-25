@@ -10,7 +10,7 @@ import {
     View,
 } from 'react-native';
 import { OfflineStorage } from '../app/_utils/offlineStorage';
-import { AuthController } from '../app/controllers/AuthController';
+import { AuthController } from '../app/_controllers/AuthController';
 
 interface OfflineModeModalProps {
   visible: boolean;

@@ -12,12 +12,12 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 import { TrainerApplication } from '../_models/TrainerApplication';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
-import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { useUnreadMessages } from '../_contexts/UnreadMessagesContext';
 
 // Belt-based martial arts
 const beltBasedMartialArts = [

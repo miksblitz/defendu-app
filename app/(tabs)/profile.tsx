@@ -19,9 +19,9 @@ import OfflineModeModal from '../../components/OfflineModeModal';
 import WalletCard from '../../components/WalletCard';
 import { useLogout } from '../../hooks/useLogout';
 import { OfflineStorage } from '../_utils/offlineStorage';
-import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
-import { AuthController } from '../controllers/AuthController';
-import { WalletController } from '../controllers/WalletController';
+import { useUnreadMessages } from '../_contexts/UnreadMessagesContext';
+import { AuthController } from '../_controllers/AuthController';
+import { WalletController } from '../_controllers/WalletController';
 
 const PRIVACY_URL = 'https://defendu.com/privacy';
 const TERMS_URL = 'https://defendu.com/terms';

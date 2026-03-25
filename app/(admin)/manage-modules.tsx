@@ -27,7 +27,7 @@ import Toast from '../../components/Toast';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { Module } from '../_models/Module';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController } from '../_controllers/AuthController';
 
 const MODULE_CATEGORIES = [
   { label: 'All', value: 'All' },

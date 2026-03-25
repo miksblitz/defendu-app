@@ -1,6 +1,6 @@
 // controllers/AnalyticsController.ts
 import { ref, get } from 'firebase/database';
-import { db } from '../config/firebaseConfig';
+import { db } from '../_config/firebaseConfig';
 import { User } from '../_models/User';
 
 export interface AnalyticsData {
