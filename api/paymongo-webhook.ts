@@ -3,8 +3,8 @@
 // Adds signature validation and idempotent credit application.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as admin from 'firebase-admin';
 import crypto from 'crypto';
+import * as admin from 'firebase-admin';
 
 let adminApp: admin.app.App | null = null;
 
