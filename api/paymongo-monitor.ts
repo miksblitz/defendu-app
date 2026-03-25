@@ -64,11 +64,13 @@ function getAuthToken(req: VercelRequest): string {
   return direct;
 }
 
-function isAuthorized(req: VercelRequest): boolean {
-  const monitorKey = process.env.PAYMONGO_MONITOR_KEY;
-  if (!monitorKey) return false;
+function checkAuthorization(req: VercelRequest): { ok: boolean; reason?: string } {
+  const monitorKey = (process.env.PAYMONGO_MONITOR_KEY || '').trim();
+  if (!monitorKey) return { ok: false, reason: 'missing_server_monitor_key' };
   const token = getAuthToken(req);
-  return token.length > 0 && token === monitorKey;
+  if (!token) return { ok: false, reason: 'missing_client_token' };
+  if (token !== monitorKey) return { ok: false, reason: 'token_mismatch' };
+  return { ok: true };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -79,8 +81,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  if (!isAuthorized(req)) {
-    return res.status(401).json({ error: 'Unauthorized monitor access' });
+  const auth = checkAuthorization(req);
+  if (!auth.ok) {
+    return res.status(401).json({ error: 'Unauthorized monitor access', reason: auth.reason });
   }
 
   try {
