@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const pendingData = pendingSnap.val();
-    if (pendingData.status === 'completed') {
+    if (pendingData.status === 'completed' || pendingData.status === 'processing') {
       return res.redirect(302, 'defenduapp://wallet?status=already_processed');
     }
 
@@ -125,6 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Mark pending payment as completed
     await pendingRef.update({
       status: 'completed',
+      completedBy: 'callback',
       completedAt: admin.database.ServerValue.TIMESTAMP,
     });
 

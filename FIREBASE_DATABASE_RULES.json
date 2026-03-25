@@ -119,6 +119,12 @@
         ".read": "$uid === auth.uid",
         ".write": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin')"
       }
+    },
+    "paymongoWebhookEvents": {
+      "$eventId": {
+        ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      }
     }
   }
 }
