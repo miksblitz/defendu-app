@@ -5,6 +5,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import * as admin from 'firebase-admin';
+import {
+  REQUIRED_WEBHOOK_ENV_VARS,
+  validateEnvVars,
+  getMissingEnvResponse,
+} from './_lib/envConfig';
 
 let adminApp: admin.app.App | null = null;
 
@@ -149,12 +154,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY;
-  const paymongoWebhookSecret = process.env.PAYMONGO_WEBHOOK_SECRET;
-
-  if (!paymongoSecretKey || !paymongoWebhookSecret) {
-    return res.status(500).json({ error: 'Webhook environment not configured' });
+  // Strict validation for all required webhook env vars
+  const envValidation = validateEnvVars(REQUIRED_WEBHOOK_ENV_VARS);
+  if (!envValidation.valid) {
+    return res.status(503).json(getMissingEnvResponse(envValidation.missing));
   }
+
+  const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY!;
+  const paymongoWebhookSecret = process.env.PAYMONGO_WEBHOOK_SECRET!;
 
   try {
     // 1) Signature validation

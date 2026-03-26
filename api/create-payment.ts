@@ -4,6 +4,11 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
+import {
+  REQUIRED_PAYMENT_ENV_VARS,
+  validateEnvVars,
+  getMissingEnvResponse,
+} from './_lib/envConfig';
 
 let adminApp: admin.app.App | null = null;
 
@@ -42,10 +47,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY;
-  if (!paymongoSecretKey) {
-    return res.status(500).json({ error: 'Payment service not configured' });
+  // Strict validation for all required payment env vars
+  const envValidation = validateEnvVars(REQUIRED_PAYMENT_ENV_VARS);
+  if (!envValidation.valid) {
+    return res.status(503).json(getMissingEnvResponse(envValidation.missing));
   }
+
+  const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY!;
 
   try {
     const { uid, credits, pricePHP, paymentMethod } = req.body;

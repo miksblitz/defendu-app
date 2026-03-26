@@ -4,6 +4,10 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
+import {
+  REQUIRED_PAYMENT_ENV_VARS,
+  validateEnvVars,
+} from './_lib/envConfig';
 
 let adminApp: admin.app.App | null = null;
 
@@ -34,6 +38,13 @@ function getAdminApp(): admin.app.App {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
+  // Strict validation for all required payment env vars
+  const envValidation = validateEnvVars(REQUIRED_PAYMENT_ENV_VARS);
+  if (!envValidation.valid) {
+    console.error('Missing env vars:', envValidation.missing.join(', '));
+    return res.redirect(302, 'defenduapp://wallet?status=config_error');
+  }
+
   try {
     const { uid, credits, session_id } = req.query;
 
@@ -49,10 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).send('Invalid credits amount');
     }
 
-    const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY;
-    if (!paymongoSecretKey) {
-      return res.status(500).send('Payment service not configured');
-    }
+    const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY!;
 
     // Verify the payment session with PayMongo
     const verifyResponse = await fetch(`https://api.paymongo.com/v1/checkout_sessions/${sessionIdStr}`, {

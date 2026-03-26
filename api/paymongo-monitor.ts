@@ -4,6 +4,13 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
+import {
+  REQUIRED_MONITOR_ENV_VARS,
+  validateEnvVars,
+  getMissingEnvResponse,
+  getReadinessReport,
+  hasEnvVar,
+} from './_lib/envConfig';
 
 let adminApp: admin.app.App | null = null;
 
@@ -86,19 +93,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized monitor access', reason: auth.reason });
   }
 
+  // Validate required monitor env vars before Firebase access
+  const envValidation = validateEnvVars(REQUIRED_MONITOR_ENV_VARS);
+  if (!envValidation.valid) {
+    // Still return readiness report even if Firebase can't be accessed
+    const readiness = getReadinessReport();
+    return res.status(503).json({
+      ...getMissingEnvResponse(envValidation.missing),
+      readiness,
+    });
+  }
+
   try {
     const dbAdmin = admin.database(getAdminApp());
     const limit = parseLimit(req.query.limit);
     const uid = parseUid(req.query.uid);
 
-    // Setup checklist flags (booleans only, never return secret values)
+    // Comprehensive readiness report using centralized config
+    const readiness = getReadinessReport();
+
+    // Legacy checklist format for backwards compatibility
     const checklist = {
-      hasPaymongoSecretKey: Boolean(process.env.PAYMONGO_SECRET_KEY),
-      hasPaymongoWebhookSecret: Boolean(process.env.PAYMONGO_WEBHOOK_SECRET),
-      hasMonitorKey: Boolean(process.env.PAYMONGO_MONITOR_KEY),
-      hasAppBaseUrl: Boolean(process.env.APP_BASE_URL),
-      hasFirebaseServiceAccount: Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_KEY_BASE64),
-      hasFirebaseDatabaseUrl: Boolean(process.env.FIREBASE_DATABASE_URL),
+      hasPaymongoSecretKey: hasEnvVar('PAYMONGO_SECRET_KEY'),
+      hasPaymongoWebhookSecret: hasEnvVar('PAYMONGO_WEBHOOK_SECRET'),
+      hasMonitorKey: hasEnvVar('PAYMONGO_MONITOR_KEY'),
+      hasAppBaseUrl: hasEnvVar('APP_BASE_URL'),
+      hasFirebaseServiceAccount: hasEnvVar('FIREBASE_SERVICE_ACCOUNT_KEY_BASE64'),
+      hasFirebaseDatabaseUrl: hasEnvVar('FIREBASE_DATABASE_URL'),
     };
 
     // Recent webhook events
@@ -144,6 +165,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       ok: true,
       generatedAt: Date.now(),
+      readiness,
       checklist,
       usage: {
         tip: 'Pass ?uid=<firebase_uid> to include pending payment snapshots for a specific user.',
