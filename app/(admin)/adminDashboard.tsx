@@ -503,7 +503,9 @@ export default function AdminDashboard() {
                   <Text style={styles.kpiTitle}>Reviews</Text>
                 </View>
                 <Text style={styles.kpiValue}>{data.pendingModuleReviews}</Text>
-                <Text style={styles.kpiSubtext}>New modules awaiting approval</Text>
+                <Text style={styles.kpiSubtext}>
+                  {data.approvedModules} approved of {data.totalModules} total
+                </Text>
                 <View style={styles.infoPill}>
                   <Ionicons name="checkmark-done-outline" size={14} color="#9be6b3" />
                   <Text style={styles.infoPillText}>Keep SLA under 24h</Text>

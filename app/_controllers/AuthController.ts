@@ -10,13 +10,13 @@ import {
     updatePassword,
 } from 'firebase/auth';
 import { get, off, onValue, ref, remove, set, update } from 'firebase/database';
+import { auth, cloudinaryConfig, db } from '../_config/firebaseConfig';
 import { Module } from '../_models/Module';
 import { ModuleReview } from '../_models/ModuleReview';
 import { SkillProfile } from '../_models/SkillProfile';
 import { TrainerApplication } from '../_models/TrainerApplication';
 import { ForgotPasswordData, LoginData, RegisterData, User } from '../_models/User';
 import { SEED_TEST_MODULES } from '../_seed/testModules';
-import { auth, cloudinaryConfig, db } from '../_config/firebaseConfig';
 import { MessageController } from './MessageController';
 
 export class AuthController {
@@ -1170,6 +1170,7 @@ export class AuthController {
       physicalDemandTags?: string[];
       repRange?: string;
       trainingDurationSeconds?: number;
+      sortOrder?: number;
     }
   ): Promise<void> {
     try {
@@ -1198,6 +1199,9 @@ export class AuthController {
       if (updates.repRange !== undefined) patch.repRange = updates.repRange || null;
       if (updates.trainingDurationSeconds !== undefined) {
         patch.trainingDurationSeconds = updates.trainingDurationSeconds ?? null;
+      }
+      if (updates.sortOrder !== undefined) {
+        patch.sortOrder = updates.sortOrder;
       }
       if (Object.keys(patch).length === 0) return;
 

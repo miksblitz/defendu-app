@@ -1,7 +1,6 @@
 // controllers/AnalyticsController.ts
-import { ref, get } from 'firebase/database';
+import { get, ref } from 'firebase/database';
 import { db } from '../_config/firebaseConfig';
-import { User } from '../_models/User';
 
 export interface AnalyticsData {
   totalActiveUsers: number;
@@ -11,6 +10,8 @@ export interface AnalyticsData {
   totalRegistrations: number;
   pendingTrainerVerifications: number;
   pendingModuleReviews: number;
+  totalModules: number;
+  approvedModules: number;
   topPerformedTechniques: { technique: string; count: number }[];
   revenue: {
     totalRevenue: number;
@@ -140,9 +141,31 @@ export class AnalyticsController {
         .sort((a, b) => b.count - a.count)
         .slice(0, 5); // Top 5
 
-      // Check for pending module reviews (placeholder - would need modules collection)
-      // For now, we'll use a placeholder value
-      const pendingModuleReviews = 0; // TODO: Implement when modules collection exists
+      // Get pending module reviews count and total modules
+      let pendingModuleReviews = 0;
+      let totalModules = 0;
+      let approvedModules = 0;
+      try {
+        const modulesRef = ref(db, 'modules');
+        const modulesSnapshot = await get(modulesRef);
+        if (modulesSnapshot.exists()) {
+          const modulesData = modulesSnapshot.val();
+          for (const moduleId in modulesData) {
+            if (!modulesData.hasOwnProperty(moduleId)) continue;
+            const moduleData = modulesData[moduleId];
+            if (moduleData) {
+              totalModules++;
+              if (moduleData.status === 'pending review') {
+                pendingModuleReviews++;
+              } else if (moduleData.status === 'approved') {
+                approvedModules++;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch pending modules:', err);
+      }
 
       // Calculate if profitable (assuming operational costs)
       const estimatedMonthlyCosts = 500; // Placeholder for server costs, etc.
@@ -156,6 +179,8 @@ export class AnalyticsController {
         totalRegistrations,
         pendingTrainerVerifications,
         pendingModuleReviews,
+        totalModules,
+        approvedModules,
         topPerformedTechniques,
         revenue: {
           totalRevenue,
@@ -179,6 +204,8 @@ export class AnalyticsController {
       totalRegistrations: 0,
       pendingTrainerVerifications: 0,
       pendingModuleReviews: 0,
+      totalModules: 0,
+      approvedModules: 0,
       topPerformedTechniques: [],
       revenue: {
         totalRevenue: 0,

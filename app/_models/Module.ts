@@ -24,7 +24,10 @@ export interface Module {
   
   // AI Training Specifications
   intensityLevel: number; // 1-5
+  sortOrder?: number; // Admin-controlled sort order for display
   spaceRequirements: string[]; // Selected space requirements
+  warmupExercises?: string[]; // Recommended warmup exercises
+  cooldownExercises?: string[]; // Recommended cooldown stretches
   physicalDemandTags: string[]; // Selected physical demand tags
   repRange?: string; // e.g. "4-6", "8-10", "12", "15"
   trainingDurationSeconds?: number; // e.g. 30, 60, 120, ... 900 (15 min)

@@ -20,7 +20,8 @@ export interface TrainerApplication {
   yearsOfTeaching: string;
   currentRank?: string;
   aboutMe?: string;
-  
+  aboutMeImageUrl?: string; // Trainer profile image/headshot
+
   // Social Media Links
   facebookLink?: string;
   instagramLink?: string;

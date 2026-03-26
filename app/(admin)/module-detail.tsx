@@ -1,27 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  ActivityIndicator,
-  Image,
-  TextInput,
-  Modal,
-  Linking,
-  Share,
-  Platform,
-} from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import Toast from '../../components/Toast';
+import { useLogout } from '../../hooks/useLogout';
+import { useToast } from '../../hooks/useToast';
 import { AuthController } from '../_controllers/AuthController';
 import { Module } from '../_models/Module';
-import Toast from '../../components/Toast';
-import { useToast } from '../../hooks/useToast';
-import { useLogout } from '../../hooks/useLogout';
 
 /** Slug for extract output filename: alphanumeric only (e.g. "Jab fundamentals" -> "Jabfundamentals"). */
 function slugForExtract(s: string): string {
@@ -96,6 +96,7 @@ export default function ModuleDetailPage() {
   const [editIntensity, setEditIntensity] = useState<number>(1);
   const [editSpaceRequirements, setEditSpaceRequirements] = useState<string[]>([]);
   const [editPhysicalDemandTags, setEditPhysicalDemandTags] = useState<string[]>([]);
+  const [editSortOrder, setEditSortOrder] = useState<number | undefined>(undefined);
 
   const deletionReasons = [
     'Inappropriate content',
@@ -123,6 +124,7 @@ export default function ModuleDetailPage() {
       setEditIntensity(module.intensityLevel || 1);
       setEditSpaceRequirements(module.spaceRequirements || []);
       setEditPhysicalDemandTags(module.physicalDemandTags || []);
+      setEditSortOrder(module.sortOrder);
       if (module.status !== 'approved') setIsEditing(false);
     }
   }, [module]);
@@ -227,6 +229,7 @@ export default function ModuleDetailPage() {
         intensityLevel: editIntensity,
         spaceRequirements: editSpaceRequirements,
         physicalDemandTags: editPhysicalDemandTags,
+        sortOrder: editSortOrder,
       });
       const updated: Module = {
         ...module,
@@ -236,6 +239,7 @@ export default function ModuleDetailPage() {
         intensityLevel: editIntensity,
         spaceRequirements: editSpaceRequirements,
         physicalDemandTags: editPhysicalDemandTags,
+        sortOrder: editSortOrder,
         updatedAt: new Date(),
       };
       setModule(updated);
@@ -570,6 +574,33 @@ export default function ModuleDetailPage() {
                 <Text style={styles.intensityEditText}>{editIntensity}/5</Text>
               </View>
 
+              <Text style={styles.editLabel}>Sort Order (lower = appears first)</Text>
+              <View style={styles.sortOrderEditRow}>
+                <TouchableOpacity
+                  style={styles.sortOrderButton}
+                  onPress={() => setEditSortOrder((prev) => Math.max(0, (prev ?? 0) - 1))}
+                >
+                  <Ionicons name="remove" size={18} color="#38a6de" />
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.sortOrderInput}
+                  value={editSortOrder?.toString() ?? ''}
+                  onChangeText={(text) => {
+                    const num = parseInt(text, 10);
+                    setEditSortOrder(isNaN(num) ? undefined : Math.max(0, num));
+                  }}
+                  keyboardType="numeric"
+                  placeholder="Auto"
+                  placeholderTextColor="#6b8693"
+                />
+                <TouchableOpacity
+                  style={styles.sortOrderButton}
+                  onPress={() => setEditSortOrder((prev) => (prev ?? 0) + 1)}
+                >
+                  <Ionicons name="add" size={18} color="#38a6de" />
+                </TouchableOpacity>
+              </View>
+
               <Text style={styles.editLabel}>Space Requirements</Text>
               <View style={styles.tagsRow}>
                 {['Stationary', 'Arm/Leg Span (Medium Space)', 'Mobility (Large Space)'].map(
@@ -778,6 +809,13 @@ export default function ModuleDetailPage() {
                 ))}
                 <Text style={styles.intensityText}>{module.intensityLevel}/5</Text>
               </View>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Sort Order:</Text>
+              <Text style={styles.infoValue}>
+                {module.sortOrder !== undefined ? module.sortOrder : 'Auto (not set)'}
+              </Text>
             </View>
 
             {module.spaceRequirements && module.spaceRequirements.length > 0 && (
@@ -1338,6 +1376,35 @@ const styles = StyleSheet.create({
     color: '#38a6de',
     fontSize: 14,
     marginLeft: 4,
+  },
+  sortOrderEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+    gap: 8,
+  },
+  sortOrderButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(56, 166, 222, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sortOrderInput: {
+    width: 80,
+    height: 36,
+    backgroundColor: '#1a2332',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.4)',
+    color: '#FFFFFF',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
   tagsRow: {
     flexDirection: 'row',

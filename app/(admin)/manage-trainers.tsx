@@ -23,8 +23,8 @@ import StatusBadge from '../../components/admin/StatusBadge';
 import Toast from '../../components/Toast';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
-import { TrainerApplication } from '../_models/TrainerApplication';
 import { AuthController } from '../_controllers/AuthController';
+import { TrainerApplication } from '../_models/TrainerApplication';
 
 type ExtendedTrainerApplication = TrainerApplication & { 
   firstName?: string; 
@@ -433,48 +433,72 @@ export default function ManageTrainersPage() {
                 </View>
               </View>
 
+              {/* About Me Section */}
+              {(selectedApplication.aboutMe || selectedApplication.aboutMeImageUrl) && (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>About Me</Text>
+                  <View style={styles.detailInfoContainer}>
+                    {selectedApplication.aboutMeImageUrl && (
+                      <TouchableOpacity
+                        onPress={() => { if (typeof window !== 'undefined') window.open(selectedApplication.aboutMeImageUrl, '_blank'); }}
+                        style={styles.aboutMeImageContainer}
+                      >
+                        <Image
+                          source={{ uri: selectedApplication.aboutMeImageUrl }}
+                          style={styles.aboutMeImage}
+                          resizeMode="cover"
+                        />
+                      </TouchableOpacity>
+                    )}
+                    {selectedApplication.aboutMe && (
+                      <Text style={styles.detailValue}>{selectedApplication.aboutMe}</Text>
+                    )}
+                  </View>
+                </View>
+              )}
+
               {/* Personal Information */}
               <View style={styles.detailSection}>
                 <Text style={styles.detailSectionTitle}>Personal Information</Text>
                 <View style={styles.detailInfoContainer}>
                   <Text style={styles.detailLabel}>FULL LEGAL NAME:</Text>
                   <Text style={styles.detailValue}>{selectedApplication.fullLegalName || `${selectedApplication.firstName} ${selectedApplication.lastName}`}</Text>
-                  
+
                   {selectedApplication.professionalAlias && (
                     <>
                       <Text style={styles.detailLabel}>PROFESSIONAL ALIAS:</Text>
                       <Text style={styles.detailValue}>{selectedApplication.professionalAlias}</Text>
                     </>
                   )}
-                  
+
                   {selectedApplication.dateOfBirth && (
                     <>
                       <Text style={styles.detailLabel}>DATE OF BIRTH:</Text>
                       <Text style={styles.detailValue}>{selectedApplication.dateOfBirth}</Text>
                     </>
                   )}
-                  
+
                   {selectedApplication.phone && (
                     <>
                       <Text style={styles.detailLabel}>PHONE:</Text>
                       <Text style={styles.detailValue}>{selectedApplication.phone}</Text>
                     </>
                   )}
-                  
+
                   <Text style={styles.detailLabel}>EMAIL:</Text>
                   <Text style={styles.detailValue}>{selectedApplication.email}</Text>
-                  
+
                   {selectedApplication.academyName && (
                     <>
                       <Text style={styles.detailLabel}>ACADEMY NAME:</Text>
                       <Text style={styles.detailValue}>{selectedApplication.academyName}</Text>
                     </>
                   )}
-                  
-                  {selectedApplication.address && (
+
+                  {selectedApplication.physicalAddress && (
                     <>
                       <Text style={styles.detailLabel}>ADDRESS:</Text>
-                      <Text style={styles.detailValue}>{selectedApplication.address}</Text>
+                      <Text style={styles.detailValue}>{selectedApplication.physicalAddress}</Text>
                     </>
                   )}
                 </View>
@@ -484,58 +508,74 @@ export default function ManageTrainersPage() {
               <View style={styles.detailSection}>
                 <Text style={styles.detailSectionTitle}>Credentials & Certifications</Text>
                 <View style={styles.detailInfoContainer}>
-                  {selectedApplication.primaryStyle && (
+                  {selectedApplication.defenseStyles && selectedApplication.defenseStyles.length > 0 && (
                     <>
-                      <Text style={styles.detailLabel}>PRIMARY STYLE:</Text>
-                      <Text style={styles.detailValue}>{selectedApplication.primaryStyle}</Text>
+                      <Text style={styles.detailLabel}>DEFENSE STYLES / MARTIAL ARTS:</Text>
+                      <View style={styles.tagsContainer}>
+                        {selectedApplication.defenseStyles.map((style, index) => (
+                          <View key={index} style={styles.styleTag}>
+                            <Text style={styles.styleTagText}>{style}</Text>
+                          </View>
+                        ))}
+                      </View>
                     </>
                   )}
-                  
-                  {selectedApplication.yearsOfExperience !== undefined && (
+
+                  {selectedApplication.yearsOfExperience && (
                     <>
                       <Text style={styles.detailLabel}>YEARS OF EXPERIENCE:</Text>
                       <Text style={styles.detailValue}>{selectedApplication.yearsOfExperience} years</Text>
                     </>
                   )}
-                  
-                  {selectedApplication.certificationBody && (
+
+                  {selectedApplication.yearsOfTeaching && (
                     <>
-                      <Text style={styles.detailLabel}>CERTIFICATION BODY:</Text>
-                      <Text style={styles.detailValue}>{selectedApplication.certificationBody}</Text>
+                      <Text style={styles.detailLabel}>YEARS OF TEACHING:</Text>
+                      <Text style={styles.detailValue}>{selectedApplication.yearsOfTeaching} years</Text>
                     </>
                   )}
-                  
-                  {selectedApplication.certificationNumber && (
+
+                  {selectedApplication.currentRank && (
                     <>
-                      <Text style={styles.detailLabel}>CERTIFICATION NUMBER:</Text>
-                      <Text style={styles.detailValue}>{selectedApplication.certificationNumber}</Text>
-                    </>
-                  )}
-                  
-                  {selectedApplication.certificationDate && (
-                    <>
-                      <Text style={styles.detailLabel}>CERTIFICATION DATE:</Text>
-                      <Text style={styles.detailValue}>{formatDate(selectedApplication.certificationDate)}</Text>
-                    </>
-                  )}
-                  
-                  {selectedApplication.expirationDate && (
-                    <>
-                      <Text style={styles.detailLabel}>EXPIRATION DATE:</Text>
-                      <Text style={styles.detailValue}>{formatDate(selectedApplication.expirationDate)}</Text>
+                      <Text style={styles.detailLabel}>CURRENT RANK:</Text>
+                      <Text style={styles.detailValue}>{selectedApplication.currentRank}</Text>
                     </>
                   )}
                 </View>
               </View>
 
-              {/* Additional Certifications */}
-              {selectedApplication.additionalCertifications && selectedApplication.additionalCertifications.length > 0 && (
+              {/* Social Media Links */}
+              {(selectedApplication.facebookLink || selectedApplication.instagramLink || selectedApplication.otherLink) && (
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>ADDITIONAL CERTIFICATIONS:</Text>
+                  <Text style={styles.detailSectionTitle}>Social Media</Text>
                   <View style={styles.detailInfoContainer}>
-                    {selectedApplication.additionalCertifications.map((cert, index) => (
-                      <Text key={index} style={styles.detailBulletPoint}>- {cert}</Text>
-                    ))}
+                    {selectedApplication.facebookLink && (
+                      <TouchableOpacity
+                        onPress={() => { if (typeof window !== 'undefined') window.open(selectedApplication.facebookLink, '_blank'); }}
+                        style={styles.socialLinkButton}
+                      >
+                        <Ionicons name="logo-facebook" size={18} color="#38a6de" />
+                        <Text style={styles.socialLinkText}>Facebook Profile</Text>
+                      </TouchableOpacity>
+                    )}
+                    {selectedApplication.instagramLink && (
+                      <TouchableOpacity
+                        onPress={() => { if (typeof window !== 'undefined') window.open(selectedApplication.instagramLink, '_blank'); }}
+                        style={styles.socialLinkButton}
+                      >
+                        <Ionicons name="logo-instagram" size={18} color="#38a6de" />
+                        <Text style={styles.socialLinkText}>Instagram Profile</Text>
+                      </TouchableOpacity>
+                    )}
+                    {selectedApplication.otherLink && (
+                      <TouchableOpacity
+                        onPress={() => { if (typeof window !== 'undefined') window.open(selectedApplication.otherLink, '_blank'); }}
+                        style={styles.socialLinkButton}
+                      >
+                        <Ionicons name="link" size={18} color="#38a6de" />
+                        <Text style={styles.socialLinkText}>Other Link</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               )}
@@ -548,14 +588,24 @@ export default function ManageTrainersPage() {
                   {selectedApplication.uploadedFiles && selectedApplication.uploadedFiles.length > 0 ? (
                     <View style={styles.detailInfoContainer}>
                       {selectedApplication.uploadedFiles.map((file, index) => (
-                        <TouchableOpacity key={index} style={styles.fileItem}>
-                          <Ionicons 
-                            name={file.type === 'pdf' ? 'document-text' : 'image'} 
-                            size={20} 
-                            color="#38a6de" 
+                        <TouchableOpacity
+                          key={index}
+                          style={styles.fileItem}
+                          onPress={() => { if (typeof window !== 'undefined' && file.uri) window.open(file.uri, '_blank'); }}
+                        >
+                          <Ionicons
+                            name={file.type?.includes('pdf') ? 'document-text' : file.type?.includes('image') ? 'image' : 'document'}
+                            size={20}
+                            color="#38a6de"
                             style={styles.fileIcon}
                           />
-                          <Text style={styles.fileName}>{file.name}</Text>
+                          <View style={styles.fileInfo}>
+                            <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
+                            {file.size && (
+                              <Text style={styles.fileSize}>{(file.size / 1024).toFixed(1)} KB</Text>
+                            )}
+                          </View>
+                          <Ionicons name="open-outline" size={16} color="#6b8693" />
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -566,18 +616,48 @@ export default function ManageTrainersPage() {
 
                 {/* Background Questions */}
                 <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Background Check</Text>
                   <View style={styles.detailInfoContainer}>
                     <View style={styles.questionRow}>
                       <Text style={styles.detailLabel}>HAVE YOU EVER HAD CREDENTIALS REVOKED?</Text>
-                      <Text style={styles.detailValue}>
-                        {selectedApplication.credentialsRevoked ? 'Yes' : 'No'}
+                      <Text style={[styles.detailValue, selectedApplication.credentialsRevoked === 'yes' && styles.warningText]}>
+                        {selectedApplication.credentialsRevoked === 'yes' ? 'Yes' : selectedApplication.credentialsRevoked === 'no' ? 'No' : 'Not answered'}
                       </Text>
+                      {selectedApplication.credentialsRevoked === 'yes' && selectedApplication.credentialsRevokedExplanation && (
+                        <Text style={styles.explanationText}>Explanation: {selectedApplication.credentialsRevokedExplanation}</Text>
+                      )}
                     </View>
                     <View style={styles.questionRow}>
                       <Text style={styles.detailLabel}>HAVE YOU BEEN CONVICTED OF A FELONY?</Text>
-                      <Text style={styles.detailValue}>
-                        {selectedApplication.felonyConviction ? 'Yes' : 'No'}
+                      <Text style={[styles.detailValue, selectedApplication.felonyConviction === 'yes' && styles.warningText]}>
+                        {selectedApplication.felonyConviction === 'yes' ? 'Yes' : selectedApplication.felonyConviction === 'no' ? 'No' : 'Not answered'}
                       </Text>
+                      {selectedApplication.felonyConviction === 'yes' && selectedApplication.felonyExplanation && (
+                        <Text style={styles.explanationText}>Explanation: {selectedApplication.felonyExplanation}</Text>
+                      )}
+                    </View>
+                  </View>
+                </View>
+
+                {/* Certifications Agreement */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Agreements</Text>
+                  <View style={styles.detailInfoContainer}>
+                    <View style={styles.agreementRow}>
+                      <Ionicons
+                        name={selectedApplication.certifyAccurate ? 'checkmark-circle' : 'close-circle'}
+                        size={18}
+                        color={selectedApplication.certifyAccurate ? '#43d17f' : '#ff6c61'}
+                      />
+                      <Text style={styles.agreementText}>Certified information is accurate</Text>
+                    </View>
+                    <View style={styles.agreementRow}>
+                      <Ionicons
+                        name={selectedApplication.agreeConduct ? 'checkmark-circle' : 'close-circle'}
+                        size={18}
+                        color={selectedApplication.agreeConduct ? '#43d17f' : '#ff6c61'}
+                      />
+                      <Text style={styles.agreementText}>Agreed to code of conduct</Text>
                     </View>
                   </View>
                 </View>
@@ -1233,6 +1313,83 @@ const styles = StyleSheet.create({
   },
   questionRow: {
     marginBottom: 12,
+  },
+  // New styles for enhanced trainer detail view
+  aboutMeImageContainer: {
+    marginBottom: 12,
+  },
+  aboutMeImage: {
+    width: '100%',
+    maxWidth: 300,
+    height: 200,
+    borderRadius: 8,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  styleTag: {
+    backgroundColor: 'rgba(56, 166, 222, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.4)',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  styleTagText: {
+    color: '#67bce9',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  socialLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(56, 166, 222, 0.1)',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  socialLinkText: {
+    color: '#38a6de',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  fileInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  fileSize: {
+    color: '#6b8693',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  warningText: {
+    color: '#ff6c61',
+    fontWeight: '600',
+  },
+  explanationText: {
+    color: '#a9c0cb',
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginTop: 4,
+    paddingLeft: 8,
+    borderLeftWidth: 2,
+    borderLeftColor: 'rgba(255, 108, 97, 0.4)',
+  },
+  agreementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  agreementText: {
+    color: '#d6efff',
+    fontSize: 14,
   },
   detailActions: {
     flexDirection: 'row',

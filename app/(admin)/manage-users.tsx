@@ -17,11 +17,25 @@ import AdminTable, {
     AdminTableColumn,
     AdminTableSortState,
 } from '../../components/admin/AdminTable';
+import FilterBar from '../../components/admin/FilterBar';
 import SearchInput from '../../components/admin/SearchInput';
 import StatusBadge from '../../components/admin/StatusBadge';
 import { useLogout } from '../../hooks/useLogout';
-import { User } from '../_models/User';
 import { AuthController } from '../_controllers/AuthController';
+import { User } from '../_models/User';
+
+const ROLE_FILTER_OPTIONS = [
+  { label: 'All Roles', value: 'all' },
+  { label: 'Individual', value: 'individual' },
+  { label: 'Trainer', value: 'trainer' },
+  { label: 'Admin', value: 'admin' },
+];
+
+const STATUS_FILTER_OPTIONS = [
+  { label: 'All Status', value: 'all' },
+  { label: 'Active', value: 'active' },
+  { label: 'Disabled', value: 'disabled' },
+];
 
 const PAGE_SIZE = 12;
 
@@ -34,6 +48,8 @@ export default function ManageUsersPage() {
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [sortState, setSortState] = useState<AdminTableSortState>({
     columnKey: 'date-joined',
@@ -69,7 +85,7 @@ export default function ManageUsersPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, roleFilter, statusFilter]);
 
   const loadUsers = async () => {
     try {
@@ -86,13 +102,33 @@ export default function ManageUsersPage() {
   };
 
   const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return users;
-    const query = searchQuery.toLowerCase().trim();
-    return users.filter((user) => {
-      const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
-      return fullName.includes(query) || user.email.toLowerCase().includes(query);
-    });
-  }, [users, searchQuery]);
+    let result = users;
+
+    // Filter by role
+    if (roleFilter !== 'all') {
+      result = result.filter((user) => user.role === roleFilter);
+    }
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'active') {
+        result = result.filter((user) => !user.blocked);
+      } else if (statusFilter === 'disabled') {
+        result = result.filter((user) => user.blocked);
+      }
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter((user) => {
+        const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
+        return fullName.includes(query) || user.email.toLowerCase().includes(query);
+      });
+    }
+
+    return result;
+  }, [users, searchQuery, roleFilter, statusFilter]);
 
   const sortedUsers = useMemo(() => {
     const result = [...filteredUsers];
@@ -355,6 +391,20 @@ export default function ManageUsersPage() {
               onChangeText={setSearchQuery}
               placeholder="Search by name or email"
             />
+            <View style={styles.filtersRow}>
+              <FilterBar
+                label="Role"
+                options={ROLE_FILTER_OPTIONS}
+                selectedValue={roleFilter}
+                onSelect={setRoleFilter}
+              />
+              <FilterBar
+                label="Status"
+                options={STATUS_FILTER_OPTIONS}
+                selectedValue={statusFilter}
+                onSelect={setStatusFilter}
+              />
+            </View>
           </Animated.View>
 
           <AdminTable
@@ -525,6 +575,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  filtersRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
   },
   nameText: {
     color: '#f0f8fc',
