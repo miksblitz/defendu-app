@@ -5,29 +5,25 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 import {
-  REQUIRED_PAYMENT_ENV_VARS,
-  validateEnvVars,
+    REQUIRED_PAYMENT_ENV_VARS,
+    validateEnvVars,
 } from './_lib/envConfig';
 
-let adminApp: admin.app.App | null = null;
-
 function getAdminApp(): admin.app.App {
-  if (!adminApp) {
-    const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_BASE64;
-    if (!serviceAccountKey) {
-      throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY_BASE64 environment variable is not set');
-    }
-    const serviceAccount = JSON.parse(
-      Buffer.from(serviceAccountKey, 'base64').toString('utf8')
-    );
-    const databaseURL = process.env.FIREBASE_DATABASE_URL ||
-      'https://defendu-e7970-default-rtdb.asia-southeast1.firebasedatabase.app';
-    adminApp = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-      databaseURL,
-    });
+  if (admin.apps.length > 0) return admin.apps[0]!;
+  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_BASE64;
+  if (!serviceAccountKey) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY_BASE64 environment variable is not set');
   }
-  return adminApp;
+  const serviceAccount = JSON.parse(
+    Buffer.from(serviceAccountKey, 'base64').toString('utf8')
+  );
+  const databaseURL = process.env.FIREBASE_DATABASE_URL ||
+    'https://defendu-e7970-default-rtdb.asia-southeast1.firebasedatabase.app';
+  return admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+    databaseURL,
+  });
 }
 
 /**
@@ -83,17 +79,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const app = getAdminApp();
     const dbAdmin = admin.database();
 
-    // Check if this session was already processed (idempotency)
+    // Check if this session was already processed (idempotency via transaction lock)
     const pendingRef = dbAdmin.ref(`pendingPayments/${uidStr}/${sessionIdStr}`);
-    const pendingSnap = await pendingRef.once('value');
 
-    if (!pendingSnap.exists()) {
-      // Already processed or invalid
+    // Atomically lock the pending payment to prevent double-credit with webhook
+    const lockResult = await pendingRef.transaction((current: any) => {
+      if (!current) return current;
+      if (current.status === 'completed' || current.status === 'processing') return current;
+      return { ...current, status: 'processing', processingBy: 'callback' };
+    });
+
+    if (!lockResult.snapshot.exists()) {
       return res.redirect(302, 'defenduapp://wallet?status=already_processed');
     }
-
-    const pendingData = pendingSnap.val();
-    if (pendingData.status === 'completed' || pendingData.status === 'processing') {
+    const lockedData = lockResult.snapshot.val();
+    if (lockedData.status === 'completed') {
+      return res.redirect(302, `defenduapp://wallet?status=success&credits=${creditsNum}`);
+    }
+    if (lockedData.status === 'processing' && lockedData.processingBy !== 'callback') {
+      // Webhook is already handling this payment
       return res.redirect(302, 'defenduapp://wallet?status=already_processed');
     }
 
@@ -123,10 +127,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       type: 'top_up',
       amount: creditsNum,
       balanceAfter: newBalance,
-      description: `Top-up via ${pendingData.paymentMethod?.toUpperCase() || 'PAYMENT'}`,
-      paymentMethod: pendingData.paymentMethod || 'card',
+      description: `Top-up via ${lockedData.paymentMethod?.toUpperCase() || 'PAYMENT'}`,
+      paymentMethod: lockedData.paymentMethod || 'card',
       paymentId: sessionIdStr,
-      phpAmount: pendingData.pricePHP || 0,
+      phpAmount: lockedData.pricePHP || 0,
       createdAt: admin.database.ServerValue.TIMESTAMP,
     });
 

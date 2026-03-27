@@ -1,12 +1,12 @@
 // app/_layout.tsx
-import { useEffect, useState } from 'react';
-import { Stack, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { SkillProfileProvider } from './_contexts/SkillProfileContext';
+import { Stack, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import BlockedUserModal from '../components/BlockedUserModal';
 import { LogoutProvider } from './_contexts/LogoutContext';
+import { SkillProfileProvider } from './_contexts/SkillProfileContext';
 import { UnreadMessagesProvider } from './_contexts/UnreadMessagesContext';
 import { AuthController } from './_controllers/AuthController';
-import BlockedUserModal from '../components/BlockedUserModal';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -39,6 +39,22 @@ export default function RootLayout() {
             }, 100);
             return;
           }
+        }
+
+        // Handle wallet payment deep links: defenduapp://wallet?status=...
+        if ((scheme === 'defenduapp' && (hostname === 'wallet' || path === 'wallet')) || path === 'wallet') {
+          const status = queryParams?.status as string;
+          const credits = queryParams?.credits as string;
+          console.log('✅ Wallet deep link received:', { status, credits });
+
+          setTimeout(() => {
+            const params: Record<string, string> = {};
+            if (status) params.status = status;
+            if (credits) params.credits = credits;
+            const qs = new URLSearchParams(params).toString();
+            router.push(`/(tabs)/wallet${qs ? `?${qs}` : ''}` as any);
+          }, 100);
+          return;
         }
 
         // Also handle direct resetpassword links with token

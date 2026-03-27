@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Linking,
     Platform,
     SafeAreaView,
@@ -14,9 +13,11 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import Toast from '../../components/Toast';
 import { formatCredits, formatPHP, TOP_UP_PACKAGES } from '../../constants/credits';
-import { PaymentMethod, TopUpPackage } from '../_models/Wallet';
+import { useToast } from '../../hooks/useToast';
 import { WalletController } from '../_controllers/WalletController';
+import { PaymentMethod, TopUpPackage } from '../_models/Wallet';
 
 const PAYMENT_METHODS: { id: PaymentMethod; label: string; icon: string; color: string }[] = [
   { id: 'gcash', label: 'GCash', icon: 'phone-portrait-outline', color: '#007DFE' },
@@ -30,6 +31,7 @@ export default function TopUpPage() {
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
   const [balance, setBalance] = useState(0);
   const [processing, setProcessing] = useState(false);
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
 
   useEffect(() => {
     WalletController.getWallet()
@@ -43,8 +45,8 @@ export default function TopUpPage() {
     try {
       setProcessing(true);
 
-      const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
-      const { currentUser } = await import('../config/firebaseConfig').then(m => m.auth);
+      const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://defendu.vercel.app';
+      const { currentUser } = await import('../_config/firebaseConfig').then(m => m.auth);
       if (!currentUser) throw new Error('Not authenticated');
 
       const response = await fetch(`${apiBaseUrl}/api/create-payment`, {
@@ -72,21 +74,11 @@ export default function TopUpPage() {
         await Linking.openURL(checkoutUrl);
       }
 
-      // Show info alert
-      const infoMsg = 'Complete the payment in the opened window. Your credits will be added automatically after successful payment.';
-      if (Platform.OS === 'web') {
-        window.alert(infoMsg);
-      } else {
-        Alert.alert('Payment Opened', infoMsg);
-      }
+      showToast('✅ Payment opened! Complete the payment in the opened window. Your credits will be added automatically.');
     } catch (error: any) {
       console.error('Payment error:', error);
       const errMsg = error.message || 'Failed to initiate payment. Please try again.';
-      if (Platform.OS === 'web') {
-        window.alert(errMsg);
-      } else {
-        Alert.alert('Error', errMsg);
-      }
+      showToast(`❌ ${errMsg}`);
     } finally {
       setProcessing(false);
     }
@@ -236,6 +228,7 @@ export default function TopUpPage() {
           Powered by PayMongo. Secure payment processing.
         </Text>
       </ScrollView>
+      <Toast message={toastMessage} visible={toastVisible} onHide={hideToast} duration={4000} />
     </SafeAreaView>
   );
 }

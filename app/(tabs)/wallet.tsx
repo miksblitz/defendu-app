@@ -1,7 +1,7 @@
 // app/(tabs)/wallet.tsx
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     RefreshControl,
@@ -12,17 +12,55 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import Toast from '../../components/Toast';
 import WalletCard from '../../components/WalletCard';
 import { CREDITS_PER_USE, formatCredits, FREE_USAGE_LIMITS, getDifficultyColor, getDifficultyLabel } from '../../constants/credits';
-import { Wallet, WalletTransaction } from '../_models/Wallet';
+import { useToast } from '../../hooks/useToast';
 import { WalletController } from '../_controllers/WalletController';
+import { Wallet, WalletTransaction } from '../_models/Wallet';
 
 export default function WalletPage() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ status?: string; credits?: string }>();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+  const toastShownRef = useRef(false);
+
+  // Handle payment status from deep link
+  useEffect(() => {
+    if (!params.status || toastShownRef.current) return;
+    toastShownRef.current = true;
+
+    switch (params.status) {
+      case 'success': {
+        const creditsAdded = params.credits ? Number(params.credits) : 0;
+        showToast(
+          creditsAdded > 0
+            ? `✅ Payment successful! ${creditsAdded} credits added to your wallet.`
+            : '✅ Payment successful! Credits added to your wallet.'
+        );
+        // Refresh wallet data to show updated balance
+        loadData();
+        break;
+      }
+      case 'cancelled':
+        showToast('⚠️ Payment was cancelled. No credits were charged.');
+        break;
+      case 'error':
+        showToast('❌ Payment failed. Please try again or contact support.');
+        break;
+      case 'already_processed':
+        showToast('ℹ️ This payment was already processed. Check your balance.');
+        loadData();
+        break;
+      case 'config_error':
+        showToast('❌ Server configuration error. Please contact support.');
+        break;
+    }
+  }, [params.status]);
 
   const loadData = useCallback(async () => {
     try {
@@ -148,6 +186,7 @@ export default function WalletPage() {
           </View>
         </View>
       </ScrollView>
+      <Toast message={toastMessage} visible={toastVisible} onHide={hideToast} duration={4000} />
     </SafeAreaView>
   );
 }

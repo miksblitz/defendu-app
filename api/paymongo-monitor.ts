@@ -5,36 +5,29 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 import {
-  REQUIRED_MONITOR_ENV_VARS,
-  validateEnvVars,
-  getMissingEnvResponse,
-  getReadinessReport,
-  hasEnvVar,
+    getMissingEnvResponse,
+    getReadinessReport,
+    hasEnvVar,
+    REQUIRED_MONITOR_ENV_VARS,
+    validateEnvVars,
 } from './_lib/envConfig';
 
-let adminApp: admin.app.App | null = null;
-
 function getAdminApp(): admin.app.App {
-  if (!adminApp) {
-    const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_BASE64;
-    if (!serviceAccountKey) {
-      throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY_BASE64 environment variable is not set');
-    }
-
-    const serviceAccount = JSON.parse(
-      Buffer.from(serviceAccountKey, 'base64').toString('utf8')
-    );
-
-    const databaseURL =
-      process.env.FIREBASE_DATABASE_URL ||
-      'https://defendu-e7970-default-rtdb.asia-southeast1.firebasedatabase.app';
-
-    adminApp = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-      databaseURL,
-    });
+  if (admin.apps.length > 0) return admin.apps[0]!;
+  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_BASE64;
+  if (!serviceAccountKey) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY_BASE64 environment variable is not set');
   }
-  return adminApp;
+  const serviceAccount = JSON.parse(
+    Buffer.from(serviceAccountKey, 'base64').toString('utf8')
+  );
+  const databaseURL =
+    process.env.FIREBASE_DATABASE_URL ||
+    'https://defendu-e7970-default-rtdb.asia-southeast1.firebasedatabase.app';
+  return admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+    databaseURL,
+  });
 }
 
 type WebhookEventItem = {
