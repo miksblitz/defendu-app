@@ -4,49 +4,32 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
+import { bodyStr, getJsonBody } from '../lib/getVercelJsonBody';
 import { respondPoseDeveloperTicket } from '../lib/mailjetPoseTicket';
 
-/** Vercel sometimes leaves `req.body` as a string; normalize so we can read `action`. */
-function getJsonBody(req: VercelRequest): Record<string, unknown> {
-  const raw = req.body as unknown;
-  if (raw == null) return {};
-  if (typeof raw === 'string') {
-    try {
-      const p = JSON.parse(raw) as unknown;
-      return p && typeof p === 'object' && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
-    } catch {
-      return {};
-    }
-  }
-  if (Buffer.isBuffer(raw)) {
-    try {
-      const p = JSON.parse(raw.toString('utf8')) as unknown;
-      return p && typeof p === 'object' && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
-    } catch {
-      return {};
-    }
-  }
-  if (typeof raw === 'object' && !Array.isArray(raw)) {
-    return raw as Record<string, unknown>;
-  }
-  return {};
-}
-
-/** Query/body values may be string or string[] (e.g. Expo web). */
-function bodyStr(v: unknown): string {
-  if (typeof v === 'string') return v.trim();
-  if (Array.isArray(v) && typeof v[0] === 'string') return v[0].trim();
-  return '';
-}
-
 function isPoseDeveloperTicketBody(body: Record<string, unknown>): boolean {
-  if (body.action === 'pose-developer-ticket') return true;
+  const act = body.action;
+  if (act === 'pose-developer-ticket') return true;
+  if (typeof act === 'string' && act.trim() === 'pose-developer-ticket') return true;
+
+  // If action is lost in transit but the app sent the extractor payload, still route here
+  // so we do not fall through to password reset ("Email is required").
+  const extractCommand = bodyStr(body.extractCommand);
+  if (extractCommand.includes('extract_pose_data.py')) {
+    return (
+      bodyStr(body.moduleId).length > 0 &&
+      bodyStr(body.referenceCode).length > 0 &&
+      bodyStr(body.moduleTitle).length > 0 &&
+      bodyStr(body.videoUrl).length > 0
+    );
+  }
+
   return (
     bodyStr(body.moduleId).length > 0 &&
     bodyStr(body.referenceCode).length > 0 &&
     bodyStr(body.moduleTitle).length > 0 &&
     bodyStr(body.videoUrl).length > 0 &&
-    bodyStr(body.extractCommand).length > 0
+    extractCommand.length > 0
   );
 }
 

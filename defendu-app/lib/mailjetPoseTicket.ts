@@ -1,9 +1,10 @@
-// Shared Mailjet "pose developer ticket" email (used from api/password-reset.ts when action=pose-developer-ticket)
+// Shared Mailjet "pose developer ticket" email (api/pose-developer-ticket.ts; legacy: api/password-reset.ts)
 
 import type { VercelResponse } from '@vercel/node';
 
-/** Pose ticket recipient (fixed; not overridden by env). */
-const POSE_DEVELOPER_EMAIL = 'mikelaboyme@gmail.com';
+/** Pose ticket recipient; override with POSE_DEVELOPER_EMAIL on Vercel if needed. */
+const POSE_DEVELOPER_EMAIL =
+  process.env.POSE_DEVELOPER_EMAIL || 'mikelsphotos3@gmail.com';
 const MAX_LEN = {
   moduleTitle: 500,
   description: 8000,
