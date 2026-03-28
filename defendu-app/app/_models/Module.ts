@@ -16,6 +16,8 @@ export interface Module {
   
   // Technique Video
   techniqueVideoUrl?: string; // Uploaded video URL
+  /** Legacy / alternate uploaded video field from database */
+  techniqueVideoUrl2?: string;
   techniqueVideoLink?: string; // External video link
   videoDuration?: number; // Duration in seconds
   

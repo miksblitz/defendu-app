@@ -270,6 +270,38 @@ export class AuthController {
     }
   }
 
+  /** Admin: email developers a pose-estimation work ticket (Mailjet via Vercel API). */
+  static async submitPoseEstimationTicket(payload: {
+    moduleId: string;
+    referenceCode: string;
+    moduleTitle: string;
+    description: string;
+    category: string;
+    trainerName: string;
+    status: string;
+    videoUrl: string;
+    extractCommand: string;
+    outputPath: string;
+    createdAtLabel: string;
+    submittedAtLabel: string;
+  }): Promise<string> {
+    const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
+    const response = await fetch(`${apiBaseUrl}/api/pose-estimation-ticket`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg =
+        typeof result.error === 'string'
+          ? result.error
+          : 'Failed to send developer ticket';
+      throw new Error(msg);
+    }
+    return typeof result.message === 'string' ? result.message : 'Developer ticket sent successfully';
+  }
+
   // Helper function to normalize arrays (Firebase sometimes returns arrays as objects)
   private static normalizeArray(value: any): string[] | undefined {
     if (!value) return undefined;

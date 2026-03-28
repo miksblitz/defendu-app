@@ -88,6 +88,7 @@ export default function ModuleDetailPage() {
   const [deletionReason, setDeletionReason] = useState('');
   const [customDeletionReason, setCustomDeletionReason] = useState('');
   const [showExtractModal, setShowExtractModal] = useState(false);
+  const [poseTicketSubmitting, setPoseTicketSubmitting] = useState(false);
 
   const [isEditing, setIsEditing] = useState(mode === 'edit');
   const [editTitle, setEditTitle] = useState('');
@@ -389,7 +390,7 @@ export default function ModuleDetailPage() {
 
   const techniqueVideoForExtract = module?.techniqueVideoUrl
     ? getPlayableVideoUrl(module.techniqueVideoUrl) || module.techniqueVideoUrl
-    : module?.techniqueVideoUrl2 || '';
+    : module?.techniqueVideoUrl2 || module?.techniqueVideoLink || '';
 
   const extractOutputPath = module
     ? getExtractOutputPath(module.moduleTitle, module.trainerName ?? '', module.category)
@@ -404,10 +405,41 @@ export default function ModuleDetailPage() {
     try {
       await Share.share({
         message: message + '\n\nVideo: ' + techniqueVideoForExtract,
-        title: 'Extract pose data',
+        title: 'Pose estimation — developer ticket',
       });
     } catch {
       showToast('Share not available');
+    }
+  };
+
+  const handleSubmitPoseEstimationTicket = async () => {
+    if (!module || !moduleId || !extractCommand || !techniqueVideoForExtract) {
+      showToast('Video URL and command are required to submit a ticket');
+      return;
+    }
+    try {
+      setPoseTicketSubmitting(true);
+      await AuthController.submitPoseEstimationTicket({
+        moduleId,
+        referenceCode: getReferenceCode(moduleId),
+        moduleTitle: module.moduleTitle,
+        description: module.description ?? '',
+        category: module.category ?? '',
+        trainerName: module.trainerName ?? '',
+        status: module.status ?? '',
+        videoUrl: techniqueVideoForExtract,
+        extractCommand,
+        outputPath: extractOutputPath,
+        createdAtLabel: formatDate(module.createdAt),
+        submittedAtLabel: formatDate(module.submittedAt),
+      });
+      showToast('Ticket emailed to the developer');
+      setShowExtractModal(false);
+    } catch (error: any) {
+      console.error('Pose estimation ticket error:', error);
+      showToast(error.message || 'Failed to send ticket');
+    } finally {
+      setPoseTicketSubmitting(false);
     }
   };
 
@@ -784,13 +816,15 @@ export default function ModuleDetailPage() {
             {module.videoDuration && (
               <Text style={styles.durationText}>Duration: {formatDuration(module.videoDuration)}</Text>
             )}
-            {(module.techniqueVideoUrl || module.techniqueVideoUrl2) && (
+            {(module.techniqueVideoUrl ||
+              module.techniqueVideoUrl2 ||
+              module.techniqueVideoLink) && (
               <TouchableOpacity
                 style={styles.extractDataButton}
                 onPress={() => setShowExtractModal(true)}
               >
-                <Ionicons name="download-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.extractDataButtonText}>Extract pose data</Text>
+                <Ionicons name="mail-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.extractDataButtonText}>Request pose estimation (dev ticket)</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -913,18 +947,18 @@ export default function ModuleDetailPage() {
         </ScrollView>
       </View>
 
-      {/* Extract pose data Modal */}
+      {/* Pose estimation — email developer ticket (Mailjet) */}
       <Modal
         visible={showExtractModal}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowExtractModal(false)}
+        onRequestClose={() => !poseTicketSubmitting && setShowExtractModal(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Extract pose data</Text>
+            <Text style={styles.modalTitle}>Pose estimation — developer ticket</Text>
             <Text style={styles.modalSubtitle}>
-              On your computer, run the Python tool to play this video with MediaPipe overlay and press keys to save pose landmarks to Excel for training.
+              Send a formal request to the development team (via Mailjet) to add pose estimation for this module. The email includes the module reference, title, description, created and submitted dates, technique video URL, and the local extract command so they can start immediately.
             </Text>
             <Text style={styles.extractCommandLabel}>Video URL:</Text>
             <Text style={styles.extractUrlText} selectable numberOfLines={3}>
@@ -939,13 +973,35 @@ export default function ModuleDetailPage() {
               {extractOutputPath}
             </Text>
             <Text style={styles.extractKeysText}>
-              Keys: U=good_rep, J=jab, H=hook, P=positive, N=bad, Space=pause, Q=quit & save
+              Local tool keys: U=good_rep, J=jab, H=hook, P=positive, N=bad, Space=pause, Q=quit & save
             </Text>
-            <TouchableOpacity style={styles.shareExtractButton} onPress={handleShareExtractCommand}>
-              <Ionicons name="share-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-              <Text style={styles.shareExtractButtonText}>Share URL & command</Text>
+            <TouchableOpacity
+              style={[styles.shareExtractButton, poseTicketSubmitting && { opacity: 0.7 }]}
+              onPress={handleSubmitPoseEstimationTicket}
+              disabled={poseTicketSubmitting || !extractCommand}
+            >
+              {poseTicketSubmitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+              ) : (
+                <Ionicons name="send-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+              )}
+              <Text style={styles.shareExtractButtonText}>
+                {poseTicketSubmitting ? 'Sending…' : 'Email ticket to developer'}
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setShowExtractModal(false)}>
+            <TouchableOpacity
+              style={styles.shareExtractSecondary}
+              onPress={handleShareExtractCommand}
+              disabled={poseTicketSubmitting}
+            >
+              <Ionicons name="share-outline" size={20} color="#38a6de" style={{ marginRight: 8 }} />
+              <Text style={styles.shareExtractSecondaryText}>Share URL & command</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.cancelButton]}
+              onPress={() => setShowExtractModal(false)}
+              disabled={poseTicketSubmitting}
+            >
               <Text style={styles.cancelButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -1629,6 +1685,21 @@ const styles = StyleSheet.create({
   },
   shareExtractButtonText: {
     color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  shareExtractSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#38a6de',
+  },
+  shareExtractSecondaryText: {
+    color: '#38a6de',
     fontSize: 15,
     fontWeight: '600',
   },
