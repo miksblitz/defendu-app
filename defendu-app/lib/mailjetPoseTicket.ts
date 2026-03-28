@@ -33,6 +33,12 @@ function clip(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max) + '…';
 }
 
+function fromBody(v: unknown, max: number): string {
+  if (typeof v === 'string') return clip(v.trim(), max);
+  if (Array.isArray(v) && typeof v[0] === 'string') return clip(v[0].trim(), max);
+  return '';
+}
+
 /**
  * Sends pose-estimation developer ticket via Mailjet. Always ends the response.
  */
@@ -40,18 +46,18 @@ export async function respondPoseDeveloperTicket(
   res: VercelResponse,
   rawBody: Record<string, unknown>
 ): Promise<void> {
-  const moduleId = clip(String(rawBody.moduleId ?? ''), MAX_LEN.moduleId);
-  const referenceCode = clip(String(rawBody.referenceCode ?? ''), MAX_LEN.referenceCode);
-  const moduleTitle = clip(String(rawBody.moduleTitle ?? ''), MAX_LEN.moduleTitle);
-  const description = clip(String(rawBody.description ?? ''), MAX_LEN.description);
-  const category = clip(String(rawBody.category ?? ''), MAX_LEN.category);
-  const trainerName = clip(String(rawBody.trainerName ?? ''), MAX_LEN.trainerName);
-  const status = clip(String(rawBody.status ?? ''), MAX_LEN.category);
-  const videoUrl = clip(String(rawBody.videoUrl ?? ''), MAX_LEN.videoUrl);
-  const extractCommand = clip(String(rawBody.extractCommand ?? ''), MAX_LEN.extractCommand);
-  const outputPath = clip(String(rawBody.outputPath ?? ''), MAX_LEN.outputPath);
-  const createdAtLabel = clip(String(rawBody.createdAtLabel ?? ''), 100);
-  const submittedAtLabel = clip(String(rawBody.submittedAtLabel ?? ''), 100);
+  const moduleId = fromBody(rawBody.moduleId, MAX_LEN.moduleId);
+  const referenceCode = fromBody(rawBody.referenceCode, MAX_LEN.referenceCode);
+  const moduleTitle = fromBody(rawBody.moduleTitle, MAX_LEN.moduleTitle);
+  const description = fromBody(rawBody.description, MAX_LEN.description);
+  const category = fromBody(rawBody.category, MAX_LEN.category);
+  const trainerName = fromBody(rawBody.trainerName, MAX_LEN.trainerName);
+  const status = fromBody(rawBody.status, MAX_LEN.category);
+  const videoUrl = fromBody(rawBody.videoUrl, MAX_LEN.videoUrl);
+  const extractCommand = fromBody(rawBody.extractCommand, MAX_LEN.extractCommand);
+  const outputPath = fromBody(rawBody.outputPath, MAX_LEN.outputPath);
+  const createdAtLabel = fromBody(rawBody.createdAtLabel, 100);
+  const submittedAtLabel = fromBody(rawBody.submittedAtLabel, 100);
 
   if (!moduleId || !referenceCode || !moduleTitle || !videoUrl || !extractCommand) {
     res.status(400).json({

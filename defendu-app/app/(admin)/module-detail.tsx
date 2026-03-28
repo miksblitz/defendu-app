@@ -63,7 +63,12 @@ function getPlayableVideoUrl(url: string | undefined): string {
 
 export default function ModuleDetailPage() {
   const router = useRouter();
-  const { moduleId, mode } = useLocalSearchParams<{ moduleId: string; mode?: string }>();
+  const { moduleId: moduleIdParam, mode } = useLocalSearchParams<{
+    moduleId: string | string[];
+    mode?: string;
+  }>();
+  /** Expo web/router may pass search params as string[] — API expects a single string. */
+  const moduleId = Array.isArray(moduleIdParam) ? moduleIdParam[0] : moduleIdParam;
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
   const [module, setModule] = useState<Module | null>(null);

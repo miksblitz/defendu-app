@@ -32,15 +32,21 @@ function getJsonBody(req: VercelRequest): Record<string, unknown> {
   return {};
 }
 
+/** Query/body values may be string or string[] (e.g. Expo web). */
+function bodyStr(v: unknown): string {
+  if (typeof v === 'string') return v.trim();
+  if (Array.isArray(v) && typeof v[0] === 'string') return v[0].trim();
+  return '';
+}
+
 function isPoseDeveloperTicketBody(body: Record<string, unknown>): boolean {
   if (body.action === 'pose-developer-ticket') return true;
-  const s = (v: unknown) => typeof v === 'string' && v.trim().length > 0;
   return (
-    s(body.moduleId) &&
-    s(body.referenceCode) &&
-    s(body.moduleTitle) &&
-    s(body.videoUrl) &&
-    s(body.extractCommand)
+    bodyStr(body.moduleId).length > 0 &&
+    bodyStr(body.referenceCode).length > 0 &&
+    bodyStr(body.moduleTitle).length > 0 &&
+    bodyStr(body.videoUrl).length > 0 &&
+    bodyStr(body.extractCommand).length > 0
   );
 }
 
