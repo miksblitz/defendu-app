@@ -47,9 +47,10 @@ A window opens showing the video with the MediaPipe skeleton overlay.
 
 | Key | Label saved |
 |-----|-------------|
-| **U** | good_rep |
-| **J** | jab |
-| **H** | hook |
+| **U** | jab |
+| **I** | hook |
+| **O** | uppercut |
+| **G** | good_rep |
 | **P** | positive |
 | **N** | bad |
 | **Space** | Pause / resume video |

@@ -14,9 +14,10 @@ Options:
   --max-height  Max display height in pixels (default 640). Window is smaller.
 
 Keys:
-  U - Good rep (label: good_rep)
-  J - Jab (label: jab)
-  H - Hook (label: hook)
+  U - Jab (label: jab)
+  I - Hook (label: hook)
+  O - Uppercut (label: uppercut)
+  G - Good rep (label: good_rep)
   P - Other positive (label: positive)
   N - Bad / skip (label: bad)
   Space - Pause / resume
@@ -36,9 +37,10 @@ import pandas as pd
 
 # Key -> label for exporting
 KEY_LABELS = {
-    "u": "good_rep",
-    "j": "jab",
-    "h": "hook",
+    "u": "jab",         # lead jab
+    "i": "hook",        # rear hook
+    "o": "uppercut",    # rear or lead uppercut
+    "g": "good_rep",
     "p": "positive",
     "n": "bad",
 }
@@ -127,8 +129,8 @@ def run(video_path: str, output_path: str, speed: float = 1.0, portrait: bool = 
     last_frame_index = -1
     last_landmarks = None
 
-    print("Keys: U=good_rep, J=jab, H=hook, P=positive, N=bad, Space=pause, Q=quit & save")
-    print("When you see a good rep, press U (or J/H/P/N) to save that frame's pose.\n")
+    print("Keys: U=jab, I=hook, O=uppercut, G=good_rep, P=positive, N=bad, Space=pause, Q=quit & save")
+    print("When you see the move you want (jab, hook, or uppercut), press its key to save that frame's pose.\n")
 
     frame_index = -1
     while True:

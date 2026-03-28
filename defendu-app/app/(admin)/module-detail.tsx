@@ -406,7 +406,7 @@ export default function ModuleDetailPage() {
     : '';
 
   const handleShareExtractCommand = async () => {
-    const message = `Run on your computer (in pose-data-extractor folder):\n\n${extractCommand}\n\nOutput: ${extractOutputPath}\n\nKeys: U=good_rep, J=jab, H=hook, P=positive, N=bad, Space=pause, Q=quit`;
+    const message = `Run on your computer (in pose-data-extractor folder):\n\n${extractCommand}\n\nOutput: ${extractOutputPath}\n\nKeys: U=jab, I=hook, O=uppercut, G=good_rep, P=positive, N=bad, Space=pause, Q=quit`;
     try {
       await Share.share({
         message: message + '\n\nVideo: ' + techniqueVideoForExtract,
@@ -978,7 +978,7 @@ export default function ModuleDetailPage() {
               {extractOutputPath}
             </Text>
             <Text style={styles.extractKeysText}>
-              Local tool keys: U=good_rep, J=jab, H=hook, P=positive, N=bad, Space=pause, Q=quit & save
+              Local tool keys: U=jab, I=hook, O=uppercut, G=good_rep, P=positive, N=bad, Space=pause, Q=quit & save
             </Text>
             <TouchableOpacity
               style={[styles.shareExtractButton, poseTicketSubmitting && { opacity: 0.7 }]}
