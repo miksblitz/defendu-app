@@ -26,10 +26,15 @@ async function check() {
     console.log('  OPTIONS status:', r.status);
     console.log('  Access-Control-Allow-Origin:', acao ?? '(missing — browser may block localhost)');
     console.log('');
-    if (path === '/api/pose-developer-ticket' && (r.status === 404 || !acao)) {
+    if (r.status === 404) {
       console.log(
-        '  FAIL: /api/pose-developer-ticket must return OPTIONS 200 with Access-Control-Allow-Origin.',
-        'If 404, Vercel Root Directory is probably not defendu-app or the route was never deployed.\n'
+        '  FAIL: OPTIONS returned 404 (X-Vercel-Error: NOT_FOUND). No serverless route exists at this URL.',
+        'Fix: Vercel Project → Settings → Root Directory = defendu-app (folder containing api/ and vercel.json), then redeploy.\n'
+      );
+      failed = true;
+    } else if (r.status !== 200 || !acao) {
+      console.log(
+        '  FAIL: OPTIONS must return 200 with Access-Control-Allow-Origin so browsers on localhost can call the API.\n'
       );
       failed = true;
     }

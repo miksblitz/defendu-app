@@ -1222,7 +1222,7 @@ export class AuthController {
     }
   }
 
-  /** Update module metadata (admin only, no video changes). */
+  /** Update module metadata (admin only). */
   static async updateModuleMetadata(
     moduleId: string,
     updates: {
@@ -1238,6 +1238,12 @@ export class AuthController {
       physicalDemandTags?: string[];
       repRange?: string;
       trainingDurationSeconds?: number;
+      /** Cloudinary or empty/null to clear */
+      techniqueVideoUrl?: string | null;
+      /** External link or empty/null to clear */
+      techniqueVideoLink?: string | null;
+      /** Clear legacy secondary URL when both primary sources are cleared */
+      techniqueVideoUrl2?: string | null;
     }
   ): Promise<void> {
     try {
@@ -1268,6 +1274,15 @@ export class AuthController {
       if (updates.repRange !== undefined) patch.repRange = updates.repRange || null;
       if (updates.trainingDurationSeconds !== undefined) {
         patch.trainingDurationSeconds = updates.trainingDurationSeconds ?? null;
+      }
+      if (updates.techniqueVideoUrl !== undefined) {
+        patch.techniqueVideoUrl = updates.techniqueVideoUrl?.trim() || null;
+      }
+      if (updates.techniqueVideoLink !== undefined) {
+        patch.techniqueVideoLink = updates.techniqueVideoLink?.trim() || null;
+      }
+      if (updates.techniqueVideoUrl2 !== undefined) {
+        patch.techniqueVideoUrl2 = updates.techniqueVideoUrl2?.trim() || null;
       }
       if (Object.keys(patch).length === 0) return;
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
@@ -99,7 +100,10 @@ export default function ModuleDetailPage() {
   const [editTitle, setEditTitle] = useState('');
   const [editDifficulty, setEditDifficulty] = useState<Module['difficultyLevel']>('basic');
   const [editThumbnailUrl, setEditThumbnailUrl] = useState('');
+  const [editTechniqueVideoUrl, setEditTechniqueVideoUrl] = useState('');
   const [editReferenceGuideUrl, setEditReferenceGuideUrl] = useState('');
+  const techniqueVideoInputRef = useRef<HTMLInputElement | null>(null);
+  const thumbnailWebInputRef = useRef<HTMLInputElement | null>(null);
   const [editIntensity, setEditIntensity] = useState<number>(1);
   const [editSpaceRequirements, setEditSpaceRequirements] = useState<string[]>([]);
   const [editPhysicalDemandTags, setEditPhysicalDemandTags] = useState<string[]>([]);
@@ -127,6 +131,7 @@ export default function ModuleDetailPage() {
       setEditTitle(module.moduleTitle);
       setEditDifficulty(module.difficultyLevel || 'basic');
       setEditThumbnailUrl(module.thumbnailUrl || '');
+      setEditTechniqueVideoUrl(module.techniqueVideoUrl || '');
       setEditReferenceGuideUrl(module.referenceGuideUrl || '');
       setEditIntensity(module.intensityLevel || 1);
       setEditSpaceRequirements(module.spaceRequirements || []);
@@ -134,6 +139,26 @@ export default function ModuleDetailPage() {
       if (module.status !== 'approved') setIsEditing(false);
     }
   }, [module]);
+
+  const techniqueVideoForExtract = useMemo(() => {
+    if (!module) return '';
+    if (module.status === 'approved' && isEditing) {
+      const u = editTechniqueVideoUrl.trim();
+      if (u) return getPlayableVideoUrl(u) || u;
+      return (module.techniqueVideoLink || '').trim() || module.techniqueVideoUrl2 || '';
+    }
+    if (module.techniqueVideoUrl) {
+      return getPlayableVideoUrl(module.techniqueVideoUrl) || module.techniqueVideoUrl;
+    }
+    return module.techniqueVideoUrl2 || module.techniqueVideoLink || '';
+  }, [module, isEditing, editTechniqueVideoUrl]);
+
+  const extractCommand = useMemo(() => {
+    if (!module || !techniqueVideoForExtract) return '';
+    const title =
+      module.status === 'approved' && isEditing ? editTitle.trim() : (module.moduleTitle ?? '');
+    return `python extract_pose_data.py --video "${techniqueVideoForExtract}" --title "${title.replace(/"/g, '\\"')}" --trainer "${(module.trainerName ?? '').replace(/"/g, '\\"')}" --category "${(module.category ?? '').replace(/"/g, '\\"')}"`;
+  }, [module, isEditing, editTitle, techniqueVideoForExtract]);
 
   const toggleEditSpaceRequirement = (requirement: string) => {
     setEditSpaceRequirements((prev) =>
@@ -149,6 +174,10 @@ export default function ModuleDetailPage() {
 
   const handlePickThumbnail = async () => {
     try {
+      if (Platform.OS === 'web') {
+        thumbnailWebInputRef.current?.click();
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -162,6 +191,25 @@ export default function ModuleDetailPage() {
         setEditThumbnailUrl(url);
         showToast('Thumbnail updated');
       }
+    } catch (error: any) {
+      console.error('Error picking thumbnail:', error);
+      showToast(error.message || 'Failed to update thumbnail');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleWebThumbnailPick = async (event: any) => {
+    const file = event.target.files?.[0];
+    if (thumbnailWebInputRef.current) thumbnailWebInputRef.current.value = '';
+    if (!file) return;
+    try {
+      setProcessing(true);
+      const uri = URL.createObjectURL(file);
+      const url = await AuthController.uploadFileToCloudinary(uri, 'image', file.name || 'module_thumbnail');
+      URL.revokeObjectURL(uri);
+      setEditThumbnailUrl(url);
+      showToast('Thumbnail updated');
     } catch (error: any) {
       console.error('Error picking thumbnail:', error);
       showToast(error.message || 'Failed to update thumbnail');
@@ -220,6 +268,53 @@ export default function ModuleDetailPage() {
     }
   };
 
+  const handlePickTechniqueVideo = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        techniqueVideoInputRef.current?.click();
+        return;
+      }
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'video/*',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets[0]) return;
+      const asset = result.assets[0];
+      setProcessing(true);
+      const url = await AuthController.uploadFileToCloudinary(
+        asset.uri,
+        'video',
+        asset.name || 'technique_video'
+      );
+      setEditTechniqueVideoUrl(url);
+      showToast('Technique video uploaded');
+    } catch (error: any) {
+      console.error('Error selecting technique video:', error);
+      showToast(error.message || 'Failed to upload technique video');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleWebTechniqueVideoChange = async (event: any) => {
+    const file = event.target.files?.[0];
+    if (techniqueVideoInputRef.current) techniqueVideoInputRef.current.value = '';
+    if (!file) return;
+    try {
+      setProcessing(true);
+      const uri = URL.createObjectURL(file);
+      const url = await AuthController.uploadFileToCloudinary(uri, 'video', file.name || 'technique_video');
+      URL.revokeObjectURL(uri);
+      setEditTechniqueVideoUrl(url);
+      showToast('Technique video uploaded');
+    } catch (error: any) {
+      console.error('Error uploading technique video:', error);
+      showToast(error.message || 'Failed to upload technique video');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const loadModule = async () => {
     try {
       setLoading(true);
@@ -251,6 +346,8 @@ export default function ModuleDetailPage() {
     }
     try {
       setProcessing(true);
+      const vid = editTechniqueVideoUrl.trim();
+      const savedLink = (module.techniqueVideoLink || '').trim();
       await AuthController.updateModuleMetadata(moduleId, {
         moduleTitle: trimmedTitle,
         difficultyLevel: editDifficulty,
@@ -259,6 +356,8 @@ export default function ModuleDetailPage() {
         intensityLevel: editIntensity,
         spaceRequirements: editSpaceRequirements,
         physicalDemandTags: editPhysicalDemandTags,
+        techniqueVideoUrl: vid || null,
+        techniqueVideoUrl2: !vid && !savedLink ? null : undefined,
       });
       const updated: Module = {
         ...module,
@@ -269,6 +368,8 @@ export default function ModuleDetailPage() {
         intensityLevel: editIntensity,
         spaceRequirements: editSpaceRequirements,
         physicalDemandTags: editPhysicalDemandTags,
+        techniqueVideoUrl: vid || undefined,
+        techniqueVideoUrl2: !vid && !savedLink ? undefined : module.techniqueVideoUrl2,
         updatedAt: new Date(),
       };
       setModule(updated);
@@ -393,17 +494,15 @@ export default function ModuleDetailPage() {
     });
   };
 
-  const techniqueVideoForExtract = module?.techniqueVideoUrl
-    ? getPlayableVideoUrl(module.techniqueVideoUrl) || module.techniqueVideoUrl
-    : module?.techniqueVideoUrl2 || module?.techniqueVideoLink || '';
-
   const extractOutputPath = module
-    ? getExtractOutputPath(module.moduleTitle, module.trainerName ?? '', module.category)
+    ? getExtractOutputPath(
+        module.status === 'approved' && isEditing
+          ? editTitle.trim() || module.moduleTitle
+          : module.moduleTitle,
+        module.trainerName ?? '',
+        module.category
+      )
     : 'pose_data.csv';
-
-  const extractCommand = techniqueVideoForExtract
-    ? `python extract_pose_data.py --video "${techniqueVideoForExtract}" --title "${(module?.moduleTitle ?? '').replace(/"/g, '\\"')}" --trainer "${(module?.trainerName ?? '').replace(/"/g, '\\"')}" --category "${(module?.category ?? '').replace(/"/g, '\\"')}"`
-    : '';
 
   const handleShareExtractCommand = async () => {
     const message = `Run on your computer (in pose-data-extractor folder):\n\n${extractCommand}\n\nOutput: ${extractOutputPath}\n\nKeys: U=jab, I=hook, O=uppercut, G=good_rep, P=positive, N=bad, Space=pause, Q=quit`;
@@ -475,6 +574,10 @@ export default function ModuleDetailPage() {
   const isPending = module.status === 'pending review';
   const isApproved = module.status === 'approved';
   const isRejected = module.status === 'rejected';
+
+  const displayTechniqueVideoUrl =
+    isApproved && isEditing ? editTechniqueVideoUrl.trim() : (module.techniqueVideoUrl || '');
+  const displayTechniqueVideoLink = module.techniqueVideoLink || '';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -571,7 +674,7 @@ export default function ModuleDetailPage() {
 
               <Text style={styles.editLabel}>Difficulty</Text>
               <View style={styles.difficultyRow}>
-                {(['basic', 'intermediate', 'advanced'] as Module['difficultyLevel'][]).map((level) => (
+                {(['basic', 'intermediate', 'advanced'] as const).map((level) => (
                   <TouchableOpacity
                     key={level}
                     style={[
@@ -592,12 +695,24 @@ export default function ModuleDetailPage() {
                 ))}
               </View>
 
-              <Text style={styles.editLabel}>Thumbnail</Text>
+              <Text style={styles.editLabel}>Thumbnail (image or GIF)</Text>
+              <Text style={styles.editHint}>Static images and animated GIFs are uploaded as images to Cloudinary.</Text>
               {editThumbnailUrl ? (
-                <Image
-                  source={{ uri: editThumbnailUrl }}
-                  style={styles.editThumbnailPreview}
-                  resizeMode="cover"
+                <View style={styles.editThumbnailPreviewWrap}>
+                  <Image
+                    source={{ uri: editThumbnailUrl }}
+                    style={styles.editThumbnailPreview}
+                    resizeMode="contain"
+                  />
+                </View>
+              ) : null}
+              {Platform.OS === 'web' ? (
+                <input
+                  ref={thumbnailWebInputRef}
+                  type="file"
+                  accept="image/*,.gif"
+                  style={{ display: 'none' }}
+                  onChange={handleWebThumbnailPick}
                 />
               ) : null}
               <View style={styles.thumbnailButtonsRow}>
@@ -612,7 +727,7 @@ export default function ModuleDetailPage() {
                 <TouchableOpacity
                   style={styles.thumbnailButton}
                   onPress={handleCaptureThumbnail}
-                  disabled={processing}
+                  disabled={processing || Platform.OS === 'web'}
                 >
                   <Ionicons name="camera-outline" size={18} color="#38a6de" />
                   <Text style={styles.thumbnailButtonText}>Take photo</Text>
@@ -638,6 +753,50 @@ export default function ModuleDetailPage() {
                   {editReferenceGuideUrl ? 'Replace reference guide' : 'Choose from gallery or upload'}
                 </Text>
               </TouchableOpacity>
+
+              <Text style={styles.editLabel}>Technique video</Text>
+              <Text style={styles.editHint}>
+                Replace the uploaded technique video file. Pose-estimation command and developer email use the URL after you save (while editing, the ticket preview uses your unsaved upload when set).
+              </Text>
+              {editTechniqueVideoUrl ? (
+                <Text style={styles.editTechniqueVideoUrl} numberOfLines={2}>
+                  {editTechniqueVideoUrl}
+                </Text>
+              ) : null}
+              <View style={styles.thumbnailButtonsRow}>
+                <TouchableOpacity
+                  style={styles.thumbnailButton}
+                  onPress={handlePickTechniqueVideo}
+                  disabled={processing}
+                >
+                  <Ionicons name="videocam-outline" size={18} color="#38a6de" />
+                  <Text style={styles.thumbnailButtonText}>
+                    {editTechniqueVideoUrl ? 'Replace video file' : 'Upload video file'}
+                  </Text>
+                </TouchableOpacity>
+                {editTechniqueVideoUrl ? (
+                  <TouchableOpacity
+                    style={styles.thumbnailButton}
+                    onPress={() => {
+                      setEditTechniqueVideoUrl('');
+                      showToast('Uploaded video cleared (save to apply)');
+                    }}
+                    disabled={processing}
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#e57373" />
+                    <Text style={[styles.thumbnailButtonText, { color: '#e57373' }]}>Clear upload</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+              {Platform.OS === 'web' ? (
+                <input
+                  ref={techniqueVideoInputRef}
+                  type="file"
+                  accept="video/*"
+                  style={{ display: 'none' }}
+                  onChange={handleWebTechniqueVideoChange}
+                />
+              ) : null}
 
               <Text style={styles.editLabel}>Intensity (1 = easy, 5 = very hard)</Text>
               <View style={styles.intensityEditRow}>
@@ -799,21 +958,29 @@ export default function ModuleDetailPage() {
           {/* Technique Video Section */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Technique Video</Text>
-            {module.techniqueVideoUrl ? (
+            {displayTechniqueVideoUrl ? (
               <TouchableOpacity
                 style={styles.videoButton}
-                onPress={() => openVideoUrl(module.techniqueVideoUrl!, true)}
+                onPress={() => openVideoUrl(displayTechniqueVideoUrl, true)}
               >
                 <Ionicons name="play-circle" size={24} color="#38a6de" />
                 <Text style={styles.videoButtonText}>View Technique Video</Text>
               </TouchableOpacity>
-            ) : module.techniqueVideoLink ? (
+            ) : displayTechniqueVideoLink ? (
               <TouchableOpacity
                 style={styles.videoButton}
-                onPress={() => openVideoUrl(module.techniqueVideoLink!)}
+                onPress={() => openVideoUrl(displayTechniqueVideoLink)}
               >
                 <Ionicons name="play-circle" size={24} color="#38a6de" />
                 <Text style={styles.videoButtonText}>View External Video Link</Text>
+              </TouchableOpacity>
+            ) : !isEditing && module.techniqueVideoUrl2 ? (
+              <TouchableOpacity
+                style={styles.videoButton}
+                onPress={() => openVideoUrl(module.techniqueVideoUrl2!, true)}
+              >
+                <Ionicons name="play-circle" size={24} color="#38a6de" />
+                <Text style={styles.videoButtonText}>View Technique Video</Text>
               </TouchableOpacity>
             ) : (
               <Text style={styles.descriptionText}>No video provided</Text>
@@ -821,9 +988,7 @@ export default function ModuleDetailPage() {
             {module.videoDuration && (
               <Text style={styles.durationText}>Duration: {formatDuration(module.videoDuration)}</Text>
             )}
-            {(module.techniqueVideoUrl ||
-              module.techniqueVideoUrl2 ||
-              module.techniqueVideoLink) && (
+            {techniqueVideoForExtract ? (
               <TouchableOpacity
                 style={styles.extractDataButton}
                 onPress={() => setShowExtractModal(true)}
@@ -831,18 +996,20 @@ export default function ModuleDetailPage() {
                 <Ionicons name="mail-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
                 <Text style={styles.extractDataButtonText}>Request pose estimation (dev ticket)</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
 
           {/* Thumbnail Section */}
           {module.thumbnailUrl && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Thumbnail</Text>
-              <Image
-                source={{ uri: module.thumbnailUrl }}
-                style={styles.thumbnailImage}
-                resizeMode="cover"
-              />
+              <View style={styles.thumbnailSectionWrap}>
+                <Image
+                  source={{ uri: module.thumbnailUrl }}
+                  style={styles.thumbnailImage}
+                  resizeMode="contain"
+                />
+              </View>
             </View>
           )}
 
@@ -1394,13 +1561,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  editThumbnailPreview: {
+  editThumbnailPreviewWrap: {
     width: '100%',
-    height: 180,
+    height: 320,
     borderRadius: 12,
     marginTop: 4,
     marginBottom: 8,
     backgroundColor: '#1a2332',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editThumbnailPreview: {
+    width: '100%',
+    height: '100%',
   },
   thumbnailButtonsRow: {
     flexDirection: 'row',
@@ -1428,6 +1602,12 @@ const styles = StyleSheet.create({
     color: '#6b8693',
     fontSize: 12,
     marginTop: 2,
+    marginBottom: 6,
+  },
+  editTechniqueVideoUrl: {
+    color: '#8fa8b8',
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     marginBottom: 6,
   },
   editReferenceGuidePreview: {
@@ -1527,11 +1707,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
-  thumbnailImage: {
+  thumbnailSectionWrap: {
     width: '100%',
-    height: 200,
+    height: 320,
     borderRadius: 12,
     backgroundColor: '#1a2332',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
   },
   intensityContainer: {
     flexDirection: 'row',
