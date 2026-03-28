@@ -286,7 +286,7 @@ export class AuthController {
     submittedAtLabel: string;
   }): Promise<string> {
     const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
-    const response = await fetch(`${apiBaseUrl}/api/pose-estimation-ticket`, {
+    const response = await fetch(`${apiBaseUrl}/api/pose`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
