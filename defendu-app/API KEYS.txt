@@ -1,0 +1,5 @@
+API KEYS
+
+
+Cloudinary API SECRET KEY = CSkxPs6JivYRKIZzk_bjcSW0M6I
+Cloudinary API KEY =    413153473112383
