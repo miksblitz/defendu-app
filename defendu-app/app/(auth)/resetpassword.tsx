@@ -14,6 +14,7 @@ import {
     View
 } from 'react-native';
 import Toast from '../../components/Toast';
+import { getExpoApiBaseUrl } from '../../constants/apiBaseUrl';
 import { useToast } from '../../hooks/useToast';
 import { auth } from '../config/firebaseConfig';
 
@@ -144,8 +145,8 @@ export default function ResetPasswordScreen() {
   // Validate token with backend API
   const validateToken = async (token: string) => {
     try {
-      const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
-      
+      const apiBaseUrl = getExpoApiBaseUrl();
+
       const response = await fetch(`${apiBaseUrl}/api/validate-reset-token`, {
         method: 'POST',
         headers: {
@@ -315,8 +316,8 @@ export default function ResetPasswordScreen() {
     setLoading(true);
     try {
       // Confirm password reset via backend API
-      const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
-      
+      const apiBaseUrl = getExpoApiBaseUrl();
+
       const response = await fetch(`${apiBaseUrl}/api/confirm-password-reset`, {
         method: 'POST',
         headers: {

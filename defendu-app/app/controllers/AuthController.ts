@@ -16,6 +16,7 @@ import { SkillProfile } from '../_models/SkillProfile';
 import { TrainerApplication } from '../_models/TrainerApplication';
 import { ForgotPasswordData, LoginData, RegisterData, User } from '../_models/User';
 import { SEED_TEST_MODULES } from '../_seed/testModules';
+import { getExpoApiBaseUrl } from '../../constants/apiBaseUrl';
 import { auth, cloudinaryConfig, db } from '../config/firebaseConfig';
 import { MessageController } from './MessageController';
 
@@ -214,8 +215,8 @@ export class AuthController {
   // Forgot password - Now uses backend API with Mailjet
   static async forgotPassword(data: ForgotPasswordData): Promise<string> {
     try {
-      const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
-      
+      const apiBaseUrl = getExpoApiBaseUrl();
+
       console.log('🔵 Forgot password - API URL:', `${apiBaseUrl}/api/password-reset`);
       console.log('🔵 Forgot password - Email:', data.email);
       
@@ -262,7 +263,7 @@ export class AuthController {
       // Check for network errors
       if (error.message.includes('fetch') || error.message.includes('network')) {
         console.error('⚠️ NETWORK ERROR: Check if Vercel API is deployed and accessible');
-        console.error('⚠️ API URL:', process.env.EXPO_PUBLIC_API_BASE_URL);
+        console.error('⚠️ API URL:', getExpoApiBaseUrl());
         throw new Error('Network error. Please check your internet connection and try again.');
       }
       
@@ -285,8 +286,10 @@ export class AuthController {
     createdAtLabel: string;
     submittedAtLabel: string;
   }): Promise<string> {
-    const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
-    const response = await fetch(`${apiBaseUrl}/api/pose-developer-ticket`, {
+    const apiBaseUrl = getExpoApiBaseUrl();
+    const url = `${apiBaseUrl}/api/pose-developer-ticket`;
+    console.log('[Defendu] Pose developer ticket →', url);
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -297,6 +300,11 @@ export class AuthController {
         typeof result.error === 'string'
           ? result.error
           : 'Failed to send developer ticket';
+      if (msg === 'Email is required') {
+        throw new Error(
+          'Stale web bundle or wrong API: this response only comes from password reset. Stop Expo (Ctrl+C), run: npx expo start --clear — then hard-refresh the browser (Ctrl+Shift+R). Confirm Network tab shows POST …/api/pose-developer-ticket (not password-reset).'
+        );
+      }
       throw new Error(msg);
     }
     return typeof result.message === 'string' ? result.message : 'Developer ticket sent successfully';

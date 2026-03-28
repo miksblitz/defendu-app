@@ -14,6 +14,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { getExpoApiBaseUrl } from '../../constants/apiBaseUrl';
 import { formatCredits, formatPHP, TOP_UP_PACKAGES } from '../../constants/credits';
 import { PaymentMethod, TopUpPackage } from '../_models/Wallet';
 import { WalletController } from '../controllers/WalletController';
@@ -43,7 +44,7 @@ export default function TopUpPage() {
     try {
       setProcessing(true);
 
-      const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
+      const apiBaseUrl = getExpoApiBaseUrl();
       const { currentUser } = await import('../config/firebaseConfig').then(m => m.auth);
       if (!currentUser) throw new Error('Not authenticated');
 
