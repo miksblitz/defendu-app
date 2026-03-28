@@ -287,10 +287,10 @@ export class AuthController {
     submittedAtLabel: string;
   }): Promise<string> {
     const apiBaseUrl = getExpoApiBaseUrl();
+    const passwordResetUrl = `${apiBaseUrl}/api/password-reset`;
     const poseUrl = `${apiBaseUrl}/api/pose-developer-ticket`;
-    const fallbackUrl = `${apiBaseUrl}/api/password-reset`;
-    const fallbackBody = { action: 'pose-developer-ticket', ...payload };
-    console.log('[Defendu] Pose developer ticket →', poseUrl, '(fallback:', fallbackUrl, ')');
+    const bodyWithAction = { action: 'pose-developer-ticket' as const, ...payload };
+    console.log('[Defendu] Pose developer ticket →', passwordResetUrl, '(alt:', poseUrl, ')');
 
     const postJson = (url: string, body: object) =>
       fetch(url, {
@@ -299,17 +299,28 @@ export class AuthController {
         body: JSON.stringify(body),
       });
 
+    // Call password-reset first: production often lacks /api/pose-developer-ticket (404 preflight has no CORS).
     let response: Response;
     try {
-      response = await postJson(poseUrl, payload);
-      if (response.status === 404) {
-        response = await postJson(fallbackUrl, fallbackBody);
-      }
-    } catch {
-      // Missing route often breaks CORS preflight before we get a Response; password-reset is deployed.
-      response = await postJson(fallbackUrl, fallbackBody);
+      response = await postJson(passwordResetUrl, bodyWithAction);
+    } catch (error: unknown) {
+      console.error('[Defendu] Pose ticket fetch failed:', error);
+      throw new Error('Network error. Please check your internet connection and try again.');
     }
-    const result = await response.json().catch(() => ({}));
+
+    let result: { error?: string; message?: string } = await response.json().catch(() => ({}));
+
+    if (!response.ok && result.error === 'Email is required') {
+      try {
+        response = await postJson(poseUrl, payload);
+        result = await response.json().catch(() => ({}));
+      } catch {
+        throw new Error(
+          'Pose ticket rejected: Vercel is running an old api/password-reset (no pose branch) and /api/pose-developer-ticket is missing (404). In Vercel → Project → Settings, set Root Directory to defendu-app, redeploy production from main, then run npm run check:api.'
+        );
+      }
+    }
+
     if (!response.ok) {
       const msg =
         typeof result.error === 'string'
@@ -317,7 +328,7 @@ export class AuthController {
           : 'Failed to send developer ticket';
       if (msg === 'Email is required') {
         throw new Error(
-          'Server treated this as forgot-password (missing pose-ticket handling). Deploy the latest defendu-app from this repo (api/password-reset.ts must branch on action pose-developer-ticket).'
+          'Server treated this as forgot-password (missing pose-ticket handling). Deploy latest defendu-app with Root Directory defendu-app (api/password-reset.ts must branch on action pose-developer-ticket).'
         );
       }
       throw new Error(msg);

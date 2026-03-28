@@ -10,6 +10,7 @@ const paths = ['/api/pose-developer-ticket', '/api/password-reset'];
 
 async function check() {
   console.log('API base:', base, '\n');
+  let failed = false;
   for (const path of paths) {
     const url = base + path;
     const r = await fetch(url, {
@@ -25,10 +26,22 @@ async function check() {
     console.log('  OPTIONS status:', r.status);
     console.log('  Access-Control-Allow-Origin:', acao ?? '(missing — browser may block localhost)');
     console.log('');
+    if (path === '/api/pose-developer-ticket' && (r.status === 404 || !acao)) {
+      console.log(
+        '  FAIL: /api/pose-developer-ticket must return OPTIONS 200 with Access-Control-Allow-Origin.',
+        'If 404, Vercel Root Directory is probably not defendu-app or the route was never deployed.\n'
+      );
+      failed = true;
+    }
   }
+  return failed ? 1 : 0;
 }
 
-check().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+check()
+  .then((code) => {
+    process.exitCode = code;
+  })
+  .catch((e) => {
+    console.error(e);
+    process.exitCode = 1;
+  });

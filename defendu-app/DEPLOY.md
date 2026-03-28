@@ -3,7 +3,7 @@
 ## 1. Vercel project (one-time)
 
 1. Import this repo in [Vercel](https://vercel.com).
-2. **Root Directory** must be **`defendu-app`** (the folder that contains `api/` and `vercel.json`). If the repo root is `DEFENDU`, do not leave Root Directory empty.
+2. **Root Directory** must be **`defendu-app`** (the folder that contains `api/` and `vercel.json`). If the repo root is `DEFENDU`, do not leave Root Directory empty — otherwise `/api/pose-developer-ticket` will **404** (browser CORS preflight then fails with “No Access-Control-Allow-Origin”), and an old `password-reset` may still run without pose-ticket branching.
 3. Deploy **Production** from your main branch after every API change.
 
 ## 2. Environment variables (Vercel → Project → Settings → Environment Variables)
