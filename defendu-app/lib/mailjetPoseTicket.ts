@@ -1,7 +1,6 @@
-// POST /api/pose — developer pose-estimation ticket (Mailjet)
-// CORS headers match create-payment so Expo web preflight succeeds.
+// Shared Mailjet "pose developer ticket" email (used from api/password-reset.ts when action=pose-developer-ticket)
 
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelResponse } from '@vercel/node';
 
 const DEFAULT_DEVELOPER_EMAIL = 'mikelaboyme@gmail.com';
 const MAX_LEN = {
@@ -33,70 +32,63 @@ function clip(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max) + '…';
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+/**
+ * Sends pose-estimation developer ticket via Mailjet. Always ends the response.
+ */
+export async function respondPoseDeveloperTicket(
+  res: VercelResponse,
+  rawBody: Record<string, unknown>
+): Promise<void> {
+  const moduleId = clip(String(rawBody.moduleId ?? ''), MAX_LEN.moduleId);
+  const referenceCode = clip(String(rawBody.referenceCode ?? ''), MAX_LEN.referenceCode);
+  const moduleTitle = clip(String(rawBody.moduleTitle ?? ''), MAX_LEN.moduleTitle);
+  const description = clip(String(rawBody.description ?? ''), MAX_LEN.description);
+  const category = clip(String(rawBody.category ?? ''), MAX_LEN.category);
+  const trainerName = clip(String(rawBody.trainerName ?? ''), MAX_LEN.trainerName);
+  const status = clip(String(rawBody.status ?? ''), MAX_LEN.category);
+  const videoUrl = clip(String(rawBody.videoUrl ?? ''), MAX_LEN.videoUrl);
+  const extractCommand = clip(String(rawBody.extractCommand ?? ''), MAX_LEN.extractCommand);
+  const outputPath = clip(String(rawBody.outputPath ?? ''), MAX_LEN.outputPath);
+  const createdAtLabel = clip(String(rawBody.createdAtLabel ?? ''), 100);
+  const submittedAtLabel = clip(String(rawBody.submittedAtLabel ?? ''), 100);
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const body = req.body || {};
-    const moduleId = clip(String(body.moduleId ?? ''), MAX_LEN.moduleId);
-    const referenceCode = clip(String(body.referenceCode ?? ''), MAX_LEN.referenceCode);
-    const moduleTitle = clip(String(body.moduleTitle ?? ''), MAX_LEN.moduleTitle);
-    const description = clip(String(body.description ?? ''), MAX_LEN.description);
-    const category = clip(String(body.category ?? ''), MAX_LEN.category);
-    const trainerName = clip(String(body.trainerName ?? ''), MAX_LEN.trainerName);
-    const status = clip(String(body.status ?? ''), MAX_LEN.category);
-    const videoUrl = clip(String(body.videoUrl ?? ''), MAX_LEN.videoUrl);
-    const extractCommand = clip(String(body.extractCommand ?? ''), MAX_LEN.extractCommand);
-    const outputPath = clip(String(body.outputPath ?? ''), MAX_LEN.outputPath);
-    const createdAtLabel = clip(String(body.createdAtLabel ?? ''), 100);
-    const submittedAtLabel = clip(String(body.submittedAtLabel ?? ''), 100);
-
-    if (!moduleId || !referenceCode || !moduleTitle || !videoUrl || !extractCommand) {
-      return res.status(400).json({
-        error: 'Missing required fields: moduleId, referenceCode, moduleTitle, videoUrl, extractCommand',
-      });
-    }
-
-    if (!/^https?:\/\//i.test(videoUrl)) {
-      return res.status(400).json({ error: 'videoUrl must be an http(s) URL' });
-    }
-
-    const mailjetApiKey = process.env.MAILJET_API_KEY;
-    const mailjetApiSecret = process.env.MAILJET_API_SECRET;
-    const mailjetFromEmail = process.env.MAILJET_FROM_EMAIL || 'noreply@defendu.com';
-    const mailjetFromName = process.env.MAILJET_FROM_NAME || 'Defendu';
-    const developerEmail =
-      process.env.MAILJET_POSE_DEVELOPER_EMAIL || DEFAULT_DEVELOPER_EMAIL;
-
-    if (!mailjetApiKey || !mailjetApiSecret) {
-      console.error('Mailjet credentials missing for /api/pose');
-      return res.status(500).json({
-        error: 'Email service is not configured',
-      });
-    }
-
-    const ticketSubmittedAt = new Date().toLocaleString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZoneName: 'short',
+  if (!moduleId || !referenceCode || !moduleTitle || !videoUrl || !extractCommand) {
+    res.status(400).json({
+      error: 'Missing required fields: moduleId, referenceCode, moduleTitle, videoUrl, extractCommand',
     });
+    return;
+  }
 
-    const subject = `[Defendu] Pose estimation request — ${referenceCode} — ${moduleTitle}`;
+  if (!/^https?:\/\//i.test(videoUrl)) {
+    res.status(400).json({ error: 'videoUrl must be an http(s) URL' });
+    return;
+  }
 
-    const intro = `Dear Development Team,
+  const mailjetApiKey = process.env.MAILJET_API_KEY;
+  const mailjetApiSecret = process.env.MAILJET_API_SECRET;
+  const mailjetFromEmail = process.env.MAILJET_FROM_EMAIL || 'noreply@defendu.com';
+  const mailjetFromName = process.env.MAILJET_FROM_NAME || 'Defendu';
+  const developerEmail =
+    process.env.MAILJET_POSE_DEVELOPER_EMAIL || DEFAULT_DEVELOPER_EMAIL;
+
+  if (!mailjetApiKey || !mailjetApiSecret) {
+    console.error('Mailjet credentials missing for pose-developer-ticket');
+    res.status(500).json({ error: 'Email service is not configured' });
+    return;
+  }
+
+  const ticketSubmittedAt = new Date().toLocaleString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+
+  const subject = `[Defendu] Pose estimation request — ${referenceCode} — ${moduleTitle}`;
+
+  const intro = `Dear Development Team,
 
 An administrator has submitted a formal request to add or extend pose estimation capabilities for the Defendu training module summarized below. Please treat this message as a work ticket: use the technique video URL and the local extractor command (run from the pose-data-extractor project on a development machine) as the primary inputs to scope and implement pose estimation for this module in the app.
 
@@ -105,7 +97,7 @@ If anything is unclear, reply to the product or admin team for clarification.
 Kind regards,
 Defendu Admin`;
 
-    const detailBlock = `
+  const detailBlock = `
 Module reference code: ${referenceCode}
 Internal module ID: ${moduleId}
 Title: ${moduleTitle}
@@ -130,18 +122,18 @@ Expected CSV output path:
 ${outputPath || 'N/A'}
 `;
 
-    const textPart = `${intro}
+  const textPart = `${intro}
 
 ---
 
 ${detailBlock}`;
 
-    const e = (t: string) => escapeHtml(t);
-    const introParagraphs = intro
-      .split(/\n\n+/)
-      .map((p) => `<p style="margin: 12px 0;">${e(p).replace(/\n/g, '<br/>')}</p>`)
-      .join('');
-    const htmlPart = `
+  const e = (t: string) => escapeHtml(t);
+  const introParagraphs = intro
+    .split(/\n\n+/)
+    .map((p) => `<p style="margin: 12px 0;">${e(p).replace(/\n/g, '<br/>')}</p>`)
+    .join('');
+  const htmlPart = `
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -175,21 +167,22 @@ ${detailBlock}`;
 </body>
 </html>`;
 
-    const emailData = {
-      Messages: [
-        {
-          From: {
-            Email: mailjetFromEmail,
-            Name: mailjetFromName,
-          },
-          To: [{ Email: developerEmail, Name: 'Defendu Development' }],
-          Subject: subject,
-          TextPart: textPart,
-          HTMLPart: htmlPart,
+  const emailData = {
+    Messages: [
+      {
+        From: {
+          Email: mailjetFromEmail,
+          Name: mailjetFromName,
         },
-      ],
-    };
+        To: [{ Email: developerEmail, Name: 'Defendu Development' }],
+        Subject: subject,
+        TextPart: textPart,
+        HTMLPart: htmlPart,
+      },
+    ],
+  };
 
+  try {
     const authHeader = Buffer.from(`${mailjetApiKey}:${mailjetApiSecret}`).toString('base64');
     const mailjetResponse = await fetch('https://api.mailjet.com/v3.1/send', {
       method: 'POST',
@@ -203,16 +196,17 @@ ${detailBlock}`;
     if (!mailjetResponse.ok) {
       const errorData = await mailjetResponse.json().catch(() => ({}));
       console.error('Mailjet pose ticket error:', errorData);
-      return res.status(502).json({ error: 'Failed to send email' });
+      res.status(502).json({ error: 'Failed to send email' });
+      return;
     }
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: 'Developer ticket sent successfully',
     });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('api/pose error:', message);
-    return res.status(500).json({ error: 'Failed to submit ticket', message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('pose-developer-ticket error:', message);
+    res.status(500).json({ error: 'Failed to submit ticket', message });
   }
 }

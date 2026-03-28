@@ -4,6 +4,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
+import { respondPoseDeveloperTicket } from '../lib/mailjetPoseTicket';
 
 // Initialize Firebase Admin SDK
 let adminApp: admin.app.App | null = null;
@@ -43,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     return res.status(200).end();
   }
 
@@ -55,13 +56,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Set CORS headers for POST requests
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   try {
     console.log('🔵 Password reset request received');
     console.log('🔵 Request method:', req.method);
     console.log('🔵 Request body:', JSON.stringify(req.body, null, 2));
-    
+
+    const body = (req.body || {}) as Record<string, unknown>;
+    if (body.action === 'pose-developer-ticket') {
+      await respondPoseDeveloperTicket(res, body);
+      return;
+    }
+
     const { email } = req.body;
 
     if (!email || typeof email !== 'string') {

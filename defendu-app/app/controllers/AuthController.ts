@@ -286,10 +286,10 @@ export class AuthController {
     submittedAtLabel: string;
   }): Promise<string> {
     const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://your-api-domain.com';
-    const response = await fetch(`${apiBaseUrl}/api/pose`, {
+    const response = await fetch(`${apiBaseUrl}/api/password-reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ action: 'pose-developer-ticket', ...payload }),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
