@@ -22,6 +22,7 @@ Thumbs.db
 # Env / secrets
 **/.env
 **/.env.*
+!**/.env.example
 
 # Explicit secret files
 defendu-app/API KEYS.txt

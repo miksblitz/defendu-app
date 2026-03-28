@@ -287,13 +287,28 @@ export class AuthController {
     submittedAtLabel: string;
   }): Promise<string> {
     const apiBaseUrl = getExpoApiBaseUrl();
-    const url = `${apiBaseUrl}/api/pose-developer-ticket`;
-    console.log('[Defendu] Pose developer ticket →', url);
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const poseUrl = `${apiBaseUrl}/api/pose-developer-ticket`;
+    const fallbackUrl = `${apiBaseUrl}/api/password-reset`;
+    const fallbackBody = { action: 'pose-developer-ticket', ...payload };
+    console.log('[Defendu] Pose developer ticket →', poseUrl, '(fallback:', fallbackUrl, ')');
+
+    const postJson = (url: string, body: object) =>
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    let response: Response;
+    try {
+      response = await postJson(poseUrl, payload);
+      if (response.status === 404) {
+        response = await postJson(fallbackUrl, fallbackBody);
+      }
+    } catch {
+      // Missing route often breaks CORS preflight before we get a Response; password-reset is deployed.
+      response = await postJson(fallbackUrl, fallbackBody);
+    }
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
       const msg =
@@ -302,7 +317,7 @@ export class AuthController {
           : 'Failed to send developer ticket';
       if (msg === 'Email is required') {
         throw new Error(
-          'Stale web bundle or wrong API: this response only comes from password reset. Stop Expo (Ctrl+C), run: npx expo start --clear — then hard-refresh the browser (Ctrl+Shift+R). Confirm Network tab shows POST …/api/pose-developer-ticket (not password-reset).'
+          'Server treated this as forgot-password (missing pose-ticket handling). Deploy the latest defendu-app from this repo (api/password-reset.ts must branch on action pose-developer-ticket).'
         );
       }
       throw new Error(msg);

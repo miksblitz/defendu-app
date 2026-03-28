@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
+    "start:web:clear": "expo start --web --clear",
+    "check:api": "node ./scripts/verify-vercel-api.mjs",
     "reset-project": "node ./scripts/reset-project.js",
     "create-admin": "node ./scripts/create-admin.js",
     "android": "expo run:android",
