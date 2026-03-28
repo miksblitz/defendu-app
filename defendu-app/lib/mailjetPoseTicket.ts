@@ -2,7 +2,8 @@
 
 import type { VercelResponse } from '@vercel/node';
 
-const DEFAULT_DEVELOPER_EMAIL = 'mikelaboyme@gmail.com';
+/** Pose ticket recipient (fixed; not overridden by env). */
+const POSE_DEVELOPER_EMAIL = 'mikelaboyme@gmail.com';
 const MAX_LEN = {
   moduleTitle: 500,
   description: 8000,
@@ -68,8 +69,6 @@ export async function respondPoseDeveloperTicket(
   const mailjetApiSecret = process.env.MAILJET_API_SECRET;
   const mailjetFromEmail = process.env.MAILJET_FROM_EMAIL || 'noreply@defendu.com';
   const mailjetFromName = process.env.MAILJET_FROM_NAME || 'Defendu';
-  const developerEmail =
-    process.env.MAILJET_POSE_DEVELOPER_EMAIL || DEFAULT_DEVELOPER_EMAIL;
 
   if (!mailjetApiKey || !mailjetApiSecret) {
     console.error('Mailjet credentials missing for pose-developer-ticket');
@@ -174,7 +173,7 @@ ${detailBlock}`;
           Email: mailjetFromEmail,
           Name: mailjetFromName,
         },
-        To: [{ Email: developerEmail, Name: 'Defendu Development' }],
+        To: [{ Email: POSE_DEVELOPER_EMAIL, Name: 'Defendu Development' }],
         Subject: subject,
         TextPart: textPart,
         HTMLPart: htmlPart,

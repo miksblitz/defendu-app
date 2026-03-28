@@ -6,6 +6,44 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 import { respondPoseDeveloperTicket } from '../lib/mailjetPoseTicket';
 
+/** Vercel sometimes leaves `req.body` as a string; normalize so we can read `action`. */
+function getJsonBody(req: VercelRequest): Record<string, unknown> {
+  const raw = req.body as unknown;
+  if (raw == null) return {};
+  if (typeof raw === 'string') {
+    try {
+      const p = JSON.parse(raw) as unknown;
+      return p && typeof p === 'object' && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  if (Buffer.isBuffer(raw)) {
+    try {
+      const p = JSON.parse(raw.toString('utf8')) as unknown;
+      return p && typeof p === 'object' && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return {};
+}
+
+function isPoseDeveloperTicketBody(body: Record<string, unknown>): boolean {
+  if (body.action === 'pose-developer-ticket') return true;
+  const s = (v: unknown) => typeof v === 'string' && v.trim().length > 0;
+  return (
+    s(body.moduleId) &&
+    s(body.referenceCode) &&
+    s(body.moduleTitle) &&
+    s(body.videoUrl) &&
+    s(body.extractCommand)
+  );
+}
+
 // Initialize Firebase Admin SDK
 let adminApp: admin.app.App | null = null;
 
@@ -63,13 +101,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('🔵 Request method:', req.method);
     console.log('🔵 Request body:', JSON.stringify(req.body, null, 2));
 
-    const body = (req.body || {}) as Record<string, unknown>;
-    if (body.action === 'pose-developer-ticket') {
+    const body = getJsonBody(req);
+    if (isPoseDeveloperTicketBody(body)) {
       await respondPoseDeveloperTicket(res, body);
       return;
     }
 
-    const { email } = req.body;
+    const { email } = body;
 
     if (!email || typeof email !== 'string') {
       console.error('❌ Invalid email in request');
