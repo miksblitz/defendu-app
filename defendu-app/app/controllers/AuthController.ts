@@ -43,7 +43,7 @@ export class AuthController {
       const userData: User = {
         uid: firebaseUser.uid,
         email: data.email,
-        username: data.username,
+        username: data.username?.trim() ?? '',
         firstName: data.firstName,
         lastName: data.lastName,
         createdAt: new Date(),
@@ -2045,7 +2045,7 @@ export class AuthController {
     }
   }
 
-  /** Delete module (admin only) and send deletion reason to trainer via messaging. */
+  /** Disable module (admin only) and notify trainer via messaging. */
   static async deleteModule(moduleId: string, reason: string): Promise<void> {
     try {
       const currentUser = await this.getCurrentUser();
@@ -2088,16 +2088,62 @@ export class AuthController {
         trainerPhoto
       );
 
-      const messageText = `Your module "${moduleTitle}" has been removed from the platform. Reason: ${reason}`;
+      const messageText = `Your module "${moduleTitle}" has been disabled by admin. Reason: ${reason}`;
       await MessageController.sendMessage(chatId, currentUser.uid, messageText);
 
-      await remove(ref(db, `modules/${moduleId}`));
-      await remove(ref(db, `trainerModules/${trainerId}/${moduleId}`));
+      const now = Date.now();
+      await update(ref(db, `modules/${moduleId}`), {
+        status: 'disabled',
+        rejectionReason: reason,
+        reviewedAt: now,
+        reviewedBy: currentUser.uid,
+        updatedAt: now,
+      });
+      await update(ref(db, `trainerModules/${trainerId}/${moduleId}`), {
+        status: 'disabled',
+        updatedAt: now,
+      });
 
-      console.log('✅ Module deleted and trainer notified');
+      console.log('✅ Module disabled and trainer notified');
     } catch (error: any) {
-      console.error('❌ Error deleting module:', error);
-      throw new Error(error.message || 'Failed to delete module');
+      console.error('❌ Error disabling module:', error);
+      throw new Error(error.message || 'Failed to disable module');
+    }
+  }
+
+  /** Re-enable module (admin only). Restores module visibility by setting status to approved. */
+  static async enableModule(moduleId: string): Promise<void> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+      if (currentUser.role !== 'admin') {
+        throw new Error('Permission denied. Admin access required.');
+      }
+
+      const module = await this.getModuleById(moduleId);
+      if (!module) {
+        throw new Error('Module not found');
+      }
+
+      const now = Date.now();
+      await update(ref(db, `modules/${moduleId}`), {
+        status: 'approved',
+        rejectionReason: null,
+        reviewedAt: now,
+        reviewedBy: currentUser.uid,
+        updatedAt: now,
+      });
+      await update(ref(db, `trainerModules/${module.trainerId}/${moduleId}`), {
+        status: 'approved',
+        updatedAt: now,
+      });
+
+      console.log('✅ Module re-enabled successfully');
+    } catch (error: any) {
+      console.error('❌ Error re-enabling module:', error);
+      throw new Error(error.message || 'Failed to re-enable module');
     }
   }
 

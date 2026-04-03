@@ -125,13 +125,6 @@ export default function ForgotPasswordScreen() {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity 
-        style={{ marginTop: 24 }} 
-        onPress={() => router.push('/login')}
-        disabled={loading}
-      >
-        <Text style={styles.backText}>← Back to Login</Text>
-      </TouchableOpacity>
       {/* Toast Notification */}
       <Toast
         message={toastMessage}
@@ -247,11 +240,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 17,
     letterSpacing: 0.5,
-  },
-  backText: {
-    color: '#00AABB',
-    fontWeight: '600',
-    fontSize: 15,
-    textAlign: 'center',
   },
 });

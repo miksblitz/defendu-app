@@ -69,9 +69,12 @@ export default function EditProfilePage() {
         const user = await AuthController.getCurrentUser();
         if (user) {
           // Add @ prefix if not present
-          const displayUsername = user.username.startsWith('@') 
-            ? user.username 
-            : `@${user.username}`;
+          const handle = user.username?.trim() ?? '';
+          const displayUsername = handle
+            ? handle.startsWith('@')
+              ? handle
+              : `@${handle}`
+            : '@';
           setUsername(displayUsername);
           setFirstName(user.firstName || '');
           setLastName(user.lastName || '');

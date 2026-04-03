@@ -87,6 +87,7 @@ export default function ManageModulesPage() {
   const [deletionReason, setDeletionReason] = useState('');
   const [customDeletionReason, setCustomDeletionReason] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [enablingModuleId, setEnablingModuleId] = useState<string | null>(null);
   const [savingOrder, setSavingOrder] = useState(false);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -159,7 +160,7 @@ export default function ManageModulesPage() {
     if (filterType === 'active') {
       filtered = filtered.filter((module) => module.status === 'approved');
     } else {
-      filtered = filtered.filter((module) => module.status === 'pending review');
+      filtered = filtered.filter((module) => module.status === 'pending review' || module.status === 'disabled');
     }
 
     if (categoryFilter !== 'All') {
@@ -343,8 +344,21 @@ export default function ManageModulesPage() {
     }
   };
 
+  const handleEnableModule = async (moduleId: string) => {
+    try {
+      setEnablingModuleId(moduleId);
+      await AuthController.enableModule(moduleId);
+      showToast('Module enabled successfully.');
+      await loadModules();
+    } catch (error: any) {
+      showToast(error.message || 'Failed to enable module');
+    } finally {
+      setEnablingModuleId(null);
+    }
+  };
+
   const activeCount = modules.filter((m) => m.status === 'approved').length;
-  const pendingCount = modules.filter((m) => m.status === 'pending review').length;
+  const pendingCount = modules.filter((m) => m.status === 'pending review' || m.status === 'disabled').length;
 
   const columns: AdminTableColumn<Module>[] = [
     {
@@ -421,8 +435,20 @@ export default function ManageModulesPage() {
       sortable: true,
       render: (module) => (
         <StatusBadge
-          status={module.status === 'approved' ? 'Active' : 'Pending'}
-          tone={module.status === 'approved' ? 'active' : 'pending'}
+          status={
+            module.status === 'approved'
+              ? 'Active'
+              : module.status === 'disabled'
+                ? 'Disabled'
+                : 'Pending'
+          }
+          tone={
+            module.status === 'approved'
+              ? 'active'
+              : module.status === 'disabled'
+                ? 'disabled'
+                : 'pending'
+          }
         />
       ),
     },
@@ -461,9 +487,24 @@ export default function ManageModulesPage() {
               <Text style={styles.secondaryActionText}>Edit</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={[styles.dangerActionButton, isCompact && styles.dangerActionButtonCompact]} onPress={() => openDeleteModal(module)}>
-            <Text style={styles.dangerActionText}>{isCompact ? 'Dis.' : 'Disable'}</Text>
-          </TouchableOpacity>
+          {module.status === 'disabled' ? (
+            <TouchableOpacity
+              style={[styles.secondaryActionButton, isCompact && styles.secondaryActionButtonCompact]}
+              onPress={() => handleEnableModule(module.moduleId)}
+              disabled={enablingModuleId === module.moduleId}
+            >
+              <Text style={styles.secondaryActionText}>
+                {enablingModuleId === module.moduleId ? '...' : 'Enable'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.dangerActionButton, isCompact && styles.dangerActionButtonCompact]}
+              onPress={() => openDeleteModal(module)}
+            >
+              <Text style={styles.dangerActionText}>{isCompact ? 'Dis.' : 'Disable'}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ),
     },
@@ -560,7 +601,7 @@ export default function ManageModulesPage() {
                   onPress={() => setFilterType('pending')}
                 >
                   <Text style={[styles.tabText, filterType === 'pending' && styles.tabTextActive]}>
-                    Pending {pendingCount}
+                    Pending/Disabled {pendingCount}
                   </Text>
                 </TouchableOpacity>
               </View>

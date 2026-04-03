@@ -642,7 +642,8 @@ export default function ModuleDetailPage() {
               <Text style={styles.statusText}>
                 {module.status === 'pending review' ? 'Pending Review' : 
                  module.status === 'approved' ? 'Approved' : 
-                 module.status === 'rejected' ? 'Rejected' : 'Draft'}
+                 module.status === 'rejected' ? 'Rejected' :
+                 module.status === 'disabled' ? 'Disabled' : 'Draft'}
               </Text>
             </View>
           </View>
@@ -884,6 +885,11 @@ export default function ModuleDetailPage() {
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Reference Code:</Text>
               <Text style={styles.infoValue}>{getReferenceCode(module.moduleId)}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Module ID:</Text>
+              <Text style={styles.infoValue}>{module.moduleId}</Text>
             </View>
 
             <View style={styles.infoRow}>

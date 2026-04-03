@@ -7,7 +7,6 @@ import { AuthController } from '../controllers/AuthController';
 
 export default function SignUpScreen() {
   const [form, setForm] = useState({
-    username: '',
     firstName: '',
     lastName: '',
     email: '',
@@ -164,19 +163,12 @@ export default function SignUpScreen() {
       return;
     }
 
-    // Check if username is filled
-    if (!form.username) {
-      showToast('Please enter a username');
-      return;
-    }
-
     // Register user with Firebase
     setLoading(true);
     try {
       await AuthController.register({
         email: form.email,
         password: form.password,
-        username: form.username,
         firstName: form.firstName,
         lastName: form.lastName,
       });
@@ -208,24 +200,6 @@ export default function SignUpScreen() {
       <Text style={styles.subtitle}>
         Create your account and start building lifesaving skills today.
       </Text>
-
-      {/* Username */}
-      <View style={styles.inputWrapper}>
-        <Image
-          source={require('../../assets/images/profileicon.png')}
-          style={styles.iconImage}
-        />
-        <TextInput
-          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-          placeholder="Enter your username"
-          placeholderTextColor="white"
-          value={form.username}
-          onChangeText={(text) => setForm((f) => ({ ...f, username: text }))}
-          autoCapitalize="none"
-          maxLength={50}
-          editable={!loading}
-        />
-      </View>
 
       {/* First Name */}
       <View style={styles.inputWrapper}>

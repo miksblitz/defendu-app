@@ -31,7 +31,6 @@ export default function ProfilePage() {
   const router = useRouter();
   const handleLogout = useLogout();
   const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
-  const [username, setUsername] = useState('@');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -73,11 +72,6 @@ export default function ProfilePage() {
         router.replace('/(auth)/login');
         return;
       }
-      // Add @ prefix if not present
-      const displayUsername = user.username.startsWith('@') 
-        ? user.username 
-        : `@${user.username}`;
-      setUsername(displayUsername);
       setFirstName(user.firstName || '');
       setLastName(user.lastName || '');
       setProfilePicture(user.profilePicture || null);
@@ -342,9 +336,6 @@ export default function ProfilePage() {
 
             {/* User Name */}
             <Text style={styles.userName}>{fullName}</Text>
-            
-            {/* Username */}
-            <Text style={styles.userHandle}>{username}</Text>
 
             {/* Edit Profile Button */}
             <TouchableOpacity 
@@ -720,16 +711,9 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 6,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  userHandle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#07bbc0',
     marginBottom: 28,
     textAlign: 'center',
+    letterSpacing: 0.5,
   },
   editButton: {
     backgroundColor: '#07bbc0',

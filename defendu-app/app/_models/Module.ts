@@ -38,7 +38,7 @@ export interface Module {
   difficultyLevel?: 'basic' | 'intermediate' | 'advanced';
   
   // Status & Metadata
-  status: 'draft' | 'pending review' | 'approved' | 'rejected';
+  status: 'draft' | 'pending review' | 'approved' | 'rejected' | 'disabled';
   /** Display order for approved modules (lower = first). Used in admin active-modules list. */
   sortOrder?: number;
   createdAt: Date;
