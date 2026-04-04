@@ -218,13 +218,12 @@ export default function AdminDashboard() {
           </View>
           {chartData.map((item, index) => {
             const barHeight = maxValue > 0 ? (item.count / axisMax) * chartHeight : 0;
+            const barOpacity = 1 - (index * 0.12);
             return (
               <View key={index} style={styles.barChartItem}>
                 <View style={styles.barWrapper}>
-                  <View style={[styles.bar, { height: Math.max(barHeight, 4) }]}>
-                    <View style={styles.barCap} />
-                  </View>
                   <Text style={styles.barCount}>{item.count}</Text>
+                  <View style={[styles.bar, { height: Math.max(barHeight, 4), opacity: barOpacity }]} />
                 </View>
                 <Text style={styles.barChartLabel} numberOfLines={2}>{item.technique}</Text>
               </View>
@@ -771,11 +770,11 @@ const styles = StyleSheet.create({
   activeBox: {
     flex: 1,
     minWidth: 240,
-    backgroundColor: '#0f2133',
-    borderRadius: 16,
+    backgroundColor: '#0d1c2b',
+    borderRadius: 12,
     padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(103, 177, 214, 0.28)',
+    borderColor: 'rgba(80, 140, 180, 0.18)',
     cursor: 'pointer',
   },
   activeBoxLabel: {
@@ -791,7 +790,7 @@ const styles = StyleSheet.create({
   },
   activeBoxValue: {
     color: '#8fd8ff',
-    fontSize: 30,
+    fontSize: 26,
     fontWeight: '700',
     marginBottom: 4,
   },
@@ -821,11 +820,11 @@ const styles = StyleSheet.create({
   kpiCard: {
     flex: 1,
     minWidth: 220,
-    backgroundColor: '#11273d',
-    borderRadius: 16,
+    backgroundColor: '#0e1e2d',
+    borderRadius: 12,
     padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(99, 171, 206, 0.25)',
+    borderColor: 'rgba(80, 140, 180, 0.18)',
     minHeight: 180,
     cursor: 'pointer',
   },
@@ -840,7 +839,7 @@ const styles = StyleSheet.create({
   },
   kpiValue: {
     color: '#9be0ff',
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     marginBottom: 8,
   },
@@ -909,25 +908,25 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   chartCard: {
-    backgroundColor: '#0d2335',
-    borderRadius: 20,
-    padding: 24,
+    backgroundColor: '#0d1f2e',
+    borderRadius: 14,
+    padding: 22,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(105, 190, 226, 0.3)',
+    borderColor: 'rgba(80, 150, 180, 0.2)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
     cursor: 'pointer',
   },
   chartTitle: {
     color: '#FFFFFF',
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: '700',
     marginBottom: 0,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   chartHeaderRow: {
     flexDirection: 'row',
@@ -947,8 +946,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   chartSubtitle: {
-    color: '#9cbfd1',
-    fontSize: 14,
+    color: '#7a9cad',
+    fontSize: 12,
     marginBottom: 0,
   },
   chartMetricCluster: {
@@ -957,17 +956,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   chartMetricChip: {
-    backgroundColor: 'rgba(143, 216, 255, 0.12)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(100, 170, 210, 0.08)',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(143, 216, 255, 0.22)',
-    paddingVertical: 8,
+    borderColor: 'rgba(100, 170, 210, 0.15)',
+    paddingVertical: 6,
     paddingHorizontal: 10,
-    minWidth: 82,
+    minWidth: 72,
   },
   chartMetricValue: {
     color: '#bceeff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
   },
   chartMetricLabel: {
@@ -1024,35 +1023,26 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   bar: {
-    width: 50,
-    backgroundColor: '#57bde8',
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 6,
+    width: 32,
+    backgroundColor: '#4eadd4',
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
     minHeight: 4,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-  },
-  barCap: {
-    marginTop: 4,
-    width: '66%',
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: 'rgba(196, 241, 255, 0.7)',
   },
   barCount: {
-    color: '#a9e7ff',
-    fontSize: 22,
-    fontWeight: '700',
-    marginTop: 8,
-    lineHeight: 24,
+    color: '#a3d4ea',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 6,
+    lineHeight: 16,
   },
   barChartLabel: {
-    color: '#d9eef9',
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 18,
+    color: '#8badbf',
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 15,
     textAlign: 'center',
     maxWidth: 90,
   },
@@ -1065,17 +1055,17 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   revenueCard: {
-    backgroundColor: '#15283b',
-    borderRadius: 20,
-    padding: 24,
+    backgroundColor: '#0e1e2d',
+    borderRadius: 14,
+    padding: 22,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(102, 196, 188, 0.28)',
+    borderColor: 'rgba(80, 160, 155, 0.18)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
     cursor: 'pointer',
   },
   revenueHeader: {
@@ -1086,9 +1076,9 @@ const styles = StyleSheet.create({
   },
   revenueTitle: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   profitabilityBadge: {
     flexDirection: 'row',

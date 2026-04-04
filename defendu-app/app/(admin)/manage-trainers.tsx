@@ -773,7 +773,7 @@ export default function ManageTrainersPage() {
         </View>
 
         {/* Main Content */}
-        <View style={[styles.mainContent, isCompact && styles.mainContentCompact]}>
+        <ScrollView style={[styles.mainContent, isCompact && styles.mainContentCompact]} contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
           <Animated.View style={[
             styles.searchContainer,
             {
@@ -810,7 +810,7 @@ export default function ManageTrainersPage() {
               onNext: () => setCurrentPage((p) => Math.min(sortedTotalPages, p + 1)),
             }}
           />
-        </View>
+        </ScrollView>
       </View>
 
       {/* Pop-up Menu */}

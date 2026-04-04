@@ -134,8 +134,9 @@ export class AnalyticsController {
         }
       }
 
-      // Get top performed techniques
+      // Get top performed techniques (exclude Palm Strikes)
       const topPerformedTechniques = Object.entries(techniqueCounts)
+        .filter(([technique]) => technique !== 'Palm Strikes')
         .map(([technique, count]) => ({ technique, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5); // Top 5

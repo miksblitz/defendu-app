@@ -7,6 +7,7 @@ import {
     Image,
     Modal,
     SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -333,7 +334,7 @@ export default function ManageUsersPage() {
           </View>
         </Animated.View>
 
-        <View style={[styles.mainContent, isCompact && styles.mainContentCompact]}>
+        <ScrollView style={[styles.mainContent, isCompact && styles.mainContentCompact]} contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
           <Animated.View
             style={[
               styles.controlsRow,
@@ -374,7 +375,7 @@ export default function ManageUsersPage() {
               onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
             }}
           />
-        </View>
+        </ScrollView>
       </View>
 
       <Modal
