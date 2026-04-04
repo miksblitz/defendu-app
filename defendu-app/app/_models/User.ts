@@ -10,6 +10,8 @@ export interface User {
   createdAt: Date;
   lastActive?: Date;
   profilePicture?: string;
+  /** Wide banner image behind profile header (URL from Cloudinary). */
+  coverPhoto?: string;
   role: UserRole;
   hasCompletedSkillProfile: boolean;
   subscriptionStatus?: string;

@@ -865,6 +865,52 @@ export class AuthController {
     }
   }
 
+  /** Upload cover banner image and save `coverPhoto` on the user (Realtime Database + AsyncStorage). */
+  static async updateCoverPhoto(imageUri: string): Promise<string> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+
+      const formData = new FormData();
+      formData.append('file', blob as any);
+      formData.append('upload_preset', cloudinaryConfig.uploadPreset);
+      formData.append('public_id', `user_${currentUser.uid}_cover_${Date.now()}`);
+
+      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`;
+      const uploadResponse = await fetch(cloudinaryUrl, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        console.error('❌ Cloudinary cover upload error:', errorData);
+        throw new Error(errorData.error?.message || 'Failed to upload cover image');
+      }
+
+      const uploadResult = await uploadResponse.json();
+      const downloadURL = uploadResult.secure_url;
+
+      await update(ref(db, `users/${currentUser.uid}`), { coverPhoto: downloadURL });
+
+      const updatedUser: User = {
+        ...currentUser,
+        coverPhoto: downloadURL,
+      };
+      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+
+      return downloadURL;
+    } catch (error: any) {
+      console.error('❌ Error updating cover photo:', error);
+      throw new Error(error.message || 'Failed to update cover photo');
+    }
+  }
+
   /** Change password (requires current password for re-authentication). */
   static async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     const currentUser = await this.getCurrentUser();

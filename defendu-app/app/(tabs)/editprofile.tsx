@@ -140,12 +140,8 @@ export default function EditProfilePage() {
 
   const handleImagePickerPress = () => {
     if (Platform.OS === 'web') {
-      // On web, directly trigger file input
-      if (fileInputRef.current) {
-        fileInputRef.current.click();
-      }
+      fileInputRef.current?.click();
     } else {
-      // On mobile, show modal with camera/gallery options
       setShowImagePickerModal(true);
     }
   };
@@ -447,18 +443,18 @@ export default function EditProfilePage() {
           <ScrollView contentContainerStyle={{ paddingBottom: 40, paddingTop: 60 }}>
             {/* Profile Form Section */}
             <View style={styles.profileFormSection}>
-            {/* Hidden file input for web */}
             {Platform.OS === 'web' && (
               <input
-                ref={(ref) => (fileInputRef.current = ref as any)}
+                ref={(ref) => {
+                  fileInputRef.current = ref as HTMLInputElement | null;
+                }}
                 type="file"
                 accept="image/*"
                 style={{ display: 'none' }}
                 onChange={handleWebFileSelect}
               />
             )}
-            
-            {/* Avatar with camera - Larger */}
+
             <View style={styles.avatarContainer}>
               <View style={styles.avatarLarge}>
                 {profilePicture ? (
@@ -480,7 +476,7 @@ export default function EditProfilePage() {
                   </View>
                 )}
               </View>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.cameraIcon}
                 onPress={handleImagePickerPress}
                 disabled={uploadingPicture}
@@ -744,9 +740,12 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: '#07bbc0',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(7, 187, 192, 0.45)',
+    overflow: 'hidden',
   },
   avatarLargeIcon: {
     width: 90,

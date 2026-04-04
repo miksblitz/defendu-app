@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Image,
     Linking,
@@ -27,6 +30,13 @@ const PRIVACY_URL = 'https://defendu.com/privacy';
 const TERMS_URL = 'https://defendu.com/terms';
 const CONTACT_EMAIL = 'support@defendu.com';
 
+/** Display avatar is 150×150; cap source uploads to keep picks fast and avoid memory issues. */
+const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_PROFILE_IMAGE_LABEL = '5 MB';
+
+const MAX_COVER_IMAGE_BYTES = 12 * 1024 * 1024;
+const MAX_COVER_IMAGE_LABEL = '12 MB';
+
 export default function ProfilePage() {
   const router = useRouter();
   const handleLogout = useLogout();
@@ -34,6 +44,7 @@ export default function ProfilePage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [offlineEnabled, setOfflineEnabled] = useState(false);
@@ -61,6 +72,37 @@ export default function ProfilePage() {
   const [newPwError, setNewPwError] = useState('');
   const [confirmPwError, setConfirmPwError] = useState('');
 
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [showImagePickerModal, setShowImagePickerModal] = useState(false);
+  const [showCoverPickerModal, setShowCoverPickerModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const coverFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const alertImageTooLarge = useCallback(() => {
+    Alert.alert(
+      'Image too large',
+      `Please choose a photo under ${MAX_PROFILE_IMAGE_LABEL}. Smaller files work best for your profile picture.`
+    );
+  }, []);
+
+  const alertCoverTooLarge = useCallback(() => {
+    Alert.alert(
+      'Cover image too large',
+      `Please choose an image under ${MAX_COVER_IMAGE_LABEL}.`
+    );
+  }, []);
+
+  const resolveImageByteSize = async (
+    uri: string,
+    knownSize?: number | null
+  ): Promise<number> => {
+    if (knownSize != null && knownSize > 0) return knownSize;
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return blob.size;
+  };
+
   // Load user data on mount and when screen comes into focus
   const loadUserData = useCallback(async () => {
     try {
@@ -75,6 +117,7 @@ export default function ProfilePage() {
       setFirstName(user.firstName || '');
       setLastName(user.lastName || '');
       setProfilePicture(user.profilePicture || null);
+      setCoverPhoto(user.coverPhoto || null);
 
       const h = user.height ?? skillProfile?.height;
       const w = user.weight ?? skillProfile?.weight;
@@ -260,6 +303,340 @@ export default function ProfilePage() {
     }
   };
 
+  const handleImagePickerPress = () => {
+    if (Platform.OS === 'web') {
+      fileInputRef.current?.click();
+    } else {
+      setShowImagePickerModal(true);
+    }
+  };
+
+  const handleWebFileSelect = async (event: { target: { value: string; files?: FileList | null } }) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      Alert.alert('Invalid file', 'Please select an image file.');
+      return;
+    }
+    if (file.size > MAX_PROFILE_IMAGE_BYTES) {
+      alertImageTooLarge();
+      return;
+    }
+
+    const imageUrl = URL.createObjectURL(file);
+    try {
+      setUploadingPicture(true);
+      await processWebImage(imageUrl);
+    } catch (e) {
+      console.error('Web profile image:', e);
+      Alert.alert('Error', 'Could not process the image. Please try another photo.');
+    } finally {
+      URL.revokeObjectURL(imageUrl);
+      setUploadingPicture(false);
+    }
+  };
+
+  const processWebImage = async (imageUrl: string) => {
+    return new Promise<void>((resolve, reject) => {
+      const img = typeof document !== 'undefined' ? document.createElement('img') : null;
+      if (!img) {
+        reject(new Error('No document'));
+        return;
+      }
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas'));
+            return;
+          }
+          const size = Math.min(img.width, img.height);
+          const x = (img.width - size) / 2;
+          const y = (img.height - size) / 2;
+          canvas.width = 400;
+          canvas.height = 400;
+          ctx.drawImage(img, x, y, size, size, 0, 0, 400, 400);
+          canvas.toBlob(
+            async (blob) => {
+              if (!blob) {
+                reject(new Error('Blob'));
+                return;
+              }
+              try {
+                const blobUrl = URL.createObjectURL(blob);
+                const downloadURL = await AuthController.updateProfilePicture(blobUrl);
+                URL.revokeObjectURL(blobUrl);
+                setProfilePicture(`${downloadURL}?t=${Date.now()}`);
+                resolve();
+              } catch (err) {
+                reject(err);
+              }
+            },
+            'image/jpeg',
+            0.75
+          );
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => reject(new Error('Load'));
+      img.src = imageUrl;
+    });
+  };
+
+  const handleTakePhoto = async () => {
+    setShowImagePickerModal(false);
+    try {
+      const permission = await ImagePicker.getCameraPermissionsAsync();
+      if (permission.status !== 'granted') {
+        const next = await ImagePicker.requestCameraPermissionsAsync();
+        if (next.status !== 'granted') {
+          Alert.alert('Permission needed', 'Camera access is required to take a photo.');
+          return;
+        }
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const bytes = await resolveImageByteSize(asset.uri, asset.fileSize);
+        if (bytes > MAX_PROFILE_IMAGE_BYTES) {
+          alertImageTooLarge();
+          return;
+        }
+        await uploadProfileImage(asset.uri);
+      }
+    } catch (e) {
+      console.error('Camera:', e);
+      Alert.alert('Error', 'Could not take a photo. Please try again.');
+    }
+  };
+
+  const handlePickFromGallery = async () => {
+    setShowImagePickerModal(false);
+    try {
+      const permission = await ImagePicker.getMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+        const next = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (next.status !== 'granted') {
+          Alert.alert('Permission needed', 'Photo library access is required to choose a picture.');
+          return;
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const bytes = await resolveImageByteSize(asset.uri, asset.fileSize);
+        if (bytes > MAX_PROFILE_IMAGE_BYTES) {
+          alertImageTooLarge();
+          return;
+        }
+        await uploadProfileImage(asset.uri);
+      }
+    } catch (e) {
+      console.error('Gallery:', e);
+      Alert.alert('Error', 'Could not open your photos. Please try again.');
+    }
+  };
+
+  const uploadProfileImage = async (imageUri: string) => {
+    setUploadingPicture(true);
+    try {
+      const optimized = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [{ resize: { width: 400, height: 400 } }],
+        { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      const downloadURL = await AuthController.updateProfilePicture(optimized.uri);
+      setProfilePicture(`${downloadURL}?t=${Date.now()}`);
+    } catch (e) {
+      console.error('uploadProfileImage:', e);
+      Alert.alert('Error', 'Could not update your profile picture. Please try again.');
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
+  const handleCoverPickerPress = () => {
+    if (Platform.OS === 'web') {
+      coverFileInputRef.current?.click();
+    } else {
+      setShowCoverPickerModal(true);
+    }
+  };
+
+  const handleWebCoverFileSelect = async (event: { target: { value: string; files?: FileList | null } }) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      Alert.alert('Invalid file', 'Please select an image file.');
+      return;
+    }
+    if (file.size > MAX_COVER_IMAGE_BYTES) {
+      alertCoverTooLarge();
+      return;
+    }
+    const imageUrl = URL.createObjectURL(file);
+    try {
+      setUploadingCover(true);
+      await processWebCoverImage(imageUrl);
+    } catch (e) {
+      console.error('Web cover image:', e);
+      Alert.alert('Error', 'Could not process the cover image. Please try another photo.');
+    } finally {
+      URL.revokeObjectURL(imageUrl);
+      setUploadingCover(false);
+    }
+  };
+
+  const processWebCoverImage = async (imageUrl: string) => {
+    const targetW = 1200;
+    const targetH = 400;
+    return new Promise<void>((resolve, reject) => {
+      const img = typeof document !== 'undefined' ? document.createElement('img') : null;
+      if (!img) {
+        reject(new Error('No document'));
+        return;
+      }
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas'));
+            return;
+          }
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const scale = Math.max(targetW / img.width, targetH / img.height);
+          const rw = img.width * scale;
+          const rh = img.height * scale;
+          const ox = (targetW - rw) / 2;
+          const oy = (targetH - rh) / 2;
+          ctx.drawImage(img, 0, 0, img.width, img.height, ox, oy, rw, rh);
+          canvas.toBlob(
+            async (blob) => {
+              if (!blob) {
+                reject(new Error('Blob'));
+                return;
+              }
+              try {
+                const blobUrl = URL.createObjectURL(blob);
+                const downloadURL = await AuthController.updateCoverPhoto(blobUrl);
+                URL.revokeObjectURL(blobUrl);
+                setCoverPhoto(`${downloadURL}?t=${Date.now()}`);
+                resolve();
+              } catch (err) {
+                reject(err);
+              }
+            },
+            'image/jpeg',
+            0.82
+          );
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => reject(new Error('Load'));
+      img.src = imageUrl;
+    });
+  };
+
+  const handleCoverTakePhoto = async () => {
+    setShowCoverPickerModal(false);
+    try {
+      const permission = await ImagePicker.getCameraPermissionsAsync();
+      if (permission.status !== 'granted') {
+        const next = await ImagePicker.requestCameraPermissionsAsync();
+        if (next.status !== 'granted') {
+          Alert.alert('Permission needed', 'Camera access is required to take a photo.');
+          return;
+        }
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [3, 1],
+        quality: 1,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const bytes = await resolveImageByteSize(asset.uri, asset.fileSize);
+        if (bytes > MAX_COVER_IMAGE_BYTES) {
+          alertCoverTooLarge();
+          return;
+        }
+        await uploadCoverImage(asset.uri);
+      }
+    } catch (e) {
+      console.error('Cover camera:', e);
+      Alert.alert('Error', 'Could not take a photo. Please try again.');
+    }
+  };
+
+  const handleCoverPickFromGallery = async () => {
+    setShowCoverPickerModal(false);
+    try {
+      const permission = await ImagePicker.getMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+        const next = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (next.status !== 'granted') {
+          Alert.alert('Permission needed', 'Photo library access is required to choose a picture.');
+          return;
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [3, 1],
+        quality: 1,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const bytes = await resolveImageByteSize(asset.uri, asset.fileSize);
+        if (bytes > MAX_COVER_IMAGE_BYTES) {
+          alertCoverTooLarge();
+          return;
+        }
+        await uploadCoverImage(asset.uri);
+      }
+    } catch (e) {
+      console.error('Cover gallery:', e);
+      Alert.alert('Error', 'Could not open your photos. Please try again.');
+    }
+  };
+
+  const uploadCoverImage = async (imageUri: string) => {
+    setUploadingCover(true);
+    try {
+      const optimized = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [{ resize: { width: 1200 } }],
+        { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      const downloadURL = await AuthController.updateCoverPhoto(optimized.uri);
+      setCoverPhoto(`${downloadURL}?t=${Date.now()}`);
+    } catch (e) {
+      console.error('uploadCoverImage:', e);
+      Alert.alert('Error', 'Could not update your cover photo. Please try again.');
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -314,34 +691,92 @@ export default function ProfilePage() {
         </View>
 
         {/* Main Content */}
-        <ScrollView style={styles.mainContent} contentContainerStyle={{ paddingBottom: 40, paddingTop: 25 }}>
-          {/* Profile Display Section */}
+        <View style={styles.mainContentWrap}>
+          {Platform.OS === 'web' && (
+            <>
+              <input
+                ref={(el) => {
+                  fileInputRef.current = el;
+                }}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleWebFileSelect}
+              />
+              <input
+                ref={(el) => {
+                  coverFileInputRef.current = el;
+                }}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleWebCoverFileSelect}
+              />
+            </>
+          )}
+          <TouchableOpacity
+            style={styles.coverCornerButton}
+            onPress={handleCoverPickerPress}
+            disabled={uploadingCover || uploadingPicture}
+            accessibilityLabel="Add or change cover photo"
+          >
+            {uploadingCover ? (
+              <ActivityIndicator color="#07bbc0" size="small" />
+            ) : (
+              <>
+                <Ionicons name="image-outline" size={18} color="#07bbc0" />
+                <Text style={styles.coverCornerButtonText}>Add cover photo</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <ScrollView style={styles.mainContent} contentContainerStyle={{ paddingBottom: 40, paddingTop: 25 }}>
+          {/* Profile header: cover behind avatar, name below */}
           <View style={styles.profileDisplaySection}>
-            {/* Avatar */}
-            <View style={styles.avatarContainer}>
-              <View style={styles.avatarLarge}>
-                {profilePicture ? (
+            <View style={styles.profileHero}>
+              <View style={styles.coverStrip}>
+                {coverPhoto ? (
                   <Image
-                    source={{ uri: profilePicture }}
-                    style={styles.avatarImage}
+                    source={{ uri: coverPhoto }}
+                    style={styles.coverImage}
+                    resizeMode="cover"
                   />
-                ) : (
-                  <Image
-                    source={require('../../assets/images/profilepictureplaceholdericon.png')}
-                    style={styles.avatarLargeIcon}
-                  />
-                )}
+                ) : null}
+              </View>
+              <View style={styles.avatarOverlap}>
+                <View style={styles.avatarContainer}>
+                  <View style={styles.avatarLarge}>
+                    {profilePicture ? (
+                      <Image
+                        source={{ uri: profilePicture }}
+                        style={styles.avatarImage}
+                      />
+                    ) : (
+                      <Image
+                        source={require('../../assets/images/profilepictureplaceholdericon.png')}
+                        style={styles.avatarLargeIcon}
+                      />
+                    )}
+                    {uploadingPicture && (
+                      <View style={styles.avatarUploadOverlay}>
+                        <ActivityIndicator color="#FFFFFF" size="large" />
+                      </View>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.avatarAddBadge}
+                    onPress={handleImagePickerPress}
+                    disabled={uploadingPicture}
+                    accessibilityLabel="Add or change profile picture"
+                  >
+                    <Ionicons name="add" size={26} color="#041527" />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 
-            {/* User Name */}
             <Text style={styles.userName}>{fullName}</Text>
 
-            {/* Edit Profile Button */}
-            <TouchableOpacity 
-              style={styles.editButton}
-              onPress={openEditModal}
-            >
+            <TouchableOpacity style={styles.editButton} onPress={openEditModal}>
               <Text style={styles.editButtonText}>Edit Profile</Text>
             </TouchableOpacity>
             <Text style={styles.editHint}>Change your name and password</Text>
@@ -452,6 +887,7 @@ export default function ProfilePage() {
             <Text style={styles.resetButtonText}>Reset all progress</Text>
           </TouchableOpacity>
         </ScrollView>
+        </View>
       </View>
 
       {/* Pop-up Menu */}
@@ -490,6 +926,74 @@ export default function ProfilePage() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      )}
+
+      {Platform.OS !== 'web' && (
+        <Modal
+          visible={showImagePickerModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowImagePickerModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.imagePickerModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowImagePickerModal(false)}
+          >
+            <View style={styles.imagePickerSheet}>
+              <Text style={styles.imagePickerTitle}>Profile picture</Text>
+              <Text style={styles.imagePickerHint}>Max size {MAX_PROFILE_IMAGE_LABEL}</Text>
+              <TouchableOpacity style={styles.imagePickerOption} onPress={handleTakePhoto}>
+                <Ionicons name="camera" size={24} color="#07bbc0" />
+                <Text style={styles.imagePickerOptionText}>Take photo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.imagePickerOption} onPress={handlePickFromGallery}>
+                <Ionicons name="images" size={24} color="#07bbc0" />
+                <Text style={styles.imagePickerOptionText}>Choose from library</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.imagePickerOption, styles.imagePickerCancel]}
+                onPress={() => setShowImagePickerModal(false)}
+              >
+                <Text style={styles.imagePickerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {Platform.OS !== 'web' && (
+        <Modal
+          visible={showCoverPickerModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowCoverPickerModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.imagePickerModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowCoverPickerModal(false)}
+          >
+            <View style={styles.imagePickerSheet}>
+              <Text style={styles.imagePickerTitle}>Cover photo</Text>
+              <Text style={styles.imagePickerHint}>Wide banner (3:1). Max {MAX_COVER_IMAGE_LABEL}</Text>
+              <TouchableOpacity style={styles.imagePickerOption} onPress={handleCoverTakePhoto}>
+                <Ionicons name="camera" size={24} color="#07bbc0" />
+                <Text style={styles.imagePickerOptionText}>Take photo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.imagePickerOption} onPress={handleCoverPickFromGallery}>
+                <Ionicons name="images" size={24} color="#07bbc0" />
+                <Text style={styles.imagePickerOptionText}>Choose from library</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.imagePickerOption, styles.imagePickerCancel]}
+                onPress={() => setShowCoverPickerModal(false)}
+              >
+                <Text style={styles.imagePickerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       )}
 
       {/* Offline Mode Modal */}
@@ -668,33 +1172,101 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  mainContentWrap: {
+    flex: 1,
+    position: 'relative',
+  },
   mainContent: {
     flex: 1,
     paddingHorizontal: 30,
   },
+  coverCornerButton: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
+    zIndex: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(4, 21, 39, 0.94)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.4)',
+    maxWidth: '58%',
+  },
+  coverCornerButtonText: {
+    color: '#07bbc0',
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 6,
+    flexShrink: 1,
+  },
   profileDisplaySection: {
     marginBottom: 40,
     alignItems: 'center',
-    paddingTop: 20,
+    paddingTop: 8,
+  },
+  profileHero: {
+    width: '100%',
+    marginHorizontal: -30,
+    alignItems: 'center',
+  },
+  coverStrip: {
+    width: '100%',
+    height: 152,
+    backgroundColor: '#0a1e30',
+    overflow: 'hidden',
+  },
+  coverImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarOverlap: {
+    marginTop: -76,
+    alignItems: 'center',
+    zIndex: 2,
+    marginBottom: 8,
   },
   avatarContainer: {
     alignSelf: 'center',
-    marginBottom: 32,
-    shadowColor: '#07bbc0',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    position: 'relative',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  avatarUploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    borderRadius: 75,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarAddBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: '#041527',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarLarge: {
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: '#07bbc0',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 4,
-    borderColor: '#041527',
+    borderWidth: 3,
+    borderColor: 'rgba(7, 187, 192, 0.45)',
+    overflow: 'hidden',
   },
   avatarLargeIcon: {
     width: 100,
@@ -711,6 +1283,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '700',
     color: '#FFFFFF',
+    marginTop: 4,
     marginBottom: 28,
     textAlign: 'center',
     letterSpacing: 0.5,
@@ -1004,5 +1577,60 @@ const styles = StyleSheet.create({
     color: '#041527',
     fontSize: 10,
     fontWeight: '700',
+  },
+  imagePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  imagePickerSheet: {
+    backgroundColor: '#011f36',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 20,
+    paddingBottom: 36,
+    paddingHorizontal: 20,
+  },
+  imagePickerTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  imagePickerHint: {
+    color: '#6b8693',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  imagePickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#024446',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  imagePickerOptionText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 12,
+  },
+  imagePickerCancel: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#6b8693',
+    marginTop: 4,
+    justifyContent: 'center',
+  },
+  imagePickerCancelText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+    width: '100%',
   },
 });
