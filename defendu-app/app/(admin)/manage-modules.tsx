@@ -89,6 +89,7 @@ export default function ManageModulesPage() {
   const [categoryToRemove, setCategoryToRemove] = useState<string | null>(null);
   const [removingCategory, setRemovingCategory] = useState(false);
   const [confirmRemoveStep, setConfirmRemoveStep] = useState(false);
+  const [showTrainerDropdown, setShowTrainerDropdown] = useState(false);
 
   const categoryFilterOptions = useMemo(
     () => [
@@ -419,28 +420,7 @@ export default function ManageModulesPage() {
       flex: 2.5,
       render: (module, index) => (
         <View style={styles.moduleCell}>
-          {filterType === 'active' && categoryFilter !== 'All' ? ( // Only show drag controls when in Active tab with a specific category filter, to avoid confusion about ordering in other contexts
-            <View style={styles.orderControls}>
-              <TouchableOpacity
-                style={[styles.orderButton, (savingOrder || index === 0) && styles.orderButtonDisabled]}
-                disabled={savingOrder || index === 0}
-                onPress={() => moveActiveModule(module.moduleId, 'up')}
-              >
-                <Ionicons name="chevron-up" size={18} color="#38a6de" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.orderButton,
-                  (savingOrder || index === sortedModules.length - 1) && styles.orderButtonDisabled,
-                ]}
-                disabled={savingOrder || index === sortedModules.length - 1}
-                onPress={() => moveActiveModule(module.moduleId, 'down')}
-              >
-                <Ionicons name="chevron-down" size={18} color="#38a6de" />
-              </TouchableOpacity>
-            </View>
-          ) : null}
-          {filterType === 'active' && categoryFilter !== 'All' && (
+          {filterType === 'active' && categoryFilter === 'All' && (
             <View style={styles.positionBadge}>
               <Text style={styles.positionBadgeText}>
                 {(module.sortOrder ?? index) + 1}
@@ -711,12 +691,54 @@ export default function ManageModulesPage() {
                 selectedValue={difficultyFilter}
                 onSelect={setDifficultyFilter}
               />
-              <FilterBar
-                label="Trainer"
-                options={trainerOptions}
-                selectedValue={trainerFilter}
-                onSelect={setTrainerFilter}
-              />
+              <View style={styles.trainerDropdownWrap}>
+                <Text style={styles.trainerDropdownLabel}>TRAINER</Text>
+                <TouchableOpacity
+                  style={styles.trainerDropdownButton}
+                  onPress={() => setShowTrainerDropdown((prev) => !prev)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.trainerDropdownButtonText}>
+                    {trainerOptions.find((o) => o.value === trainerFilter)?.label || 'All Trainers'}
+                  </Text>
+                  <Ionicons
+                    name={showTrainerDropdown ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color="#9db3be"
+                  />
+                </TouchableOpacity>
+                {showTrainerDropdown && (
+                  <View style={styles.trainerDropdownList}>
+                    <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
+                      {trainerOptions.map((option) => {
+                        const isSelected = option.value === trainerFilter;
+                        return (
+                          <TouchableOpacity
+                            key={option.value}
+                            style={[
+                              styles.trainerDropdownItem,
+                              isSelected && styles.trainerDropdownItemSelected,
+                            ]}
+                            onPress={() => {
+                              setTrainerFilter(option.value);
+                              setShowTrainerDropdown(false);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.trainerDropdownItemText,
+                                isSelected && styles.trainerDropdownItemTextSelected,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
             </Animated.View>
 
             <AdminTable
@@ -1416,5 +1438,66 @@ const styles = StyleSheet.create({
     color: '#38a6de',
     fontSize: 12,
     fontWeight: '600',
+  },
+  trainerDropdownWrap: {
+    zIndex: 100,
+    gap: 7,
+  },
+  trainerDropdownLabel: {
+    color: '#9db3be',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  trainerDropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(126, 153, 166, 0.5)',
+    backgroundColor: 'rgba(15, 41, 63, 0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxWidth: 260,
+  },
+  trainerDropdownButtonText: {
+    color: '#d2e8f3',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  trainerDropdownList: {
+    position: 'absolute',
+    top: 62,
+    left: 0,
+    minWidth: 260,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(126, 153, 166, 0.5)',
+    backgroundColor: '#1a2332',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+    zIndex: 200,
+  },
+  trainerDropdownItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(126, 153, 166, 0.15)',
+  },
+  trainerDropdownItemSelected: {
+    backgroundColor: 'rgba(56, 166, 222, 0.18)',
+  },
+  trainerDropdownItemText: {
+    color: '#b2c6cf',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  trainerDropdownItemTextSelected: {
+    color: '#e8f4fa',
   },
 });

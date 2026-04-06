@@ -1998,7 +1998,6 @@ export class AuthController {
   private static DEFAULT_CATEGORIES = [
     'Punching',
     'Kicking',
-    'Palm Strikes',
     'Elbow Strikes',
     'Knee Strikes',
     'Defensive Moves',

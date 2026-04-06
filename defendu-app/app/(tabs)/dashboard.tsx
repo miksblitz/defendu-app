@@ -61,7 +61,7 @@ const DEFAULT_MODULE_CATEGORIES = [
   'Punching',
   'Kicking',
   'Elbow Strikes',
-  'Palm Strikes',
+  'Knee Strikes',
   'Defensive Moves',
 ] as const;
 
