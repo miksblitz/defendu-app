@@ -1893,6 +1893,65 @@ export class AuthController {
     }
   }
 
+  // ─── Module Categories (stored in Firebase) ────────────────────────
+
+  private static DEFAULT_CATEGORIES = [
+    'Punching',
+    'Kicking',
+    'Palm Strikes',
+    'Elbow Strikes',
+    'Knee Strikes',
+    'Defensive Moves',
+  ];
+
+  /** Fetch categories from DB. Seeds defaults if none exist yet. */
+  static async getModuleCategories(): Promise<string[]> {
+    try {
+      const currentUser = auth.currentUser ?? await this.waitForAuth();
+      if (!currentUser) throw new Error('User not authenticated');
+
+      const categoriesRef = ref(db, 'moduleCategories');
+      const snap = await get(categoriesRef);
+
+      if (!snap.exists()) {
+        // Seed the default categories on first call
+        await set(categoriesRef, this.DEFAULT_CATEGORIES);
+        return [...this.DEFAULT_CATEGORIES];
+      }
+
+      const data = snap.val();
+      // Handle both array and object shapes from Firebase
+      return Array.isArray(data) ? data : Object.values(data);
+    } catch (error: any) {
+      console.error('❌ Error fetching module categories:', error);
+      // Fallback so the UI is never empty
+      return [...this.DEFAULT_CATEGORIES];
+    }
+  }
+
+  /** Admin-only: add a new category and persist to Firebase. */
+  static async addModuleCategory(category: string): Promise<string[]> {
+    const currentUser = auth.currentUser ?? await this.waitForAuth();
+    if (!currentUser) throw new Error('User not authenticated');
+
+    // Verify admin role
+    const userSnap = await get(ref(db, `users/${currentUser.uid}`));
+    if (!userSnap.exists() || userSnap.val()?.role !== 'admin') {
+      throw new Error('Permission denied. Admin access required.');
+    }
+
+    const existing = await this.getModuleCategories();
+    const trimmed = category.trim();
+    if (!trimmed) throw new Error('Category name cannot be empty');
+    if (existing.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+      throw new Error('Category already exists');
+    }
+
+    const updated = [...existing, trimmed];
+    await set(ref(db, 'moduleCategories'), updated);
+    return updated;
+  }
+
   // Get approved modules for user dashboard (any authenticated user)
   static async getApprovedModules(): Promise<Module[]> {
     try {

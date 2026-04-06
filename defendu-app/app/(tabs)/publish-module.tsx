@@ -32,15 +32,6 @@ interface UploadedFile {
   size: number;
 }
 
-const categories = [
-  'Punching',
-  'Kicking',
-  'Palm Strikes',
-  'Elbow Strikes',
-  'Knee Strikes',
-  'Defensive Moves',
-];
-
 const physicalDemandTags = [
   'Flexibility',
   'Strength',
@@ -92,6 +83,13 @@ export default function PublishModulePage() {
   const introductionVideoDropZoneRef = useRef<View>(null);
   const [isDraggingVideo, setIsDraggingVideo] = useState(false);
   const [isDraggingIntroductionVideo, setIsDraggingIntroductionVideo] = useState(false);
+
+  // Dynamic categories from Firebase
+  const [categories, setCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    AuthController.getModuleCategories().then(setCategories).catch(console.error);
+  }, []);
 
   // Form state
   const [moduleTitle, setModuleTitle] = useState('');

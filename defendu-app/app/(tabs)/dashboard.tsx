@@ -57,7 +57,7 @@ function getDayCountsThisWeek(completionTimestamps: Record<string, number>): num
   return counts;
 }
 
-const MODULE_CATEGORIES = [
+const DEFAULT_MODULE_CATEGORIES = [
   'Punching',
   'Kicking',
   'Elbow Strikes',
@@ -95,6 +95,7 @@ export default function DashboardScreen() {
   const [completedModuleIds, setCompletedModuleIds] = useState<string[]>([]);
   const [completionTimestamps, setCompletionTimestamps] = useState<Record<string, number>>({});
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [moduleCategories, setModuleCategories] = useState<string[]>([...DEFAULT_MODULE_CATEGORIES]);
   const router = useRouter();
   const handleLogout = useLogout();
   const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
@@ -169,15 +170,17 @@ export default function DashboardScreen() {
       
       try {
         setModulesLoading(true);
-        const [approved, recs, progress] = await Promise.all([
+        const [approved, recs, progress, cats] = await Promise.all([
           AuthController.getApprovedModules(),
           AuthController.getRecommendations(),
           AuthController.getUserProgress(),
+          AuthController.getModuleCategories(),
         ]);
         setModules(approved);
         setRecommendations(recs);
         setCompletedModuleIds(progress.completedModuleIds);
         setCompletionTimestamps(progress.completionTimestamps ?? {});
+        setModuleCategories(cats);
         if (recs?.recommendedModuleIds?.length) {
           const recommended = await AuthController.getModulesByIds(recs.recommendedModuleIds);
           const notCompleted = recommended.filter((m) => !progress.completedModuleIds.includes(m.moduleId));
@@ -574,7 +577,7 @@ export default function DashboardScreen() {
               >
                 <Text style={[styles.categoryPillText, !selectedCategory && styles.categoryPillTextActive]}>All</Text>
               </TouchableOpacity>
-              {MODULE_CATEGORIES.map((cat) => {
+              {moduleCategories.map((cat) => {
                 const count = modules.filter((m) => normalizeCategory(m.category) === normalizeCategory(cat)).length;
                 const isActive = selectedCategory === cat;
                 return (

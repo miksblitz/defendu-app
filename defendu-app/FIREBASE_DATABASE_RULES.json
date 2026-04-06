@@ -119,6 +119,10 @@
         ".read": "$uid === auth.uid",
         ".write": "$uid === auth.uid || (auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin')"
       }
+    },
+    "moduleCategories": {
+      ".read": "auth.uid !== null",
+      ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
     }
   }
 }

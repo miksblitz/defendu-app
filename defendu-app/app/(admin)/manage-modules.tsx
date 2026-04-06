@@ -29,16 +29,6 @@ import { useToast } from '../../hooks/useToast';
 import { Module } from '../_models/Module';
 import { AuthController } from '../controllers/AuthController';
 
-const MODULE_CATEGORIES = [
-  { label: 'All', value: 'All' },
-  { label: 'Punching', value: 'Punching' },
-  { label: 'Kicking', value: 'Kicking' },
-  { label: 'Palm Strikes', value: 'Palm Strikes' },
-  { label: 'Elbow Strikes', value: 'Elbow Strikes' },
-  { label: 'Knee Strikes', value: 'Knee Strikes' },
-  { label: 'Defensive Moves', value: 'Defensive Moves' },
-];
-
 const DIFFICULTY_OPTIONS = [
   { label: 'All', value: 'all' },
   { label: 'Basic', value: 'basic' },
@@ -90,16 +80,32 @@ export default function ManageModulesPage() {
   const [enablingModuleId, setEnablingModuleId] = useState<string | null>(null);
   const [savingOrder, setSavingOrder] = useState(false);
 
+  // Dynamic categories from Firebase
+  const [categories, setCategories] = useState<string[]>([]);
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [addingCategory, setAddingCategory] = useState(false);
+
+  const categoryFilterOptions = useMemo(
+    () => [
+      { label: 'All', value: 'All' },
+      ...categories.map((c) => ({ label: c, value: c })),
+    ],
+    [categories]
+  );
+
   const headerAnim = useRef(new Animated.Value(0)).current;
   const controlsAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadModules();
+    loadCategories();
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       loadModules();
+      loadCategories();
     }, [])
   );
 
@@ -136,6 +142,32 @@ export default function ManageModulesPage() {
       setModules([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const cats = await AuthController.getModuleCategories();
+      setCategories(cats);
+    } catch (error: any) {
+      console.error('Error loading categories:', error);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) return;
+    try {
+      setAddingCategory(true);
+      const updated = await AuthController.addModuleCategory(trimmed);
+      setCategories(updated);
+      setNewCategoryName('');
+      setShowAddCategoryModal(false);
+      showToast(`Category "${trimmed}" added successfully`);
+    } catch (error: any) {
+      showToast(error.message || 'Failed to add category');
+    } finally {
+      setAddingCategory(false);
     }
   };
 
@@ -612,12 +644,22 @@ export default function ManageModulesPage() {
                 placeholder="Search by title, category, trainer, or ID"
               />
 
-              <FilterBar
-                label="Category"
-                options={MODULE_CATEGORIES}
-                selectedValue={categoryFilter}
-                onSelect={setCategoryFilter}
-              />
+              <View style={styles.categoryRow}>
+                <FilterBar
+                  label="Category"
+                  options={categoryFilterOptions}
+                  selectedValue={categoryFilter}
+                  onSelect={setCategoryFilter}
+                />
+                <TouchableOpacity
+                  style={styles.addCategoryButton}
+                  onPress={() => setShowAddCategoryModal(true)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color="#38a6de" />
+                  <Text style={styles.addCategoryButtonText}>Add</Text>
+                </TouchableOpacity>
+              </View>
               <FilterBar
                 label="Difficulty"
                 options={DIFFICULTY_OPTIONS}
@@ -710,6 +752,49 @@ export default function ManageModulesPage() {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Text style={styles.confirmDeleteButtonText}>Disable</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showAddCategoryModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddCategoryModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Add Category</Text>
+            <Text style={styles.modalSubtitle}>
+              Enter a name for the new module category.
+            </Text>
+            <TextInput
+              style={styles.customReasonInput}
+              placeholder="Category name"
+              placeholderTextColor="#6b8693"
+              value={newCategoryName}
+              onChangeText={setNewCategoryName}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => { setShowAddCategoryModal(false); setNewCategoryName(''); }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.addCategoryConfirmButton]}
+                onPress={handleAddCategory}
+                disabled={addingCategory || !newCategoryName.trim()}
+              >
+                {addingCategory ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmDeleteButtonText}>Add</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1077,6 +1162,30 @@ const styles = StyleSheet.create({
   },
   confirmDeleteButton: {
     backgroundColor: '#c62828',
+  },
+  addCategoryConfirmButton: {
+    backgroundColor: '#07bbc0',
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  addCategoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.5)',
+    marginBottom: 1,
+  },
+  addCategoryButtonText: {
+    color: '#38a6de',
+    fontSize: 12,
+    fontWeight: '600',
   },
   cancelButtonText: {
     color: '#FFFFFF',
