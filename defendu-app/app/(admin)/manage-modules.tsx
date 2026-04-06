@@ -708,35 +708,36 @@ export default function ManageModulesPage() {
                   />
                 </TouchableOpacity>
                 {showTrainerDropdown && (
-                  <View style={styles.trainerDropdownList}>
-                    <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
-                      {trainerOptions.map((option) => {
-                        const isSelected = option.value === trainerFilter;
-                        return (
-                          <TouchableOpacity
-                            key={option.value}
+                  <ScrollView
+                    style={styles.trainerDropdownList}
+                    nestedScrollEnabled
+                  >
+                    {trainerOptions.map((option) => {
+                      const isSelected = option.value === trainerFilter;
+                      return (
+                        <TouchableOpacity
+                          key={option.value}
+                          style={[
+                            styles.trainerDropdownItem,
+                            isSelected && styles.trainerDropdownItemSelected,
+                          ]}
+                          onPress={() => {
+                            setTrainerFilter(option.value);
+                            setShowTrainerDropdown(false);
+                          }}
+                        >
+                          <Text
                             style={[
-                              styles.trainerDropdownItem,
-                              isSelected && styles.trainerDropdownItemSelected,
+                              styles.trainerDropdownItemText,
+                              isSelected && styles.trainerDropdownItemTextSelected,
                             ]}
-                            onPress={() => {
-                              setTrainerFilter(option.value);
-                              setShowTrainerDropdown(false);
-                            }}
                           >
-                            <Text
-                              style={[
-                                styles.trainerDropdownItemText,
-                                isSelected && styles.trainerDropdownItemTextSelected,
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  </View>
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
                 )}
               </View>
             </Animated.View>
@@ -1440,7 +1441,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   trainerDropdownWrap: {
-    zIndex: 100,
     gap: 7,
   },
   trainerDropdownLabel: {
@@ -1468,20 +1468,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   trainerDropdownList: {
-    position: 'absolute',
-    top: 62,
-    left: 0,
-    minWidth: 260,
+    maxHeight: 200,
+    maxWidth: 260,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(126, 153, 166, 0.5)',
     backgroundColor: '#1a2332',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-    zIndex: 200,
+    marginTop: 4,
   },
   trainerDropdownItem: {
     paddingHorizontal: 14,
