@@ -1290,7 +1290,7 @@ export class AuthController {
       techniqueVideoLink?: string | null;
       /** Clear legacy secondary URL when both primary sources are cleared */
       techniqueVideoUrl2?: string | null;
-      /** Reassign module to a different trainer */
+      /** Change the trainer assigned to this module */
       trainerId?: string;
       trainerName?: string;
     }
@@ -1342,27 +1342,31 @@ export class AuthController {
 
       await update(ref(db, `modules/${moduleId}`), patch);
 
-      // Keep trainerModules reference in sync for title/status metadata
+      // If the trainer was changed, move the trainerModules reference
       const oldTrainerId = existingModule.trainerId;
       const newTrainerId = updates.trainerId ?? oldTrainerId;
 
       if (updates.trainerId && updates.trainerId !== oldTrainerId) {
-        // Trainer changed: remove from old trainer's list, add to new
-        await remove(ref(db, `trainerModules/${oldTrainerId}/${moduleId}`));
-        await set(ref(db, `trainerModules/${newTrainerId}/${moduleId}`), {
-          moduleTitle: updates.moduleTitle ?? existingModule.moduleTitle,
-          status: existingModule.status,
-          createdAt: existingModule.createdAt instanceof Date ? existingModule.createdAt.getTime() : existingModule.createdAt,
+        // Copy module reference to new trainer and remove from old trainer
+        const oldRef = ref(db, `trainerModules/${oldTrainerId}/${moduleId}`);
+        const oldSnapshot = await get(oldRef);
+        const existingData = oldSnapshot.exists() ? oldSnapshot.val() : {};
+        const movedData = {
+          ...existingData,
           updatedAt: now,
-        });
+          ...(updates.moduleTitle !== undefined ? { moduleTitle: updates.moduleTitle } : {}),
+        };
+        await set(ref(db, `trainerModules/${newTrainerId}/${moduleId}`), movedData);
+        await remove(oldRef);
       } else {
+        // Same trainer — just sync title/updatedAt
         const trainerModulePatch: Record<string, unknown> = {
           updatedAt: now,
         };
         if (updates.moduleTitle !== undefined) {
           trainerModulePatch.moduleTitle = updates.moduleTitle;
         }
-        await update(ref(db, `trainerModules/${newTrainerId}/${moduleId}`), trainerModulePatch);
+        await update(ref(db, `trainerModules/${oldTrainerId}/${moduleId}`), trainerModulePatch);
       }
     } catch (error: any) {
       console.error('❌ Error updating module metadata:', error);

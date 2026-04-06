@@ -108,10 +108,9 @@ export default function ModuleDetailPage() {
   const [editIntensity, setEditIntensity] = useState<number>(1);
   const [editSpaceRequirements, setEditSpaceRequirements] = useState<string[]>([]);
   const [editPhysicalDemandTags, setEditPhysicalDemandTags] = useState<string[]>([]);
+  const [approvedTrainers, setApprovedTrainers] = useState<User[]>([]);
   const [editTrainerId, setEditTrainerId] = useState('');
   const [editTrainerName, setEditTrainerName] = useState('');
-  const [approvedTrainers, setApprovedTrainers] = useState<User[]>([]);
-  const [loadingTrainers, setLoadingTrainers] = useState(false);
   const [showTrainerPicker, setShowTrainerPicker] = useState(false);
 
   const deletionReasons = [
@@ -130,6 +129,10 @@ export default function ModuleDetailPage() {
     if (moduleId) {
       loadModule();
     }
+    // Fetch approved trainers for the trainer picker
+    AuthController.getApprovedTrainers()
+      .then(setApprovedTrainers)
+      .catch((err) => console.error('Failed to load trainers:', err));
   }, [moduleId]);
 
   useEffect(() => {
@@ -147,24 +150,6 @@ export default function ModuleDetailPage() {
       if (module.status !== 'approved') setIsEditing(false);
     }
   }, [module]);
-
-  useEffect(() => {
-    if (isEditing && approvedTrainers.length === 0) {
-      loadApprovedTrainers();
-    }
-  }, [isEditing]);
-
-  const loadApprovedTrainers = async () => {
-    try {
-      setLoadingTrainers(true);
-      const trainers = await AuthController.getApprovedTrainers();
-      setApprovedTrainers(trainers);
-    } catch (error: any) {
-      console.error('Error loading trainers:', error);
-    } finally {
-      setLoadingTrainers(false);
-    }
-  };
 
   const techniqueVideoForExtract = useMemo(() => {
     if (!module) return '';
@@ -374,7 +359,7 @@ export default function ModuleDetailPage() {
       setProcessing(true);
       const vid = editTechniqueVideoUrl.trim();
       const savedLink = (module.techniqueVideoLink || '').trim();
-      const trainerChanged = editTrainerId !== module.trainerId;
+      const trainerChanged = editTrainerId && editTrainerId !== module.trainerId;
       await AuthController.updateModuleMetadata(moduleId, {
         moduleTitle: trimmedTitle,
         difficultyLevel: editDifficulty,
@@ -398,8 +383,7 @@ export default function ModuleDetailPage() {
         physicalDemandTags: editPhysicalDemandTags,
         techniqueVideoUrl: vid || undefined,
         techniqueVideoUrl2: !vid && !savedLink ? undefined : module.techniqueVideoUrl2,
-        trainerId: editTrainerId,
-        trainerName: editTrainerName,
+        ...(trainerChanged ? { trainerId: editTrainerId, trainerName: editTrainerName } : {}),
         updatedAt: new Date(),
       };
       setModule(updated);
@@ -726,20 +710,80 @@ export default function ModuleDetailPage() {
                 ))}
               </View>
 
-              <Text style={styles.editLabel}>Assigned Trainer</Text>
+              <Text style={styles.editLabel}>Trainer</Text>
               <TouchableOpacity
                 style={styles.trainerPickerButton}
                 onPress={() => setShowTrainerPicker(true)}
-                disabled={loadingTrainers}
               >
-                <Ionicons name="person-outline" size={18} color="#38a6de" />
-                <Text style={styles.trainerPickerText} numberOfLines={1}>
-                  {loadingTrainers
-                    ? 'Loading trainers...'
-                    : editTrainerName || editTrainerId || 'Select trainer'}
+                <Text style={styles.trainerPickerText}>
+                  {editTrainerName || 'Select trainer'}
                 </Text>
-                <Ionicons name="chevron-down" size={16} color="#6b8693" />
+                <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
               </TouchableOpacity>
+
+              <Modal
+                visible={showTrainerPicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowTrainerPicker(false)}
+              >
+                <TouchableOpacity
+                  style={styles.trainerPickerOverlay}
+                  activeOpacity={1}
+                  onPress={() => setShowTrainerPicker(false)}
+                >
+                  <View style={styles.trainerPickerModal}>
+                    <Text style={styles.trainerPickerTitle}>Select Trainer</Text>
+                    <ScrollView style={styles.trainerPickerList}>
+                      {approvedTrainers.length === 0 ? (
+                        <Text style={styles.trainerPickerEmpty}>No approved trainers found</Text>
+                      ) : (
+                        approvedTrainers.map((trainer) => {
+                          const name = trainer.username || `${trainer.firstName} ${trainer.lastName}`.trim();
+                          const isSelected = trainer.uid === editTrainerId;
+                          return (
+                            <TouchableOpacity
+                              key={trainer.uid}
+                              style={[
+                                styles.trainerPickerItem,
+                                isSelected && styles.trainerPickerItemActive,
+                              ]}
+                              onPress={() => {
+                                setEditTrainerId(trainer.uid);
+                                setEditTrainerName(name);
+                                setShowTrainerPicker(false);
+                              }}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text
+                                  style={[
+                                    styles.trainerPickerItemText,
+                                    isSelected && styles.trainerPickerItemTextActive,
+                                  ]}
+                                >
+                                  {name}
+                                </Text>
+                                <Text style={styles.trainerPickerItemEmail}>
+                                  {trainer.email}
+                                </Text>
+                              </View>
+                              {isSelected && (
+                                <Ionicons name="checkmark-circle" size={20} color="#38a6de" />
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </ScrollView>
+                    <TouchableOpacity
+                      style={styles.trainerPickerCloseButton}
+                      onPress={() => setShowTrainerPicker(false)}
+                    >
+                      <Text style={styles.trainerPickerCloseText}>Close</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
 
               <Text style={styles.editLabel}>Thumbnail (image or GIF)</Text>
               <Text style={styles.editHint}>Static images and animated GIFs are uploaded as images to Cloudinary.</Text>
@@ -953,9 +997,7 @@ export default function ModuleDetailPage() {
 
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Trainer:</Text>
-              <Text style={styles.infoValue}>
-                {isEditing ? (editTrainerName || editTrainerId || 'N/A') : (module.trainerName || 'N/A')}
-              </Text>
+              <Text style={styles.infoValue}>{module.trainerName || 'N/A'}</Text>
             </View>
 
             <View style={styles.infoRow}>
@@ -1393,62 +1435,6 @@ export default function ModuleDetailPage() {
         </TouchableOpacity>
       )}
 
-      <Modal
-        visible={showTrainerPicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowTrainerPicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Assign Trainer</Text>
-            <Text style={styles.modalSubtitle}>
-              Select an approved trainer to assign to this module.
-            </Text>
-            {loadingTrainers ? (
-              <ActivityIndicator size="large" color="#38a6de" style={{ marginVertical: 24 }} />
-            ) : (
-              <ScrollView style={styles.trainerList}>
-                {approvedTrainers.map((trainer) => {
-                  const displayName = `${trainer.firstName} ${trainer.lastName}`.trim() || trainer.username || trainer.email;
-                  const isSelected = trainer.uid === editTrainerId;
-                  return (
-                    <TouchableOpacity
-                      key={trainer.uid}
-                      style={[styles.trainerOption, isSelected && styles.trainerOptionSelected]}
-                      onPress={() => {
-                        setEditTrainerId(trainer.uid);
-                        setEditTrainerName(displayName);
-                        setShowTrainerPicker(false);
-                      }}
-                    >
-                      <View style={styles.radioButton}>
-                        {isSelected && <View style={styles.radioButtonInner} />}
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.trainerOptionName}>{displayName}</Text>
-                        <Text style={styles.trainerOptionEmail}>{trainer.email}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-                {approvedTrainers.length === 0 && (
-                  <Text style={styles.noTrainersText}>No approved trainers found.</Text>
-                )}
-              </ScrollView>
-            )}
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowTrainerPicker(false)}
-              >
-                <Text style={styles.cancelButtonText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       <Toast
         message={toastMessage}
         visible={toastVisible}
@@ -1653,6 +1639,90 @@ const styles = StyleSheet.create({
   },
   difficultyChipTextActive: {
     color: '#e6f6ff',
+  },
+  trainerPickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#2a4a5c',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: '#16303d',
+    marginBottom: 4,
+  },
+  trainerPickerText: {
+    color: '#cfe6f0',
+    fontSize: 14,
+  },
+  trainerPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trainerPickerModal: {
+    backgroundColor: '#162a36',
+    borderRadius: 14,
+    width: '90%',
+    maxWidth: 420,
+    maxHeight: '70%',
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#1e3d4d',
+  },
+  trainerPickerTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 14,
+  },
+  trainerPickerList: {
+    maxHeight: 320,
+  },
+  trainerPickerEmpty: {
+    color: '#6b8693',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
+  trainerPickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  trainerPickerItemActive: {
+    backgroundColor: 'rgba(56,166,222,0.15)',
+  },
+  trainerPickerItemText: {
+    color: '#cfe6f0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  trainerPickerItemTextActive: {
+    color: '#38a6de',
+  },
+  trainerPickerItemEmail: {
+    color: '#6b8693',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  trainerPickerCloseButton: {
+    marginTop: 14,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2a4a5c',
+  },
+  trainerPickerCloseText: {
+    color: '#9bb8c7',
+    fontSize: 14,
+    fontWeight: '600',
   },
   saveEditsButton: {
     marginTop: 16,
@@ -2176,54 +2246,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '500',
-  },
-  trainerPickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(56, 166, 222, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(56, 166, 222, 0.25)',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    gap: 10,
-    marginBottom: 4,
-  },
-  trainerPickerText: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 15,
-  },
-  trainerList: {
-    maxHeight: 300,
-    marginVertical: 12,
-  },
-  trainerOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    marginBottom: 4,
-    gap: 12,
-  },
-  trainerOptionSelected: {
-    backgroundColor: 'rgba(56, 166, 222, 0.12)',
-  },
-  trainerOptionName: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  trainerOptionEmail: {
-    color: '#6b8693',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  noTrainersText: {
-    color: '#6b8693',
-    fontSize: 14,
-    textAlign: 'center',
-    paddingVertical: 24,
   },
 });
