@@ -85,6 +85,10 @@ export default function ManageModulesPage() {
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
+  const [showRemoveCategoryModal, setShowRemoveCategoryModal] = useState(false);
+  const [categoryToRemove, setCategoryToRemove] = useState<string | null>(null);
+  const [removingCategory, setRemovingCategory] = useState(false);
+  const [confirmRemoveStep, setConfirmRemoveStep] = useState(false);
 
   const categoryFilterOptions = useMemo(
     () => [
@@ -168,6 +172,24 @@ export default function ManageModulesPage() {
       showToast(error.message || 'Failed to add category');
     } finally {
       setAddingCategory(false);
+    }
+  };
+
+  const handleRemoveCategory = async () => {
+    if (!categoryToRemove) return;
+    try {
+      setRemovingCategory(true);
+      const updated = await AuthController.removeModuleCategory(categoryToRemove);
+      setCategories(updated);
+      if (categoryFilter === categoryToRemove) setCategoryFilter('All');
+      showToast(`Category "${categoryToRemove}" removed`);
+      setCategoryToRemove(null);
+      setShowRemoveCategoryModal(false);
+      setConfirmRemoveStep(false);
+    } catch (error: any) {
+      showToast(error.message || 'Failed to remove category');
+    } finally {
+      setRemovingCategory(false);
     }
   };
 
@@ -644,21 +666,33 @@ export default function ManageModulesPage() {
                 placeholder="Search by title, category, trainer, or ID"
               />
 
-              <View style={styles.categoryRow}>
+              <View>
+                <View style={styles.categoryRow}>
+                  <Text style={styles.categoryRowLabel}>CATEGORY</Text>
+                  <View style={styles.categoryActions}>
+                    <TouchableOpacity
+                      style={styles.addCategoryButton}
+                      onPress={() => setShowAddCategoryModal(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="add-circle-outline" size={15} color="#38a6de" />
+                      <Text style={styles.addCategoryButtonText}>Add</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.removeCategoryButton}
+                      onPress={() => { setConfirmRemoveStep(false); setShowRemoveCategoryModal(true); }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="remove-circle-outline" size={15} color="#e57373" />
+                      <Text style={styles.removeCategoryButtonText}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
                 <FilterBar
-                  label="Category"
                   options={categoryFilterOptions}
                   selectedValue={categoryFilter}
                   onSelect={setCategoryFilter}
                 />
-                <TouchableOpacity
-                  style={styles.addCategoryButton}
-                  onPress={() => setShowAddCategoryModal(true)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="add-circle-outline" size={20} color="#38a6de" />
-                  <Text style={styles.addCategoryButtonText}>Add</Text>
-                </TouchableOpacity>
               </View>
               <FilterBar
                 label="Difficulty"
@@ -798,6 +832,87 @@ export default function ManageModulesPage() {
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showRemoveCategoryModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { setShowRemoveCategoryModal(false); setCategoryToRemove(null); setConfirmRemoveStep(false); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {!confirmRemoveStep ? (
+              <>
+                <Text style={styles.modalTitle}>Remove Category</Text>
+                <Text style={styles.modalSubtitle}>
+                  Select a category to remove.
+                </Text>
+                <ScrollView style={styles.reasonsList}>
+                  {categories.map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[styles.reasonOption, categoryToRemove === cat && styles.reasonOptionSelected]}
+                      onPress={() => setCategoryToRemove(cat)}
+                    >
+                      <View style={styles.radioButton}>
+                        {categoryToRemove === cat && <View style={styles.radioButtonInner} />}
+                      </View>
+                      <Text style={styles.reasonText}>{cat}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => { setShowRemoveCategoryModal(false); setCategoryToRemove(null); }}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.confirmDeleteButton]}
+                    onPress={() => setConfirmRemoveStep(true)}
+                    disabled={!categoryToRemove}
+                  >
+                    <Text style={styles.confirmDeleteButtonText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Ionicons name="warning-outline" size={48} color="#e57373" style={{ alignSelf: 'center', marginBottom: 12 }} />
+                <Text style={styles.modalTitle}>Are you sure?</Text>
+                <Text style={styles.modalSubtitle}>
+                  You are about to remove the{' '}
+                  <Text style={{ color: '#e57373', fontWeight: '700' }}>"{categoryToRemove}"</Text>{' '}
+                  category. This will delete it from the database and it will no longer appear as a filter or option when publishing modules.
+                </Text>
+                <Text style={[styles.modalSubtitle, { color: '#f0a500', marginTop: 8 }]}>
+                  Note: Existing modules that already use this category will not be affected.
+                </Text>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => setConfirmRemoveStep(false)}
+                  >
+                    <Text style={styles.cancelButtonText}>No, Go Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.confirmDeleteButton]}
+                    onPress={handleRemoveCategory}
+                    disabled={removingCategory}
+                  >
+                    {removingCategory ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.confirmDeleteButtonText}>Yes, Remove</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -1168,8 +1283,16 @@ const styles = StyleSheet.create({
   },
   categoryRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 7,
+  },
+  categoryRowLabel: {
+    color: '#9db3be',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   addCategoryButton: {
     flexDirection: 'row',
@@ -1185,6 +1308,26 @@ const styles = StyleSheet.create({
   },
   addCategoryButtonText: {
     color: '#38a6de',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  categoryActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  removeCategoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 18,
+    backgroundColor: 'rgba(229, 115, 115, 0.15)',
+    borderWidth: 1.5,
+    borderColor: '#e57373',
+  },
+  removeCategoryButtonText: {
+    color: '#e57373',
     fontSize: 13,
     fontWeight: '700',
   },

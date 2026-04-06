@@ -1952,6 +1952,27 @@ export class AuthController {
     return updated;
   }
 
+  /** Admin-only: remove a category from Firebase. */
+  static async removeModuleCategory(category: string): Promise<string[]> {
+    const currentUser = auth.currentUser ?? await this.waitForAuth();
+    if (!currentUser) throw new Error('User not authenticated');
+
+    // Verify admin role
+    const userSnap = await get(ref(db, `users/${currentUser.uid}`));
+    if (!userSnap.exists() || userSnap.val()?.role !== 'admin') {
+      throw new Error('Permission denied. Admin access required.');
+    }
+
+    const existing = await this.getModuleCategories();
+    const updated = existing.filter((c) => c !== category);
+    if (updated.length === existing.length) {
+      throw new Error('Category not found');
+    }
+
+    await set(ref(db, 'moduleCategories'), updated);
+    return updated;
+  }
+
   // Get approved modules for user dashboard (any authenticated user)
   static async getApprovedModules(): Promise<Module[]> {
     try {
