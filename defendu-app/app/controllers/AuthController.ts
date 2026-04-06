@@ -1290,6 +1290,9 @@ export class AuthController {
       techniqueVideoLink?: string | null;
       /** Clear legacy secondary URL when both primary sources are cleared */
       techniqueVideoUrl2?: string | null;
+      /** Reassign module to a different trainer */
+      trainerId?: string;
+      trainerName?: string;
     }
   ): Promise<void> {
     try {
@@ -1330,6 +1333,8 @@ export class AuthController {
       if (updates.techniqueVideoUrl2 !== undefined) {
         patch.techniqueVideoUrl2 = updates.techniqueVideoUrl2?.trim() || null;
       }
+      if (updates.trainerId !== undefined) patch.trainerId = updates.trainerId;
+      if (updates.trainerName !== undefined) patch.trainerName = updates.trainerName;
       if (Object.keys(patch).length === 0) return;
 
       const now = Date.now();
@@ -1338,14 +1343,27 @@ export class AuthController {
       await update(ref(db, `modules/${moduleId}`), patch);
 
       // Keep trainerModules reference in sync for title/status metadata
-      const trainerId = existingModule.trainerId;
-      const trainerModulePatch: Record<string, unknown> = {
-        updatedAt: now,
-      };
-      if (updates.moduleTitle !== undefined) {
-        trainerModulePatch.moduleTitle = updates.moduleTitle;
+      const oldTrainerId = existingModule.trainerId;
+      const newTrainerId = updates.trainerId ?? oldTrainerId;
+
+      if (updates.trainerId && updates.trainerId !== oldTrainerId) {
+        // Trainer changed: remove from old trainer's list, add to new
+        await remove(ref(db, `trainerModules/${oldTrainerId}/${moduleId}`));
+        await set(ref(db, `trainerModules/${newTrainerId}/${moduleId}`), {
+          moduleTitle: updates.moduleTitle ?? existingModule.moduleTitle,
+          status: existingModule.status,
+          createdAt: existingModule.createdAt instanceof Date ? existingModule.createdAt.getTime() : existingModule.createdAt,
+          updatedAt: now,
+        });
+      } else {
+        const trainerModulePatch: Record<string, unknown> = {
+          updatedAt: now,
+        };
+        if (updates.moduleTitle !== undefined) {
+          trainerModulePatch.moduleTitle = updates.moduleTitle;
+        }
+        await update(ref(db, `trainerModules/${newTrainerId}/${moduleId}`), trainerModulePatch);
       }
-      await update(ref(db, `trainerModules/${trainerId}/${moduleId}`), trainerModulePatch);
     } catch (error: any) {
       console.error('❌ Error updating module metadata:', error);
       throw new Error(error.message || 'Failed to update module');
