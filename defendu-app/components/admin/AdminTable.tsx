@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
     ScrollView,
     StyleProp,
@@ -9,6 +9,7 @@ import {
     View,
     ViewStyle,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import EmptyState from './EmptyState';
 import LoadingSkeleton from './LoadingSkeleton';
 
@@ -65,6 +66,17 @@ export default function AdminTable<T>({
 }: AdminTableProps<T>) {
   const { width } = useWindowDimensions();
   const isCompact = compact ?? width < 1080;
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollX = useRef(0);
+
+  const handleScrollLeft = () => {
+    const next = Math.max(0, scrollX.current - 300);
+    scrollRef.current?.scrollTo({ x: next, animated: true });
+  };
+
+  const handleScrollRight = () => {
+    scrollRef.current?.scrollTo({ x: scrollX.current + 300, animated: true });
+  };
 
   if (loading) {
     return (
@@ -84,7 +96,22 @@ export default function AdminTable<T>({
 
   return (
     <View style={[styles.tableShell, isCompact && styles.tableShellCompact]}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <View style={styles.scrollButtonsRow}>
+        <TouchableOpacity style={styles.scrollArrowButton} onPress={handleScrollLeft} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={18} color="#d6efff" />
+        </TouchableOpacity>
+        <Text style={styles.scrollHintText}>Scroll table</Text>
+        <TouchableOpacity style={styles.scrollArrowButton} onPress={handleScrollRight} activeOpacity={0.7}>
+          <Ionicons name="chevron-forward" size={18} color="#d6efff" />
+        </TouchableOpacity>
+      </View>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={true}
+        onScroll={(e) => { scrollX.current = e.nativeEvent.contentOffset.x; }}
+        scrollEventThrottle={16}
+      >
         <View style={[styles.tableContent, isCompact && styles.tableContentCompact]}>
           <View style={styles.headerRow}>
             {columns.map((column) => (
@@ -286,6 +313,28 @@ const styles = StyleSheet.create({
   pageText: {
     color: '#9fb5c0',
     fontSize: 12,
+    fontWeight: '600',
+  },
+  scrollButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginBottom: 8,
+  },
+  scrollArrowButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.5)',
+    backgroundColor: 'rgba(56, 166, 222, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scrollHintText: {
+    color: '#9fb5c0',
+    fontSize: 11,
     fontWeight: '600',
   },
 });

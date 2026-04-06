@@ -1726,6 +1726,84 @@ export class AuthController {
   }
 
   /**
+   * Admin-only: create a new module and assign it to a trainer.
+   * The module is created with "approved" status by default.
+   */
+  static async adminCreateModule(moduleData: {
+    moduleTitle: string;
+    description: string;
+    category: string;
+    trainerId: string;
+    trainerName: string;
+    difficultyLevel?: 'basic' | 'intermediate' | 'advanced';
+    intensityLevel?: number;
+    spaceRequirements?: string[];
+    physicalDemandTags?: string[];
+    thumbnailUrl?: string;
+    techniqueVideoUrl?: string;
+    referenceGuideUrl?: string;
+    repRange?: string;
+    trainingDurationSeconds?: number;
+  }): Promise<string> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) throw new Error('User not authenticated');
+      if (currentUser.role !== 'admin') throw new Error('Permission denied. Admin access required.');
+
+      if (!moduleData.moduleTitle.trim()) throw new Error('Module title is required');
+      if (!moduleData.category.trim()) throw new Error('Category is required');
+      if (!moduleData.trainerId) throw new Error('Trainer is required');
+
+      const moduleId = `module_${moduleData.trainerId}_${Date.now()}`;
+      const now = Date.now();
+
+      const moduleForDB: Record<string, unknown> = {
+        moduleId,
+        trainerId: moduleData.trainerId,
+        trainerName: moduleData.trainerName,
+        moduleTitle: moduleData.moduleTitle.trim(),
+        description: moduleData.description?.trim() || '',
+        category: moduleData.category,
+        difficultyLevel: moduleData.difficultyLevel ?? 'basic',
+        intensityLevel: moduleData.intensityLevel ?? 1,
+        spaceRequirements: moduleData.spaceRequirements || [],
+        physicalDemandTags: moduleData.physicalDemandTags || [],
+        thumbnailUrl: moduleData.thumbnailUrl || null,
+        techniqueVideoUrl: moduleData.techniqueVideoUrl || null,
+        referenceGuideUrl: moduleData.referenceGuideUrl || null,
+        repRange: moduleData.repRange || null,
+        trainingDurationSeconds: moduleData.trainingDurationSeconds ?? null,
+        status: 'approved',
+        certificationChecked: true,
+        createdAt: now,
+        updatedAt: now,
+        submittedAt: now,
+        reviewedAt: now,
+        reviewedBy: currentUser.uid,
+        introductionType: 'text',
+        introduction: null,
+        introductionVideoUrl: null,
+        techniqueVideoLink: null,
+        videoDuration: null,
+      };
+
+      await set(ref(db, `modules/${moduleId}`), moduleForDB);
+      await set(ref(db, `trainerModules/${moduleData.trainerId}/${moduleId}`), {
+        moduleId,
+        moduleTitle: moduleData.moduleTitle.trim(),
+        status: 'approved',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      return moduleId;
+    } catch (error: any) {
+      console.error('❌ Error creating module (admin):', error);
+      throw new Error(error.message || 'Failed to create module');
+    }
+  }
+
+  /**
    * Save module to database (publish or draft)
    */
   static async saveModule(moduleData: Omit<Module, 'moduleId' | 'createdAt' | 'updatedAt'>, isDraft: boolean = false): Promise<string> {

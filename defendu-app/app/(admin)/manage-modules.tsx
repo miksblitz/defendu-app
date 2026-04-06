@@ -50,7 +50,7 @@ const DELETION_REASONS = [
 
 type FilterType = 'active' | 'pending';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 
 export default function ManageModulesPage() {
   const { width } = useWindowDimensions();
@@ -275,16 +275,13 @@ export default function ManageModulesPage() {
 
   const totalPages = Math.max(
     1,
-    filterType === 'active'
-      ? 1
-      : Math.ceil(sortedModules.length / PAGE_SIZE)
+    Math.ceil(sortedModules.length / PAGE_SIZE)
   );
 
   const paginatedModules = useMemo(() => {
-    if (filterType === 'active') return sortedModules;
     const start = (currentPage - 1) * PAGE_SIZE;
     return sortedModules.slice(start, start + PAGE_SIZE);
-  }, [sortedModules, currentPage, filterType]);
+  }, [sortedModules, currentPage]);
 
   const handleSortChange = (columnKey: string) => {
     setSortState((prev) => {
@@ -658,6 +655,20 @@ export default function ManageModulesPage() {
                     Pending/Disabled {pendingCount}
                   </Text>
                 </TouchableOpacity>
+                <View style={{ flex: 1 }} />
+                <TouchableOpacity
+                  style={styles.addModuleButton}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(admin)/module-detail',
+                      params: { mode: 'create', ...(categoryFilter !== 'All' ? { category: categoryFilter } : {}) },
+                    })
+                  }
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add-circle" size={18} color="#FFFFFF" />
+                  <Text style={styles.addModuleButtonText}>Add Module</Text>
+                </TouchableOpacity>
               </View>
 
               <SearchInput
@@ -718,16 +729,12 @@ export default function ManageModulesPage() {
               onSortChange={filterType === 'active' ? undefined : handleSortChange}
               emptyTitle={searchQuery ? 'No modules match your search' : 'No modules found'}
               emptyDescription="Try updating your filters or review module approval data in the backend."
-              pagination={
-                filterType === 'active'
-                  ? undefined
-                  : {
-                      currentPage,
-                      totalPages,
-                      onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
-                      onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
-                    }
-              }
+              pagination={{
+                currentPage,
+                totalPages,
+                onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
+                onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
+              }}
             />
 
             {filterType === 'active' && savingOrder ? (
@@ -1328,6 +1335,20 @@ const styles = StyleSheet.create({
   },
   removeCategoryButtonText: {
     color: '#e57373',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  addModuleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#07bbc0',
+  },
+  addModuleButtonText: {
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
   },

@@ -65,16 +65,18 @@ function getPlayableVideoUrl(url: string | undefined): string {
 
 export default function ModuleDetailPage() {
   const router = useRouter();
-  const { moduleId: moduleIdParam, mode } = useLocalSearchParams<{
+  const { moduleId: moduleIdParam, mode, category: categoryParam } = useLocalSearchParams<{
     moduleId: string | string[];
     mode?: string;
+    category?: string;
   }>();
   /** Expo web/router may pass search params as string[] — API expects a single string. */
   const moduleId = Array.isArray(moduleIdParam) ? moduleIdParam[0] : moduleIdParam;
+  const isCreateMode = mode === 'create';
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
   const [module, setModule] = useState<Module | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isCreateMode);
   const [showMenu, setShowMenu] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -113,6 +115,12 @@ export default function ModuleDetailPage() {
   const [editTrainerName, setEditTrainerName] = useState('');
   const [showTrainerPicker, setShowTrainerPicker] = useState(false);
 
+  // Create mode state
+  const [createCategory, setCreateCategory] = useState(categoryParam || '');
+  const [createDescription, setCreateDescription] = useState('');
+  const [categories, setCategories] = useState<string[]>([]);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+
   const deletionReasons = [
     'Inappropriate content',
     'Incomplete information',
@@ -126,14 +134,19 @@ export default function ModuleDetailPage() {
   ];
 
   useEffect(() => {
-    if (moduleId) {
+    if (isCreateMode) {
+      // Load categories for create mode category picker
+      AuthController.getModuleCategories()
+        .then(setCategories)
+        .catch((err) => console.error('Failed to load categories:', err));
+    } else if (moduleId) {
       loadModule();
     }
     // Fetch approved trainers for the trainer picker
     AuthController.getApprovedTrainers()
       .then(setApprovedTrainers)
       .catch((err) => console.error('Failed to load trainers:', err));
-  }, [moduleId]);
+  }, [moduleId, isCreateMode]);
 
   useEffect(() => {
     if (module) {
@@ -397,6 +410,40 @@ export default function ModuleDetailPage() {
     }
   };
 
+  const handleCreateModule = async () => {
+    const trimmedTitle = editTitle.trim();
+    if (!trimmedTitle) { showToast('Title is required'); return; }
+    if (!createCategory) { showToast('Category is required'); return; }
+    if (!editTrainerId) { showToast('Trainer is required'); return; }
+    try {
+      setProcessing(true);
+      const newModuleId = await AuthController.adminCreateModule({
+        moduleTitle: trimmedTitle,
+        description: createDescription.trim(),
+        category: createCategory,
+        trainerId: editTrainerId,
+        trainerName: editTrainerName,
+        difficultyLevel: editDifficulty || 'basic',
+        intensityLevel: editIntensity,
+        spaceRequirements: editSpaceRequirements,
+        physicalDemandTags: editPhysicalDemandTags,
+        thumbnailUrl: editThumbnailUrl.trim() || undefined,
+        techniqueVideoUrl: editTechniqueVideoUrl.trim() || undefined,
+        referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
+      });
+      showToast('Module created successfully!');
+      router.replace({
+        pathname: '/(admin)/module-detail',
+        params: { moduleId: newModuleId },
+      });
+    } catch (error: any) {
+      console.error('Error creating module:', error);
+      showToast(error.message || 'Failed to create module');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleApprove = async () => {
     if (!module || !moduleId) return;
 
@@ -572,7 +619,7 @@ export default function ModuleDetailPage() {
     );
   }
 
-  if (!module) {
+  if (!module && !isCreateMode) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
@@ -581,6 +628,280 @@ export default function ModuleDetailPage() {
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Create mode: render a full creation form
+  if (isCreateMode) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.leftNavBar}>
+            <TouchableOpacity style={styles.navMenuButton} onPress={() => setShowMenu(true)}>
+              <Ionicons name="menu" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={styles.navBottomIcons}>
+              <View style={styles.navIconsBox}>
+                <TouchableOpacity onPress={() => router.push('/(admin)/adminManaging')}>
+                  <Image source={require('../../assets/images/adminmanageicon.png')} style={styles.navIconImage} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => router.push('/(admin)/adminDashboard')}>
+                  <Image source={require('../../assets/images/homeicon.png')} style={styles.navIconImage} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButtonHeader} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={styles.headerContent}>
+              <Image source={require('../../assets/images/defendudashboardlogo.png')} style={styles.headerLogoImage} resizeMode="contain" />
+              <Text style={styles.headerAdminText}>Admin</Text>
+            </View>
+          </View>
+
+          <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.statusContainer}>
+              <View style={[styles.statusBadge, styles.statusBadgeApproved]}>
+                <Text style={styles.statusText}>New Module</Text>
+              </View>
+            </View>
+
+            <Text style={[styles.moduleTitle, { marginBottom: 16 }]}>Create Module</Text>
+
+            <View style={styles.editSection}>
+              <Text style={styles.editLabel}>Title *</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editTitle}
+                onChangeText={setEditTitle}
+                placeholder="Module title"
+                placeholderTextColor="#6b8693"
+                autoFocus
+              />
+
+              <Text style={styles.editLabel}>Description</Text>
+              <TextInput
+                style={[styles.editInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                value={createDescription}
+                onChangeText={setCreateDescription}
+                placeholder="Module description"
+                placeholderTextColor="#6b8693"
+                multiline
+                numberOfLines={3}
+              />
+
+              <Text style={styles.editLabel}>Category *</Text>
+              <TouchableOpacity
+                style={styles.trainerPickerButton}
+                onPress={() => setShowCategoryPicker(true)}
+              >
+                <Text style={styles.trainerPickerText}>
+                  {createCategory || 'Select category'}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
+              </TouchableOpacity>
+
+              <Modal
+                visible={showCategoryPicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowCategoryPicker(false)}
+              >
+                <TouchableOpacity style={styles.trainerPickerOverlay} activeOpacity={1} onPress={() => setShowCategoryPicker(false)}>
+                  <View style={styles.trainerPickerModal}>
+                    <Text style={styles.trainerPickerTitle}>Select Category</Text>
+                    <ScrollView style={styles.trainerPickerList}>
+                      {categories.length === 0 ? (
+                        <Text style={styles.trainerPickerEmpty}>No categories found</Text>
+                      ) : (
+                        categories.map((cat) => {
+                          const isSelected = cat === createCategory;
+                          return (
+                            <TouchableOpacity
+                              key={cat}
+                              style={[styles.trainerPickerItem, isSelected && styles.trainerPickerItemActive]}
+                              onPress={() => { setCreateCategory(cat); setShowCategoryPicker(false); }}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.trainerPickerItemText, isSelected && styles.trainerPickerItemTextActive]}>{cat}</Text>
+                              </View>
+                              {isSelected && <Ionicons name="checkmark-circle" size={20} color="#38a6de" />}
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </ScrollView>
+                    <TouchableOpacity style={styles.trainerPickerCloseButton} onPress={() => setShowCategoryPicker(false)}>
+                      <Text style={styles.trainerPickerCloseText}>Close</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
+
+              <Text style={styles.editLabel}>Difficulty</Text>
+              <View style={styles.difficultyRow}>
+                {(['basic', 'intermediate', 'advanced'] as const).map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={[styles.difficultyChip, editDifficulty === level && styles.difficultyChipActive]}
+                    onPress={() => setEditDifficulty(level)}
+                  >
+                    <Text style={[styles.difficultyChipText, editDifficulty === level && styles.difficultyChipTextActive]}>
+                      {level.charAt(0).toUpperCase() + level.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.editLabel}>Trainer *</Text>
+              <TouchableOpacity
+                style={styles.trainerPickerButton}
+                onPress={() => setShowTrainerPicker(true)}
+              >
+                <Text style={styles.trainerPickerText}>
+                  {editTrainerName || 'Select trainer'}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
+              </TouchableOpacity>
+
+              <Modal
+                visible={showTrainerPicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowTrainerPicker(false)}
+              >
+                <TouchableOpacity style={styles.trainerPickerOverlay} activeOpacity={1} onPress={() => setShowTrainerPicker(false)}>
+                  <View style={styles.trainerPickerModal}>
+                    <Text style={styles.trainerPickerTitle}>Select Trainer</Text>
+                    <ScrollView style={styles.trainerPickerList}>
+                      {approvedTrainers.length === 0 ? (
+                        <Text style={styles.trainerPickerEmpty}>No approved trainers found</Text>
+                      ) : (
+                        approvedTrainers.map((trainer) => {
+                          const name = trainer.username || `${trainer.firstName} ${trainer.lastName}`.trim();
+                          const isSelected = trainer.uid === editTrainerId;
+                          return (
+                            <TouchableOpacity
+                              key={trainer.uid}
+                              style={[styles.trainerPickerItem, isSelected && styles.trainerPickerItemActive]}
+                              onPress={() => { setEditTrainerId(trainer.uid); setEditTrainerName(name); setShowTrainerPicker(false); }}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.trainerPickerItemText, isSelected && styles.trainerPickerItemTextActive]}>{name}</Text>
+                                <Text style={styles.trainerPickerItemEmail}>{trainer.email}</Text>
+                              </View>
+                              {isSelected && <Ionicons name="checkmark-circle" size={20} color="#38a6de" />}
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </ScrollView>
+                    <TouchableOpacity style={styles.trainerPickerCloseButton} onPress={() => setShowTrainerPicker(false)}>
+                      <Text style={styles.trainerPickerCloseText}>Close</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
+
+              <Text style={styles.editLabel}>Thumbnail (image or GIF)</Text>
+              {editThumbnailUrl ? (
+                <View style={styles.editThumbnailPreviewWrap}>
+                  <Image source={{ uri: editThumbnailUrl }} style={styles.editThumbnailPreview} resizeMode="contain" />
+                </View>
+              ) : null}
+              {Platform.OS === 'web' ? (
+                <input ref={thumbnailWebInputRef} type="file" accept="image/*,.gif" style={{ display: 'none' }} onChange={handleWebThumbnailPick} />
+              ) : null}
+              <View style={styles.thumbnailButtonsRow}>
+                <TouchableOpacity style={styles.thumbnailButton} onPress={handlePickThumbnail} disabled={processing}>
+                  <Ionicons name="images-outline" size={18} color="#38a6de" />
+                  <Text style={styles.thumbnailButtonText}>Choose from gallery</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.editLabel}>Technique video</Text>
+              {editTechniqueVideoUrl ? (
+                <Text style={styles.editTechniqueVideoUrl} numberOfLines={2}>{editTechniqueVideoUrl}</Text>
+              ) : null}
+              <View style={styles.thumbnailButtonsRow}>
+                <TouchableOpacity style={styles.thumbnailButton} onPress={handlePickTechniqueVideo} disabled={processing}>
+                  <Ionicons name="videocam-outline" size={18} color="#38a6de" />
+                  <Text style={styles.thumbnailButtonText}>{editTechniqueVideoUrl ? 'Replace video file' : 'Upload video file'}</Text>
+                </TouchableOpacity>
+              </View>
+              {Platform.OS === 'web' ? (
+                <input ref={techniqueVideoInputRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={handleWebTechniqueVideoChange} />
+              ) : null}
+
+              <Text style={styles.editLabel}>Intensity (1 = easy, 5 = very hard)</Text>
+              <View style={styles.intensityEditRow}>
+                {[1, 2, 3, 4, 5].map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={[styles.intensityDotEdit, level <= editIntensity && styles.intensityDotEditActive]}
+                    onPress={() => setEditIntensity(level)}
+                  />
+                ))}
+                <Text style={styles.intensityEditText}>{editIntensity}/5</Text>
+              </View>
+
+              <Text style={styles.editLabel}>Space Requirements</Text>
+              <View style={styles.tagsRow}>
+                {['Stationary', 'Arm/Leg Span (Medium Space)', 'Mobility (Large Space)'].map((req) => (
+                  <TouchableOpacity
+                    key={req}
+                    style={[styles.tag, editSpaceRequirements.includes(req) && styles.tagActive]}
+                    onPress={() => toggleEditSpaceRequirement(req)}
+                  >
+                    <Text style={[styles.tagText, editSpaceRequirements.includes(req) && styles.tagTextActive]}>{req}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.editLabel}>Physical Demand Tags</Text>
+              <View style={styles.tagsRow}>
+                {['Flexibility', 'Strength', 'Endurance', 'Balance', 'Coordination', 'Speed', 'Agility', 'Power'].map((tag) => (
+                  <TouchableOpacity
+                    key={tag}
+                    style={[styles.tag, editPhysicalDemandTags.includes(tag) && styles.tagActive]}
+                    onPress={() => toggleEditPhysicalDemandTag(tag)}
+                  >
+                    <Text style={[styles.tagText, editPhysicalDemandTags.includes(tag) && styles.tagTextActive]}>{tag}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.saveEditsButton, processing && styles.saveEditsButtonDisabled]}
+                onPress={handleCreateModule}
+                disabled={processing}
+              >
+                {processing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveEditsButtonText}>Create Module</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+
+        {showMenu && (
+          <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
+            <View style={styles.menuContainer}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); handleLogout(); }}>
+                <Image source={require('../../assets/images/logouticon.png')} style={styles.menuIcon} />
+                <Text style={styles.menuText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        <Toast message={toastMessage} visible={toastVisible} onHide={hideToast} duration={3000} />
       </SafeAreaView>
     );
   }
