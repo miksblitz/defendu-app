@@ -186,14 +186,8 @@ export default function ViewModulePage() {
   };
 
   const handleSafetyConfirm = () => {
-    const hasVideoIntro = module?.introductionType === 'video' && module?.introductionVideoUrl;
-    const hasTextIntro = module?.introductionType === 'text' && module?.introduction?.trim();
-    if (hasVideoIntro || hasTextIntro) {
-      setStep('video');
-      if (hasTextIntro) setIntroVideoWatched(true);
-    } else {
-      setStep('complete');
-    }
+    // Skip introduction, go straight to Try it yourself
+    handleTryItYourself();
   };
 
   const handleIntroDone = () => {

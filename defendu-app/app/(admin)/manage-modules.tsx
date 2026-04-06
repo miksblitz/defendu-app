@@ -368,7 +368,7 @@ export default function ManageModulesPage() {
       flex: 2.5,
       render: (module, index) => (
         <View style={styles.moduleCell}>
-          {filterType === 'active' ? (
+          {filterType === 'active' && categoryFilter !== 'All' ? ( // Only show drag controls when in Active tab with a specific category filter, to avoid confusion about ordering in other contexts
             <View style={styles.orderControls}>
               <TouchableOpacity
                 style={[styles.orderButton, (savingOrder || index === 0) && styles.orderButtonDisabled]}
@@ -389,7 +389,7 @@ export default function ManageModulesPage() {
               </TouchableOpacity>
             </View>
           ) : null}
-          {filterType === 'active' && (
+          {filterType === 'active' && categoryFilter !== 'All' && (
             <View style={styles.positionBadge}>
               <Text style={styles.positionBadgeText}>
                 {(module.sortOrder ?? index) + 1}
