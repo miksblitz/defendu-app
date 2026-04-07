@@ -90,6 +90,8 @@ export default function ManageModulesPage() {
   const [removingCategory, setRemovingCategory] = useState(false);
   const [confirmRemoveStep, setConfirmRemoveStep] = useState(false);
   const [showTrainerDropdown, setShowTrainerDropdown] = useState(false);
+  const [addCategoryStep, setAddCategoryStep] = useState<1 | 2>(1);
+  const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
 
   const categoryFilterOptions = useMemo(
     () => [
@@ -166,7 +168,17 @@ export default function ManageModulesPage() {
       setAddingCategory(true);
       const updated = await AuthController.addModuleCategory(trimmed);
       setCategories(updated);
+      if (selectedModuleIds.length > 0) {
+        await Promise.all(
+          selectedModuleIds.map((id) =>
+            AuthController.updateModuleMetadata(id, { category: trimmed })
+          )
+        );
+        await loadModules();
+      }
       setNewCategoryName('');
+      setSelectedModuleIds([]);
+      setAddCategoryStep(1);
       setShowAddCategoryModal(false);
       showToast(`Category "${trimmed}" added successfully`);
     } catch (error: any) {
@@ -636,19 +648,6 @@ export default function ManageModulesPage() {
                   </Text>
                 </TouchableOpacity>
                 <View style={{ flex: 1 }} />
-                <TouchableOpacity
-                  style={styles.addModuleButton}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/(admin)/module-detail',
-                      params: { mode: 'create', ...(categoryFilter !== 'All' ? { category: categoryFilter } : {}) },
-                    })
-                  }
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="add-circle" size={18} color="#FFFFFF" />
-                  <Text style={styles.addModuleButtonText}>Add Module</Text>
-                </TouchableOpacity>
               </View>
 
               <SearchInput
@@ -827,41 +826,113 @@ export default function ManageModulesPage() {
         visible={showAddCategoryModal}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowAddCategoryModal(false)}
+        onRequestClose={() => {
+          setShowAddCategoryModal(false);
+          setNewCategoryName('');
+          setSelectedModuleIds([]);
+          setAddCategoryStep(1);
+        }}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Add Category</Text>
-            <Text style={styles.modalSubtitle}>
-              Enter a name for the new module category.
-            </Text>
-            <TextInput
-              style={styles.customReasonInput}
-              placeholder="Category name"
-              placeholderTextColor="#6b8693"
-              value={newCategoryName}
-              onChangeText={setNewCategoryName}
-              autoFocus
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => { setShowAddCategoryModal(false); setNewCategoryName(''); }}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.addCategoryConfirmButton]}
-                onPress={handleAddCategory}
-                disabled={addingCategory || !newCategoryName.trim()}
-              >
-                {addingCategory ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.confirmDeleteButtonText}>Add</Text>
+          <View style={[styles.modalContainer, addCategoryStep === 2 && styles.modalContainerLarge]}>
+            {addCategoryStep === 1 ? (
+              <>
+                <Text style={styles.modalTitle}>Add Category</Text>
+                <Text style={styles.modalSubtitle}>
+                  Enter a name for the new module category.
+                </Text>
+                <TextInput
+                  style={styles.customReasonInput}
+                  placeholder="Category name"
+                  placeholderTextColor="#6b8693"
+                  value={newCategoryName}
+                  onChangeText={setNewCategoryName}
+                  autoFocus
+                />
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => {
+                      setShowAddCategoryModal(false);
+                      setNewCategoryName('');
+                      setSelectedModuleIds([]);
+                      setAddCategoryStep(1);
+                    }}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.addCategoryConfirmButton]}
+                    onPress={() => setAddCategoryStep(2)}
+                    disabled={!newCategoryName.trim()}
+                  >
+                    <Text style={styles.confirmDeleteButtonText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>Assign Modules</Text>
+                <Text style={styles.modalSubtitle}>
+                  Select existing modules to add to{' '}
+                  <Text style={{ color: '#38a6de', fontWeight: '700' }}>"{newCategoryName}"</Text>.
+                  {' '}You can skip this step.
+                </Text>
+                <ScrollView style={styles.moduleSelectList} nestedScrollEnabled>
+                  {modules.filter((m) => m.status === 'approved').map((m) => {
+                    const isSelected = selectedModuleIds.includes(m.moduleId);
+                    return (
+                      <TouchableOpacity
+                        key={m.moduleId}
+                        style={[styles.moduleSelectItem, isSelected && styles.moduleSelectItemSelected]}
+                        onPress={() =>
+                          setSelectedModuleIds((prev) =>
+                            isSelected ? prev.filter((id) => id !== m.moduleId) : [...prev, m.moduleId]
+                          )
+                        }
+                        activeOpacity={0.75}
+                      >
+                        <View style={[styles.moduleSelectCheckbox, isSelected && styles.moduleSelectCheckboxChecked]}>
+                          {isSelected && <Ionicons name="checkmark" size={12} color="#FFFFFF" />}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.moduleSelectTitle} numberOfLines={1}>{m.moduleTitle}</Text>
+                          <Text style={styles.moduleSelectMeta} numberOfLines={1}>
+                            {m.trainerName || m.trainerId || 'Unknown trainer'} · {m.category}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                {selectedModuleIds.length > 0 && (
+                  <Text style={styles.moduleSelectCount}>
+                    {selectedModuleIds.length} module{selectedModuleIds.length !== 1 ? 's' : ''} selected
+                  </Text>
                 )}
-              </TouchableOpacity>
-            </View>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => setAddCategoryStep(1)}
+                  >
+                    <Text style={styles.cancelButtonText}>Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.addCategoryConfirmButton]}
+                    onPress={handleAddCategory}
+                    disabled={addingCategory}
+                  >
+                    {addingCategory ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.confirmDeleteButtonText}>
+                        {selectedModuleIds.length > 0 ? 'Add & Assign' : 'Add Category'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -1310,6 +1381,61 @@ const styles = StyleSheet.create({
   },
   addCategoryConfirmButton: {
     backgroundColor: '#07bbc0',
+  },
+  modalContainerLarge: {
+    maxHeight: '80%',
+  },
+  moduleSelectList: {
+    maxHeight: 320,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  moduleSelectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(126, 153, 166, 0.2)',
+    marginBottom: 6,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    gap: 12,
+  },
+  moduleSelectItemSelected: {
+    borderColor: '#38a6de',
+    backgroundColor: 'rgba(56, 166, 222, 0.1)',
+  },
+  moduleSelectCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#6b8693',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moduleSelectCheckboxChecked: {
+    backgroundColor: '#38a6de',
+    borderColor: '#38a6de',
+  },
+  moduleSelectTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  moduleSelectMeta: {
+    color: '#9db3be',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  moduleSelectCount: {
+    color: '#38a6de',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 2,
   },
   categoryRow: {
     flexDirection: 'row',
