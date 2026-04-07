@@ -1,112 +1,524 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Image,
+  ImageBackground,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { ModuleGridSkeleton } from '../../components/SkeletonLoader';
+import { getModuleColumns, getSidebarWidth, Breakpoints } from '../../constants/layout';
+import { useLogout } from '../../hooks/useLogout';
+import { Module } from '../_models/Module';
+import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { AuthController } from '../controllers/AuthController';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+const CARD_GAP = 12;
 
-export default function TabTwoScreen() {
+function normalizeCategory(cat: string | undefined): string {
+  return (cat ?? '').trim().toLowerCase();
+}
+
+export default function ExploreScreen() {
+  const { width: screenWidth } = useWindowDimensions();
+  const sidebarW = getSidebarWidth(screenWidth);
+  const isMobile = screenWidth < Breakpoints.tablet;
+  const columns = getModuleColumns(screenWidth);
+  const router = useRouter();
+  const handleLogout = useLogout();
+  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
+
+  const [modules, setModules] = useState<Module[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'newest' | 'title'>('newest');
+  const [showMenu, setShowMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const hoverScales = useRef<Map<string, Animated.Value>>(new Map()).current;
+
+  const getHoverScale = (id: string) => {
+    if (!hoverScales.has(id)) hoverScales.set(id, new Animated.Value(1));
+    return hoverScales.get(id)!;
+  };
+
+  const handlePressIn = (id: string) => {
+    Animated.spring(getHoverScale(id), { toValue: 1.04, useNativeDriver: true, speed: 20, bounciness: 8 }).start();
+  };
+  const handlePressOut = (id: string) => {
+    Animated.spring(getHoverScale(id), { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 8 }).start();
+  };
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const user = await AuthController.getCurrentUser();
+      if (!user) { router.replace('/(auth)/login'); return; }
+      const [approved, cats] = await Promise.all([
+        AuthController.getApprovedModules(),
+        AuthController.getModuleCategories(),
+      ]);
+      setModules(approved);
+      setCategories(cats);
+    } catch (e) {
+      console.error('Explore load error:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+
+  useEffect(() => {
+    if (!loading) {
+      Animated.timing(headerAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    }
+  }, [loading, headerAnim]);
+
+  const filteredModules = useMemo(() => {
+    let result = modules;
+    if (selectedCategory) {
+      result = result.filter((m) => normalizeCategory(m.category) === normalizeCategory(selectedCategory));
+    }
+    if (selectedDifficulty) {
+      result = result.filter((m) => (m.difficultyLevel ?? 'basic') === selectedDifficulty);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (m) =>
+          m.moduleTitle.toLowerCase().includes(q) ||
+          m.category.toLowerCase().includes(q) ||
+          (m.trainerName ?? '').toLowerCase().includes(q) ||
+          (m.description ?? '').toLowerCase().includes(q),
+      );
+    }
+    if (sortBy === 'title') {
+      result = [...result].sort((a, b) => a.moduleTitle.localeCompare(b.moduleTitle));
+    }
+    return result;
+  }, [modules, selectedCategory, selectedDifficulty, searchQuery, sortBy]);
+
+  const contentWidth = screenWidth - sidebarW - (isMobile ? 32 : 60);
+  const totalGaps = CARD_GAP * (columns - 1);
+  const cardWidth = Math.floor((contentWidth - totalGaps) / columns);
+
+  const handleModulePress = (m: Module) => {
+    router.push(`/view-module?moduleId=${m.moduleId}` as any);
+  };
+
+  const handleMessages = () => {
+    clearUnread();
+    setShowMenu(false);
+    router.push('/messages');
+  };
+
+  const renderSidebar = () => (
+    <View style={s.sidebar}>
+      <View style={s.sidebarTopWrap}>
+        <TouchableOpacity style={s.sidebarTopBtn} onPress={() => { clearUnread(); setShowMenu(true); }}>
+          <Image source={require('../../assets/images/threedoticon.png')} style={s.threeDotIcon} />
+        </TouchableOpacity>
+        {unreadCount > 0 && (
+          <View style={s.unreadBadge}>
+            <Text style={s.unreadBadgeText}>{unreadDisplay}</Text>
+          </View>
+        )}
+      </View>
+      <View style={s.sidebarBottom}>
+        <TouchableOpacity style={s.sidebarBtn} onPress={() => router.push('/profile')}>
+          <Image source={require('../../assets/images/blueprofileicon.png')} style={s.sidebarIcon} />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.sidebarBtn} onPress={() => router.push('/trainer')}>
+          <Image source={require('../../assets/images/trainericon.png')} style={s.sidebarIcon} />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.sidebarBtn} onPress={() => router.push('/dashboard')}>
+          <Image source={require('../../assets/images/homeicon.png')} style={s.sidebarIcon} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderMobileHeader = () => (
+    <View style={s.mobileHeader}>
+      <TouchableOpacity onPress={() => setShowMobileMenu(true)} style={s.hamburgerBtn}>
+        <Ionicons name="menu" size={26} color="#FFFFFF" />
+        {unreadCount > 0 && (
+          <View style={s.hamburgerBadge}>
+            <Text style={s.unreadBadgeText}>{unreadDisplay}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+      <Image source={require('../../assets/images/defendudashboardlogo.png')} style={s.mobileLogo} resizeMode="contain" />
+      <View style={{ width: 40 }} />
+    </View>
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <SafeAreaView style={s.safeArea}>
+      <View style={s.container}>
+        {!isMobile && renderSidebar()}
+
+        <View style={{ flex: 1 }}>
+          {isMobile && renderMobileHeader()}
+
+          <ScrollView
+            style={s.scrollView}
+            contentContainerStyle={[s.scrollContent, isMobile && s.scrollContentMobile]}
+            showsVerticalScrollIndicator
+          >
+            {/* Header */}
+            <Animated.View style={[s.header, { opacity: headerAnim, transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] }]}>
+              {!isMobile && (
+                <Image source={require('../../assets/images/defendudashboardlogo.png')} style={s.logoImage} resizeMode="contain" />
+              )}
+              <Text style={s.pageTitle}>Explore Modules</Text>
+              <Text style={s.pageSubtitle}>
+                Browse all {modules.length} training modules — filter by category, difficulty, or search.
+              </Text>
+            </Animated.View>
+
+            {/* Search Bar */}
+            <View style={s.searchBarWrap}>
+              <Ionicons name="search" size={18} color="#6b8693" style={{ marginRight: 8 }} />
+              <TextInput
+                style={s.searchInput}
+                placeholder="Search modules, trainers, categories…"
+                placeholderTextColor="#6b8693"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
+                  <Ionicons name="close-circle" size={18} color="#6b8693" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Category Pills */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.pillScroll} contentContainerStyle={s.pillRow}>
+              <TouchableOpacity
+                style={[s.pill, !selectedCategory && s.pillActive]}
+                onPress={() => setSelectedCategory(null)}
+              >
+                <Text style={[s.pillText, !selectedCategory && s.pillTextActive]}>All</Text>
+              </TouchableOpacity>
+              {categories.map((cat) => {
+                const count = modules.filter((m) => normalizeCategory(m.category) === normalizeCategory(cat)).length;
+                const active = selectedCategory === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[s.pill, active && s.pillActive]}
+                    onPress={() => setSelectedCategory(active ? null : cat)}
+                  >
+                    <Text style={[s.pillText, active && s.pillTextActive]}>
+                      {cat} ({count})
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Difficulty + Sort Row */}
+            <View style={s.filterRow}>
+              <View style={s.filterGroup}>
+                {['basic', 'intermediate', 'advanced'].map((d) => {
+                  const active = selectedDifficulty === d;
+                  return (
+                    <TouchableOpacity
+                      key={d}
+                      style={[s.filterChip, active && s.filterChipActive]}
+                      onPress={() => setSelectedDifficulty(active ? null : d)}
+                    >
+                      <Text style={[s.filterChipText, active && s.filterChipTextActive]}>
+                        {d.charAt(0).toUpperCase() + d.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={s.sortGroup}>
+                <TouchableOpacity
+                  style={[s.sortBtn, sortBy === 'newest' && s.sortBtnActive]}
+                  onPress={() => setSortBy('newest')}
+                >
+                  <Text style={[s.sortBtnText, sortBy === 'newest' && s.sortBtnTextActive]}>Newest</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.sortBtn, sortBy === 'title' && s.sortBtnActive]}
+                  onPress={() => setSortBy('title')}
+                >
+                  <Text style={[s.sortBtnText, sortBy === 'title' && s.sortBtnTextActive]}>A–Z</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Results count */}
+            <Text style={s.resultCount}>
+              {filteredModules.length} module{filteredModules.length !== 1 ? 's' : ''}
+              {searchQuery.trim() ? ` matching "${searchQuery}"` : ''}
+            </Text>
+
+            {/* Module Grid */}
+            {loading ? (
+              <ModuleGridSkeleton columns={columns} cardWidth={cardWidth} />
+            ) : filteredModules.length === 0 ? (
+              <View style={s.emptyState}>
+                <Ionicons name="search-outline" size={48} color="#0a3645" />
+                <Text style={s.emptyTitle}>No modules found</Text>
+                <Text style={s.emptySubtext}>Try adjusting your filters or search query.</Text>
+                <TouchableOpacity
+                  style={s.emptyResetBtn}
+                  onPress={() => { setSearchQuery(''); setSelectedCategory(null); setSelectedDifficulty(null); }}
+                >
+                  <Text style={s.emptyResetText}>Clear Filters</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={s.modulesGrid}>
+                {filteredModules.map((module, index) => {
+                  const isEndOfRow = (index + 1) % columns === 0;
+                  const durationMin = module.videoDuration ? `${Math.ceil(module.videoDuration / 60)} min` : '';
+                  const imageSource = module.thumbnailUrl
+                    ? { uri: module.thumbnailUrl }
+                    : require('../../assets/images/managemodulepic.png');
+                  const hoverScale = getHoverScale(module.moduleId);
+
+                  return (
+                    <Animated.View
+                      key={module.moduleId}
+                      style={[
+                        { width: cardWidth, marginRight: isEndOfRow ? 0 : CARD_GAP, marginBottom: 16 },
+                        { transform: [{ scale: hoverScale }] },
+                      ]}
+                    >
+                      <TouchableOpacity
+                        style={s.card}
+                        onPress={() => handleModulePress(module)}
+                        onPressIn={() => handlePressIn(module.moduleId)}
+                        onPressOut={() => handlePressOut(module.moduleId)}
+                        activeOpacity={0.9}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open module ${module.moduleTitle}`}
+                      >
+                        <ImageBackground
+                          source={imageSource}
+                          style={s.cardImage}
+                          imageStyle={s.cardImageInner}
+                        >
+                          <View style={s.cardOverlay}>
+                            <View style={s.cardBadgeRow}>
+                              <View style={s.cardCategoryBadge}>
+                                <Text style={s.cardCategoryText}>{module.category}</Text>
+                              </View>
+                              {module.difficultyLevel && (
+                                <View style={[s.cardDifficultyBadge, module.difficultyLevel === 'advanced' && s.diffAdvanced, module.difficultyLevel === 'intermediate' && s.diffIntermediate]}>
+                                  <Text style={s.cardDifficultyText}>
+                                    {module.difficultyLevel.charAt(0).toUpperCase() + module.difficultyLevel.slice(1)}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                            <View style={s.cardContent}>
+                              <Text style={s.cardTitle} numberOfLines={2}>{module.moduleTitle}</Text>
+                              {module.description ? (
+                                <Text style={s.cardDesc} numberOfLines={2}>{module.description}</Text>
+                              ) : null}
+                              <View style={s.cardMeta}>
+                                {module.trainerName ? (
+                                  <Text style={s.cardTrainer} numberOfLines={1}>
+                                    <Ionicons name="person-outline" size={11} color="#6b8693" /> {module.trainerName}
+                                  </Text>
+                                ) : null}
+                                {durationMin ? (
+                                  <View style={s.durationBadge}>
+                                    <Text style={s.durationText}>{durationMin}</Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                            </View>
+                          </View>
+                        </ImageBackground>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+
+      {/* Mobile Drawer */}
+      {showMobileMenu && (
+        <TouchableOpacity style={s.drawerOverlay} activeOpacity={1} onPress={() => setShowMobileMenu(false)}>
+          <View style={s.drawerContainer}>
+            <View style={s.drawerHeader}>
+              <Image source={require('../../assets/images/defendudashboardlogo.png')} style={s.drawerLogo} resizeMode="contain" />
+              <TouchableOpacity onPress={() => setShowMobileMenu(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={s.drawerItem} onPress={() => { setShowMobileMenu(false); router.push('/dashboard'); }}>
+              <Image source={require('../../assets/images/homeicon.png')} style={s.drawerIcon} />
+              <Text style={s.drawerText}>Home</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.drawerItem} onPress={() => { setShowMobileMenu(false); router.push('/profile'); }}>
+              <Image source={require('../../assets/images/blueprofileicon.png')} style={s.drawerIcon} />
+              <Text style={s.drawerText}>Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.drawerItem} onPress={() => { setShowMobileMenu(false); router.push('/trainer'); }}>
+              <Image source={require('../../assets/images/trainericon.png')} style={s.drawerIcon} />
+              <Text style={s.drawerText}>Trainer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.drawerItem} onPress={() => { setShowMobileMenu(false); handleMessages(); }}>
+              <Image source={require('../../assets/images/messageicon.png')} style={s.drawerIcon} />
+              <Text style={s.drawerText}>Messages</Text>
+              {unreadCount > 0 && (
+                <View style={s.drawerBadge}>
+                  <Text style={s.unreadBadgeText}>{unreadDisplay}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <View style={s.drawerDivider} />
+            <TouchableOpacity style={s.drawerItem} onPress={() => { setShowMobileMenu(false); handleLogout(); }}>
+              <Image source={require('../../assets/images/logouticon.png')} style={s.drawerIcon} />
+              <Text style={[s.drawerText, { color: '#e57373' }]}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {/* Desktop pop-up menu */}
+      {showMenu && (
+        <TouchableOpacity style={s.menuOverlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
+          <View style={s.menuContainer}>
+            <TouchableOpacity style={s.menuItem} onPress={handleMessages}>
+              <Image source={require('../../assets/images/messageicon.png')} style={s.menuIcon} />
+              <Text style={s.menuText}>Messages</Text>
+              {unreadCount > 0 && (
+                <View style={s.menuBadge}><Text style={s.unreadBadgeText}>{unreadDisplay}</Text></View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={s.menuItem} onPress={() => { setShowMenu(false); handleLogout(); }}>
+              <Image source={require('../../assets/images/logouticon.png')} style={s.menuIcon} />
+              <Text style={s.menuText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+const s = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: '#041527' },
+  container: { flex: 1, flexDirection: 'row' },
+
+  sidebar: { backgroundColor: '#000E1C', width: 80, paddingTop: 20, paddingBottom: 30, alignItems: 'center', justifyContent: 'space-between' },
+  sidebarTopWrap: { position: 'relative' },
+  sidebarTopBtn: { padding: 8 },
+  sidebarBottom: { flexDirection: 'column', width: '100%', alignItems: 'center' },
+  sidebarBtn: { paddingVertical: 20, width: '100%', alignItems: 'center' },
+  sidebarIcon: { width: 28, height: 28, tintColor: '#07bbc0', resizeMode: 'contain' },
+  threeDotIcon: { width: 24, height: 24, resizeMode: 'contain' },
+  unreadBadge: { position: 'absolute', top: 2, right: 2, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#e53935', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  unreadBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+
+  mobileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#000E1C' },
+  hamburgerBtn: { padding: 4, position: 'relative' },
+  hamburgerBadge: { position: 'absolute', top: -2, right: -6, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#e53935', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  mobileLogo: { width: 120, height: 36 },
+
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: 30, paddingVertical: 24, paddingBottom: 40 },
+  scrollContentMobile: { paddingHorizontal: 16, paddingVertical: 16, paddingBottom: 32 },
+
+  header: { marginBottom: 20 },
+  logoImage: { width: 160, height: 50, marginBottom: 12 },
+  pageTitle: { fontSize: 26, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
+  pageSubtitle: { fontSize: 14, color: '#6b8693', lineHeight: 20 },
+
+  searchBarWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0a1e2e', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(107,134,147,0.25)', paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16 },
+  searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14, padding: 0 },
+
+  pillScroll: { marginBottom: 12 },
+  pillRow: { flexDirection: 'row', gap: 8, paddingRight: 16 },
+  pill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#062731', borderWidth: 1, borderColor: 'rgba(7,187,192,0.25)' },
+  pillActive: { backgroundColor: '#07bbc0', borderColor: '#07bbc0' },
+  pillText: { color: '#6b8693', fontSize: 13, fontWeight: '600' },
+  pillTextActive: { color: '#041527' },
+
+  filterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  filterGroup: { flexDirection: 'row', gap: 8 },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: 'transparent', borderWidth: 1, borderColor: 'rgba(107,134,147,0.3)' },
+  filterChipActive: { backgroundColor: 'rgba(7,187,192,0.15)', borderColor: '#07bbc0' },
+  filterChipText: { color: '#6b8693', fontSize: 12, fontWeight: '600' },
+  filterChipTextActive: { color: '#07bbc0' },
+  sortGroup: { flexDirection: 'row', gap: 6 },
+  sortBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: 'transparent' },
+  sortBtnActive: { backgroundColor: 'rgba(7,187,192,0.1)' },
+  sortBtnText: { color: '#6b8693', fontSize: 12, fontWeight: '600' },
+  sortBtnTextActive: { color: '#07bbc0' },
+
+  resultCount: { color: '#6b8693', fontSize: 12, marginBottom: 12 },
+
+  modulesGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+
+  card: { borderRadius: 16, overflow: 'hidden', backgroundColor: '#062731' },
+  cardImage: { width: '100%', minHeight: 280 },
+  cardImageInner: { resizeMode: 'cover', borderRadius: 16 },
+  cardOverlay: { flex: 1, backgroundColor: 'rgba(4,21,39,0.7)', justifyContent: 'space-between' },
+  cardBadgeRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 12 },
+  cardCategoryBadge: { backgroundColor: 'rgba(6,39,49,0.9)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  cardCategoryText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
+  cardDifficultyBadge: { backgroundColor: 'rgba(7,187,192,0.2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  diffIntermediate: { backgroundColor: 'rgba(240,165,0,0.2)' },
+  diffAdvanced: { backgroundColor: 'rgba(229,115,115,0.2)' },
+  cardDifficultyText: { color: '#b8cdd9', fontSize: 10, fontWeight: '700' },
+  cardContent: { padding: 14, paddingTop: 8 },
+  cardTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  cardDesc: { color: '#b8cdd9', fontSize: 12, lineHeight: 17, marginBottom: 8 },
+  cardMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardTrainer: { color: '#6b8693', fontSize: 11 },
+  durationBadge: { backgroundColor: 'rgba(7,187,192,0.9)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  durationText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+
+  emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
+  emptyTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
+  emptySubtext: { color: '#6b8693', fontSize: 14 },
+  emptyResetBtn: { marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, backgroundColor: '#07bbc0' },
+  emptyResetText: { color: '#041527', fontSize: 13, fontWeight: '700' },
+
+  drawerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,14,28,0.85)', zIndex: 1000 },
+  drawerContainer: { width: 280, height: '100%', backgroundColor: '#000E1C', paddingTop: 20, paddingHorizontal: 20 },
+  drawerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
+  drawerLogo: { width: 120, height: 36 },
+  drawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 14 },
+  drawerIcon: { width: 22, height: 22, tintColor: '#07bbc0', resizeMode: 'contain' },
+  drawerText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  drawerBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#e53935', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, marginLeft: 'auto' as any },
+  drawerDivider: { height: 1, backgroundColor: 'rgba(107,134,147,0.2)', marginVertical: 12 },
+
+  menuOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, backgroundColor: 'rgba(0,14,28,0.75)' },
+  menuContainer: { position: 'absolute', top: 20, left: 90, backgroundColor: '#000E1C', borderRadius: 15, borderWidth: 1, borderColor: '#6b8693', paddingVertical: 10, minWidth: 200, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 20 },
+  menuIcon: { width: 24, height: 24, marginRight: 12, resizeMode: 'contain' },
+  menuText: { color: '#FFFFFF', fontSize: 16, fontWeight: '500' },
+  menuBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#e53935', alignItems: 'center', justifyContent: 'center', marginLeft: 8, paddingHorizontal: 6 },
 });

@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     height: 56,
     width: '100%',
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: 'rgba(0, 170, 187, 0.15)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -273,6 +273,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
+    cursor: 'pointer' as any,
   },
   buttonDisabled: {
     opacity: 0.6,

@@ -92,6 +92,8 @@ export default function ManageModulesPage() {
   const [showTrainerDropdown, setShowTrainerDropdown] = useState(false);
   const [addCategoryStep, setAddCategoryStep] = useState<1 | 2>(1);
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
+  const [assignSearchQuery, setAssignSearchQuery] = useState('');
+  const [assignCategoryFilter, setAssignCategoryFilter] = useState<string>('All');
 
   const categoryFilterOptions = useMemo(
     () => [
@@ -831,6 +833,8 @@ export default function ManageModulesPage() {
           setNewCategoryName('');
           setSelectedModuleIds([]);
           setAddCategoryStep(1);
+          setAssignSearchQuery('');
+          setAssignCategoryFilter('All');
         }}
       >
         <View style={styles.modalOverlay}>
@@ -857,6 +861,8 @@ export default function ManageModulesPage() {
                       setNewCategoryName('');
                       setSelectedModuleIds([]);
                       setAddCategoryStep(1);
+                      setAssignSearchQuery('');
+                      setAssignCategoryFilter('All');
                     }}
                   >
                     <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -878,8 +884,36 @@ export default function ManageModulesPage() {
                   <Text style={{ color: '#38a6de', fontWeight: '700' }}>"{newCategoryName}"</Text>.
                   {' '}You can skip this step.
                 </Text>
+                {/* Search bar */}
+                <TextInput
+                  style={styles.assignSearchInput}
+                  placeholder="Search modules..."
+                  placeholderTextColor="#6b8693"
+                  value={assignSearchQuery}
+                  onChangeText={setAssignSearchQuery}
+                />
+                {/* Category filter pills */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.assignCategoryRow}>
+                  {['All', ...categories].map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[styles.assignCategoryPill, assignCategoryFilter === cat && styles.assignCategoryPillActive]}
+                      onPress={() => setAssignCategoryFilter(cat)}
+                    >
+                      <Text style={[styles.assignCategoryPillText, assignCategoryFilter === cat && styles.assignCategoryPillTextActive]}>{cat}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
                 <ScrollView style={styles.moduleSelectList} nestedScrollEnabled>
-                  {modules.filter((m) => m.status === 'approved').map((m) => {
+                  {modules.filter((m) => {
+                    if (m.status !== 'approved') return false;
+                    if (assignCategoryFilter !== 'All' && m.category !== assignCategoryFilter) return false;
+                    if (assignSearchQuery.trim()) {
+                      const q = assignSearchQuery.trim().toLowerCase();
+                      return m.moduleTitle.toLowerCase().includes(q) || (m.trainerName || '').toLowerCase().includes(q);
+                    }
+                    return true;
+                  }).map((m) => {
                     const isSelected = selectedModuleIds.includes(m.moduleId);
                     return (
                       <TouchableOpacity
@@ -1436,6 +1470,42 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 2,
+  },
+  assignSearchInput: {
+    backgroundColor: '#0a1e30',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1a3a4a',
+    color: '#FFFFFF',
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  assignCategoryRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  assignCategoryPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#0a1e30',
+    borderWidth: 1,
+    borderColor: '#1a3a4a',
+    marginRight: 6,
+  },
+  assignCategoryPillActive: {
+    backgroundColor: '#38a6de',
+    borderColor: '#38a6de',
+  },
+  assignCategoryPillText: {
+    color: '#9db3be',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  assignCategoryPillTextActive: {
+    color: '#FFFFFF',
   },
   categoryRow: {
     flexDirection: 'row',

@@ -101,6 +101,9 @@ export default function ModuleDetailPage() {
 
   const [isEditing, setIsEditing] = useState(mode === 'edit');
   const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editIntroduction, setEditIntroduction] = useState('');
+  const [editCategory, setEditCategory] = useState('');
   const [editDifficulty, setEditDifficulty] = useState<Module['difficultyLevel']>('basic');
   const [editThumbnailUrl, setEditThumbnailUrl] = useState('');
   const [editTechniqueVideoUrl, setEditTechniqueVideoUrl] = useState('');
@@ -120,6 +123,7 @@ export default function ModuleDetailPage() {
   const [createDescription, setCreateDescription] = useState('');
   const [categories, setCategories] = useState<string[]>([]);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showEditCategoryPicker, setShowEditCategoryPicker] = useState(false);
 
   const deletionReasons = [
     'Inappropriate content',
@@ -141,6 +145,10 @@ export default function ModuleDetailPage() {
         .catch((err) => console.error('Failed to load categories:', err));
     } else if (moduleId) {
       loadModule();
+      // Also load categories for edit mode category picker
+      AuthController.getModuleCategories()
+        .then(setCategories)
+        .catch((err) => console.error('Failed to load categories:', err));
     }
     // Fetch approved trainers for the trainer picker
     AuthController.getApprovedTrainers()
@@ -151,6 +159,9 @@ export default function ModuleDetailPage() {
   useEffect(() => {
     if (module) {
       setEditTitle(module.moduleTitle);
+      setEditDescription(module.description || '');
+      setEditIntroduction(module.introductionType === 'text' ? (module.introduction || '') : '');
+      setEditCategory(module.category || '');
       setEditDifficulty(module.difficultyLevel || 'basic');
       setEditThumbnailUrl(module.thumbnailUrl || '');
       setEditTechniqueVideoUrl(module.techniqueVideoUrl || '');
@@ -373,8 +384,12 @@ export default function ModuleDetailPage() {
       const vid = editTechniqueVideoUrl.trim();
       const savedLink = (module.techniqueVideoLink || '').trim();
       const trainerChanged = editTrainerId && editTrainerId !== module.trainerId;
+      const categoryChanged = editCategory.trim() && editCategory.trim() !== module.category;
       await AuthController.updateModuleMetadata(moduleId, {
         moduleTitle: trimmedTitle,
+        description: editDescription.trim(),
+        introduction: editIntroduction.trim(),
+        category: editCategory.trim() || undefined,
         difficultyLevel: editDifficulty,
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
         referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
@@ -388,6 +403,9 @@ export default function ModuleDetailPage() {
       const updated: Module = {
         ...module,
         moduleTitle: trimmedTitle,
+        description: editDescription.trim(),
+        introduction: editIntroduction.trim() || module.introduction,
+        category: editCategory.trim() || module.category,
         difficultyLevel: editDifficulty,
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
         referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
@@ -1007,6 +1025,76 @@ export default function ModuleDetailPage() {
                 placeholder="Module title"
                 placeholderTextColor="#6b8693"
               />
+
+              <Text style={styles.editLabel}>Description</Text>
+              <TextInput
+                style={[styles.editInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                value={editDescription}
+                onChangeText={setEditDescription}
+                placeholder="Module description"
+                placeholderTextColor="#6b8693"
+                multiline
+                numberOfLines={3}
+              />
+
+              <Text style={styles.editLabel}>Introduction (text)</Text>
+              <TextInput
+                style={[styles.editInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                value={editIntroduction}
+                onChangeText={setEditIntroduction}
+                placeholder="Introduction text"
+                placeholderTextColor="#6b8693"
+                multiline
+                numberOfLines={3}
+              />
+
+              <Text style={styles.editLabel}>Category</Text>
+              <TouchableOpacity
+                style={styles.trainerPickerButton}
+                onPress={() => setShowEditCategoryPicker(true)}
+              >
+                <Text style={styles.trainerPickerText}>
+                  {editCategory || 'Select category'}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
+              </TouchableOpacity>
+
+              <Modal
+                visible={showEditCategoryPicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowEditCategoryPicker(false)}
+              >
+                <TouchableOpacity style={styles.trainerPickerOverlay} activeOpacity={1} onPress={() => setShowEditCategoryPicker(false)}>
+                  <View style={styles.trainerPickerModal}>
+                    <Text style={styles.trainerPickerTitle}>Select Category</Text>
+                    <ScrollView style={styles.trainerPickerList}>
+                      {categories.length === 0 ? (
+                        <Text style={styles.trainerPickerEmpty}>No categories found</Text>
+                      ) : (
+                        categories.map((cat) => {
+                          const isSelected = cat === editCategory;
+                          return (
+                            <TouchableOpacity
+                              key={cat}
+                              style={[styles.trainerPickerItem, isSelected && styles.trainerPickerItemActive]}
+                              onPress={() => { setEditCategory(cat); setShowEditCategoryPicker(false); }}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.trainerPickerItemText, isSelected && styles.trainerPickerItemTextActive]}>{cat}</Text>
+                              </View>
+                              {isSelected && <Ionicons name="checkmark-circle" size={20} color="#38a6de" />}
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </ScrollView>
+                    <TouchableOpacity style={styles.trainerPickerCloseButton} onPress={() => setShowEditCategoryPicker(false)}>
+                      <Text style={styles.trainerPickerCloseText}>Close</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
 
               <Text style={styles.editLabel}>Difficulty</Text>
               <View style={styles.difficultyRow}>

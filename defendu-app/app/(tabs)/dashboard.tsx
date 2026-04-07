@@ -1,9 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Animated,
-    Dimensions,
     Image,
     ImageBackground,
     SafeAreaView,
@@ -11,9 +11,12 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
+import { ModuleGridSkeleton } from '../../components/SkeletonLoader';
+import { getModuleColumns, getSidebarWidth, Breakpoints } from '../../constants/layout';
 import { useLogout } from '../../hooks/useLogout';
 import { Module } from '../_models/Module';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
@@ -57,6 +60,8 @@ function getDayCountsThisWeek(completionTimestamps: Record<string, number>): num
   return counts;
 }
 
+const CARD_GAP = 12;
+
 const DEFAULT_MODULE_CATEGORIES = [
   'Punching',
   'Kicking',
@@ -69,20 +74,18 @@ function normalizeCategory(cat: string | undefined): string {
   return (cat ?? '').trim().toLowerCase();
 }
 
-// Get screen width for horizontal scrolling
-const screenWidth = Dimensions.get('window').width;
-// Calculate module card width to fit exactly 4 in a row
-// Available width = screenWidth - sidebar(80) - mainContentContainer padding(60) - modulesContainer padding(24)
-// For 4 cards: 3 gaps of 12px between them (no gap after the 4th card)
-const availableWidth = screenWidth - 80 - 60 - 24;
-const gapBetweenCards = 12; // Gap between cards (not after last card in row)
-const totalGapsFor4Cards = gapBetweenCards * 3; // 3 gaps between 4 cards
-const moduleCardWidth = Math.floor((availableWidth - totalGapsFor4Cards) / 4); // Floor to ensure it fits
-const moduleCardMarginRight = gapBetweenCards;
-
 export default function DashboardScreen() {
+  const { width: screenWidth } = useWindowDimensions();
+  const sidebarW = getSidebarWidth(screenWidth);
+  const isMobile = screenWidth < Breakpoints.tablet;
+  const columns = getModuleColumns(screenWidth);
+  const contentWidth = screenWidth - sidebarW - (isMobile ? 32 : 60) - 24;
+  const moduleCardWidth = Math.floor((contentWidth - CARD_GAP * (columns - 1)) / columns);
+  const moduleCardMarginRight = CARD_GAP;
+
   const [selectedDay, setSelectedDay] = useState(() => (new Date().getDay() + 6) % 7);
   const [showMenu, setShowMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
   const [userName, setUserName] = useState('User');
   const [modules, setModules] = useState<Module[]>([]);
@@ -328,7 +331,8 @@ export default function DashboardScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Fixed Sidebar - always visible */}
+        {/* Sidebar - desktop/tablet only */}
+        {!isMobile && (
         <View style={styles.sidebar}>
           {/* Three dots icon at top */}
           <View style={styles.sidebarTopButtonWrap}>
@@ -377,25 +381,33 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        )}
 
         {/* Main Content */}
+        <View style={{ flex: 1 }}>
+        {/* Mobile Header */}
+        {isMobile && (
+          <View style={styles.mobileHeader}>
+            <TouchableOpacity onPress={() => setShowMobileMenu(true)} style={styles.hamburgerBtn}>
+              <Ionicons name="menu" size={26} color="#FFFFFF" />
+              {unreadCount > 0 && (
+                <View style={styles.hamburgerBadge}>
+                  <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <Image source={require('../../assets/images/defendudashboardlogo.png')} style={styles.mobileLogo} resizeMode="contain" />
+            <View style={{ width: 40 }} />
+          </View>
+        )}
+
         <ScrollView
-          horizontal
-          style={styles.mainContentScrollView}
-          contentContainerStyle={styles.mainContentHorizontalContainer}
-          showsHorizontalScrollIndicator={true}
-          showsVerticalScrollIndicator={false}
+          style={styles.mainContentVerticalScrollView}
+          contentContainerStyle={[styles.mainContentContainer, isMobile && styles.mainContentContainerMobile]}
+          showsVerticalScrollIndicator={true}
+          showsHorizontalScrollIndicator={false}
           nestedScrollEnabled={true}
-          bounces={true}
-          decelerationRate="fast"
         >
-          <ScrollView
-            style={styles.mainContentVerticalScrollView}
-            contentContainerStyle={styles.mainContentContainer}
-            showsVerticalScrollIndicator={true}
-            showsHorizontalScrollIndicator={false}
-            nestedScrollEnabled={true}
-          >
             {/* Welcome Header */}
             <Animated.View style={[
               styles.welcomeSection,
@@ -430,7 +442,7 @@ export default function DashboardScreen() {
                 </View>
                 <View style={styles.recommendedModulesRow}>
                   {recommendedModules.slice(0, 8).map((module, index) => {
-                    const isEndOfRow = (index + 1) % 4 === 0;
+                    const isEndOfRow = (index + 1) % columns === 0;
                     const durationMin = module.videoDuration ? `${Math.ceil(module.videoDuration / 60)} min` : '';
                     const animValue = getAnimatedValue(`rec-${module.moduleId}`);
                     const imageSource = module.thumbnailUrl 
@@ -443,7 +455,7 @@ export default function DashboardScreen() {
                         key={module.moduleId}
                         style={[
                           styles.moduleCard,
-                          isEndOfRow && styles.moduleCardEndOfRow,
+                          { width: moduleCardWidth, marginRight: isEndOfRow ? 0 : moduleCardMarginRight },
                           {
                             opacity: animValue,
                             transform: [
@@ -597,10 +609,7 @@ export default function DashboardScreen() {
 
             <View style={styles.modulesContainer}>
               {modulesLoading ? (
-                <View style={styles.modulesLoadingContainer}>
-                  <ActivityIndicator size="large" color="#07bbc0" />
-                  <Text style={styles.modulesLoadingText}>Loading modules...</Text>
-                </View>
+                <ModuleGridSkeleton columns={columns} cardWidth={moduleCardWidth} />
               ) : modules.length === 0 ? (
                 <View style={styles.modulesEmptyContainer}>
                   <Text style={styles.modulesEmptyText}>No modules available yet.</Text>
@@ -617,7 +626,7 @@ export default function DashboardScreen() {
                     <Text style={styles.difficultySectionTitle}>{label}</Text>
                     <View style={styles.modulesGrid}>
                       {items.map((module, index) => {
-                  const isEndOfRow = (index + 1) % 4 === 0;
+                  const isEndOfRow = (index + 1) % columns === 0;
                   const durationMin = module.videoDuration ? `${Math.ceil(module.videoDuration / 60)} min` : '';
                   const animValue = getAnimatedValue(module.moduleId);
                   const hoverScale = getHoverScale(module.moduleId);
@@ -630,7 +639,7 @@ export default function DashboardScreen() {
                       key={module.moduleId}
                       style={[
                         styles.moduleCard,
-                        isEndOfRow && styles.moduleCardEndOfRow,
+                        { width: moduleCardWidth, marginRight: isEndOfRow ? 0 : moduleCardMarginRight },
                         {
                           opacity: animValue,
                           transform: [
@@ -695,8 +704,50 @@ export default function DashboardScreen() {
               )}
             </View>
           </ScrollView>
-        </ScrollView>
+        </View>
       </View>
+
+      {/* Mobile Drawer */}
+      {showMobileMenu && (
+        <TouchableOpacity style={styles.drawerOverlay} activeOpacity={1} onPress={() => setShowMobileMenu(false)}>
+          <View style={styles.drawerContainer}>
+            <View style={styles.drawerHeader}>
+              <Image source={require('../../assets/images/defendudashboardlogo.png')} style={styles.drawerLogo} resizeMode="contain" />
+              <TouchableOpacity onPress={() => setShowMobileMenu(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { setShowMobileMenu(false); router.push('/dashboard'); }}>
+              <Image source={require('../../assets/images/homeicon.png')} style={styles.drawerIcon} />
+              <Text style={styles.drawerText}>Home</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { setShowMobileMenu(false); router.push('/explore'); }}>
+              <Ionicons name="compass-outline" size={22} color="#07bbc0" />
+              <Text style={styles.drawerText}>Explore</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { setShowMobileMenu(false); router.push('/profile'); }}>
+              <Image source={require('../../assets/images/blueprofileicon.png')} style={styles.drawerIcon} />
+              <Text style={styles.drawerText}>Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { setShowMobileMenu(false); router.push('/trainer'); }}>
+              <Image source={require('../../assets/images/trainericon.png')} style={styles.drawerIcon} />
+              <Text style={styles.drawerText}>Trainer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { setShowMobileMenu(false); handleMessages(); }}>
+              <Image source={require('../../assets/images/messageicon.png')} style={styles.drawerIcon} />
+              <Text style={styles.drawerText}>Messages</Text>
+              {unreadCount > 0 && (
+                <View style={styles.drawerBadge}><Text style={styles.unreadBadgeText}>{unreadDisplay}</Text></View>
+              )}
+            </TouchableOpacity>
+            <View style={styles.drawerDivider} />
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { setShowMobileMenu(false); handleLogout(); }}>
+              <Image source={require('../../assets/images/logouticon.png')} style={styles.drawerIcon} />
+              <Text style={[styles.drawerText, { color: '#e57373' }]}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
 
       {/* Pop-up Menu */}
       {showMenu && (
@@ -799,20 +850,18 @@ const styles = StyleSheet.create({
     height: 24,
     resizeMode: 'contain',
   },
-  mainContentScrollView: {
-    flex: 1,
-  },
-  mainContentHorizontalContainer: {
-    minWidth: screenWidth - 80, // Screen width minus sidebar width
-  },
   mainContentVerticalScrollView: {
-    width: screenWidth - 80, // Fixed width to enable horizontal scrolling
+    flex: 1,
   },
   mainContentContainer: {
     paddingHorizontal: 30,
     paddingVertical: 25,
     paddingBottom: 40,
-    width: screenWidth - 80, // Fixed width to enable horizontal scrolling
+  },
+  mainContentContainerMobile: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingBottom: 32,
   },
   logoImage: {
     width: 180,
@@ -1032,11 +1081,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   moduleCard: {
-    width: moduleCardWidth,
     minHeight: 260,
     borderRadius: 24,
     overflow: 'hidden',
-    marginRight: moduleCardMarginRight,
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -1185,5 +1232,95 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '500',
+  },
+
+  /* Mobile Header */
+  mobileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#000E1C',
+  },
+  hamburgerBtn: {
+    padding: 4,
+    position: 'relative',
+  },
+  hamburgerBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  mobileLogo: {
+    width: 120,
+    height: 36,
+  },
+
+  /* Mobile Drawer */
+  drawerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,14,28,0.85)',
+    zIndex: 1000,
+  },
+  drawerContainer: {
+    width: 280,
+    height: '100%',
+    backgroundColor: '#000E1C',
+    paddingTop: 20,
+    paddingHorizontal: 20,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  drawerLogo: {
+    width: 120,
+    height: 36,
+  },
+  drawerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 14,
+  },
+  drawerIcon: {
+    width: 22,
+    height: 22,
+    tintColor: '#07bbc0',
+    resizeMode: 'contain',
+  },
+  drawerText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  drawerBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    marginLeft: 'auto' as any,
+  },
+  drawerDivider: {
+    height: 1,
+    backgroundColor: 'rgba(107,134,147,0.2)',
+    marginVertical: 12,
   },
 });

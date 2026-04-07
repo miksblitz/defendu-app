@@ -16,10 +16,12 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from 'react-native';
 import OfflineModeModal from '../../components/OfflineModeModal';
 import WalletCard from '../../components/WalletCard';
+import { getSidebarWidth, Breakpoints } from '../../constants/layout';
 import { useLogout } from '../../hooks/useLogout';
 import { OfflineStorage } from '../_utils/offlineStorage';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
@@ -40,7 +42,11 @@ const MAX_COVER_IMAGE_LABEL = '12 MB';
 export default function ProfilePage() {
   const router = useRouter();
   const handleLogout = useLogout();
+  const { width: screenWidth } = useWindowDimensions();
+  const sidebarW = getSidebarWidth(screenWidth);
+  const isMobile = screenWidth < Breakpoints.tablet;
   const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -640,7 +646,8 @@ export default function ProfilePage() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Fixed Sidebar - always visible */}
+        {/* Sidebar - desktop/tablet only */}
+        {!isMobile && (
         <View style={styles.sidebar}>
           {/* Three dots icon at top */}
           <View style={styles.sidebarTopButtonWrap}>
@@ -689,9 +696,25 @@ export default function ProfilePage() {
             </TouchableOpacity>
           </View>
         </View>
+        )}
 
         {/* Main Content */}
         <View style={styles.mainContentWrap}>
+          {/* Mobile Header */}
+          {isMobile && (
+            <View style={styles.mobileHeader}>
+              <TouchableOpacity onPress={() => setShowMobileMenu(true)} style={styles.hamburgerBtn}>
+                <Ionicons name="menu" size={26} color="#FFFFFF" />
+                {unreadCount > 0 && (
+                  <View style={styles.hamburgerBadge}>
+                    <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.mobileHeaderTitle}>Profile</Text>
+              <View style={{ width: 40 }} />
+            </View>
+          )}
           {Platform.OS === 'web' && (
             <>
               <input
@@ -729,7 +752,7 @@ export default function ProfilePage() {
               </>
             )}
           </TouchableOpacity>
-          <ScrollView style={styles.mainContent} contentContainerStyle={{ paddingBottom: 40, paddingTop: 25 }}>
+          <ScrollView style={[styles.mainContent, isMobile && { paddingHorizontal: 16 }]} contentContainerStyle={{ paddingBottom: 40, paddingTop: 25 }}>
           {/* Profile header: cover behind avatar, name below */}
           <View style={styles.profileDisplaySection}>
             <View style={styles.profileHero}>
@@ -897,7 +920,7 @@ export default function ProfilePage() {
           activeOpacity={1}
           onPress={() => setShowMenu(false)}
         >
-          <View style={styles.menuContainer}>
+          <View style={[styles.menuContainer, isMobile && styles.menuContainerMobile]}>
             <TouchableOpacity 
               style={styles.menuItem}
               onPress={handleMessages}
@@ -923,6 +946,56 @@ export default function ProfilePage() {
                 style={styles.menuIcon}
               />
               <Text style={styles.menuText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {/* Mobile Drawer */}
+      {showMobileMenu && (
+        <TouchableOpacity
+          style={styles.drawerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMobileMenu(false)}
+        >
+          <View style={styles.drawerContainer}>
+            <View style={styles.drawerHeader}>
+              <Text style={styles.drawerTitle}>Menu</Text>
+              <TouchableOpacity onPress={() => setShowMobileMenu(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { setShowMobileMenu(false); router.push('/dashboard'); }}>
+              <Image source={require('../../assets/images/homeicon.png')} style={styles.drawerIcon} />
+              <Text style={styles.drawerItemText}>Dashboard</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.drawerItem, styles.drawerItemActive]}>
+              <Image source={require('../../assets/images/blueprofileicon.png')} style={styles.drawerIcon} />
+              <Text style={styles.drawerItemText}>Profile</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { setShowMobileMenu(false); router.push('/trainer'); }}>
+              <Image source={require('../../assets/images/trainericon.png')} style={styles.drawerIcon} />
+              <Text style={styles.drawerItemText}>Trainer</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { setShowMobileMenu(false); handleMessages(); }}>
+              <Image source={require('../../assets/images/messageicon.png')} style={styles.drawerIcon} />
+              <Text style={styles.drawerItemText}>Messages</Text>
+              {unreadCount > 0 && (
+                <View style={styles.drawerBadge}>
+                  <Text style={styles.unreadBadgeText}>{unreadDisplay}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.drawerSeparator} />
+
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { setShowMobileMenu(false); handleLogout(); }}>
+              <Image source={require('../../assets/images/logouticon.png')} style={styles.drawerIcon} />
+              <Text style={[styles.drawerItemText, { color: '#e57373' }]}>Logout</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -1632,5 +1705,115 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     width: '100%',
+  },
+  // Mobile responsive styles
+  mobileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#000E1C',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(7, 187, 192, 0.1)',
+  },
+  mobileHeaderTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  hamburgerBtn: {
+    padding: 6,
+    position: 'relative',
+  },
+  hamburgerBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  menuContainerMobile: {
+    left: 16,
+    top: 56,
+  },
+  drawerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2000,
+    backgroundColor: 'rgba(0, 14, 28, 0.75)',
+  },
+  drawerContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: 280,
+    backgroundColor: '#000E1C',
+    paddingTop: 20,
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(7, 187, 192, 0.15)',
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(107, 134, 147, 0.15)',
+    marginBottom: 8,
+  },
+  drawerTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  drawerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  drawerItemActive: {
+    backgroundColor: 'rgba(7, 187, 192, 0.1)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#07bbc0',
+  },
+  drawerIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 14,
+    resizeMode: 'contain',
+    tintColor: '#07bbc0',
+  },
+  drawerItemText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  drawerBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 'auto',
+    paddingHorizontal: 6,
+  },
+  drawerSeparator: {
+    height: 1,
+    backgroundColor: 'rgba(107, 134, 147, 0.15)',
+    marginVertical: 8,
+    marginHorizontal: 20,
   },
 });

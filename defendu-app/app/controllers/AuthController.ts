@@ -1278,6 +1278,7 @@ export class AuthController {
       referenceGuideUrl?: string;
       sortOrder?: number;
       description?: string;
+      introduction?: string;
       category?: string;
       intensityLevel?: number;
       spaceRequirements?: string[];
@@ -1316,6 +1317,7 @@ export class AuthController {
       if (updates.referenceGuideUrl !== undefined) patch.referenceGuideUrl = updates.referenceGuideUrl || null;
       if (updates.sortOrder !== undefined) patch.sortOrder = updates.sortOrder ?? null;
       if (updates.description !== undefined) patch.description = updates.description;
+      if (updates.introduction !== undefined) patch.introduction = updates.introduction;
       if (updates.category !== undefined) patch.category = updates.category;
       if (updates.intensityLevel !== undefined) patch.intensityLevel = updates.intensityLevel;
       if (updates.spaceRequirements !== undefined) patch.spaceRequirements = updates.spaceRequirements || [];
