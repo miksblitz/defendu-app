@@ -32,6 +32,16 @@ type ExtendedTrainerApplication = TrainerApplication & {
   profilePicture?: string; 
   specialty?: string;
 };
+type ApprovedTrainerRow = {
+  uid: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  profilePicture?: string;
+  specialty?: string;
+  description?: string;
+  application: TrainerApplication | null;
+};
 
 const PAGE_SIZE = 10;
 
@@ -45,9 +55,11 @@ export default function ManageTrainersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedApplication, setSelectedApplication] = useState<ExtendedTrainerApplication | null>(null);
   const [processingApplication, setProcessingApplication] = useState<string | null>(null);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [rejectingUid, setRejectingUid] = useState<string | null>(null);
-  const [selectedRejectionReason, setSelectedRejectionReason] = useState<string>('');
+  const [processingTrainerId, setProcessingTrainerId] = useState<string | null>(null);
+  const [showRevokeModal, setShowRevokeModal] = useState(false);
+  const [trainerToRevoke, setTrainerToRevoke] = useState<ApprovedTrainerRow | null>(null);
+  const [viewMode, setViewMode] = useState<'applications' | 'trainers'>('applications');
+  const [approvedTrainers, setApprovedTrainers] = useState<ApprovedTrainerRow[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortState, setSortState] = useState<AdminTableSortState>({
     columnKey: 'submitted',
@@ -60,19 +72,8 @@ export default function ManageTrainersPage() {
   const headerAnim = useRef(new Animated.Value(0)).current;
   const searchAnim = useRef(new Animated.Value(0)).current;
 
-  // Rejection reasons
-  const rejectionReasons = [
-    'Inappropriate credentials',
-    'Invalid credentials',
-    'Lacking qualities of being a certified trainer',
-    'Bad reputation',
-    'Incomplete application',
-    'Does not meet minimum requirements',
-    'Other (specify in notes)',
-  ];
-
   useEffect(() => {
-    loadApplications();
+    loadAllData();
   }, []);
   
   useEffect(() => {
@@ -106,12 +107,22 @@ export default function ManageTrainersPage() {
       return fullName.includes(query) || email.includes(query) || specialty.includes(query);
     });
   }, [applications, searchQuery]);
+  const filteredApprovedTrainers = useMemo(() => {
+    if (!searchQuery.trim()) return approvedTrainers;
+    const query = searchQuery.toLowerCase().trim();
+    return approvedTrainers.filter((trainer) => {
+      const fullName = `${trainer.firstName} ${trainer.lastName}`.toLowerCase();
+      const email = trainer.email.toLowerCase();
+      const specialty = (trainer.specialty || '').toLowerCase();
+      const description = (trainer.description || '').toLowerCase();
+      return fullName.includes(query) || email.includes(query) || specialty.includes(query) || description.includes(query);
+    });
+  }, [approvedTrainers, searchQuery]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredApplications.length / PAGE_SIZE));
   const sortedApplications = useMemo(() => {
     const result = [...filteredApplications];
     const multiplier = sortState.direction === 'asc' ? 1 : -1;
@@ -125,12 +136,24 @@ export default function ManageTrainersPage() {
 
     return result;
   }, [filteredApplications, sortState]);
+  const sortedApprovedTrainers = useMemo(() => {
+    const result = [...filteredApprovedTrainers];
+    result.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+    return result;
+  }, [filteredApprovedTrainers]);
 
-  const sortedTotalPages = Math.max(1, Math.ceil(sortedApplications.length / PAGE_SIZE));
+  const sortedTotalPages = Math.max(
+    1,
+    Math.ceil((viewMode === 'applications' ? sortedApplications.length : sortedApprovedTrainers.length) / PAGE_SIZE)
+  );
   const paginatedApplications = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
     return sortedApplications.slice(start, start + PAGE_SIZE);
   }, [sortedApplications, currentPage]);
+  const paginatedApprovedTrainers = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return sortedApprovedTrainers.slice(start, start + PAGE_SIZE);
+  }, [sortedApprovedTrainers, currentPage]);
 
   const handleSortChange = (columnKey: string) => {
     setSortState((prev) => {
@@ -146,6 +169,10 @@ export default function ManageTrainersPage() {
       };
     });
     setCurrentPage(1);
+  };
+
+  const loadAllData = async () => {
+    await Promise.all([loadApplications(), loadApprovedTrainers()]);
   };
 
   const loadApplications = async () => {
@@ -207,6 +234,31 @@ export default function ManageTrainersPage() {
     }
   };
 
+  const loadApprovedTrainers = async () => {
+    try {
+      const trainers = await AuthController.getApprovedTrainers();
+      const rows: ApprovedTrainerRow[] = [];
+      for (const trainer of trainers) {
+        const app = await AuthController.getTrainerApplicationData(trainer.uid);
+        rows.push({
+          uid: trainer.uid,
+          firstName: trainer.firstName,
+          lastName: trainer.lastName,
+          email: trainer.email,
+          profilePicture: trainer.profilePicture,
+          specialty: app?.defenseStyles?.[0] || trainer.preferredTechnique?.[0] || 'N/A',
+          description: app?.aboutMe || trainer.previousTrainingDetails || '',
+          application: app,
+        });
+      }
+      setApprovedTrainers(rows);
+    } catch (error: any) {
+      console.error('❌ Error loading approved trainers:', error);
+      showToast(error.message || 'Failed to load approved trainers');
+      setApprovedTrainers([]);
+    }
+  };
+
   const formatDate = (date: Date): string => {
     return date.toLocaleDateString('en-US', { 
       month: 'long', 
@@ -230,41 +282,48 @@ export default function ManageTrainersPage() {
     }
   };
 
-  const handleRejectClick = (uid: string) => {
-    setRejectingUid(uid);
-    setSelectedRejectionReason('');
-    setShowRejectModal(true);
-  };
-
-  const handleReject = async () => {
-    if (!rejectingUid || !selectedRejectionReason) {
-      alert('Please select a rejection reason');
-      return;
-    }
-
-    try {
-      setProcessingApplication(rejectingUid);
-      await AuthController.rejectTrainerApplication(rejectingUid, selectedRejectionReason);
-      await loadApplications();
-      setSelectedApplication(null);
-      setShowRejectModal(false);
-      setRejectingUid(null);
-      setSelectedRejectionReason('');
-      alert('Trainer application rejected');
-    } catch (error: any) {
-      console.error('Error rejecting application:', error);
-      alert('Failed to reject application. Please try again.');
-    } finally {
-      setProcessingApplication(null);
-    }
-  };
-
   const handleViewApplication = (application: TrainerApplication) => {
     setSelectedApplication(application);
   };
 
   const handleBackToList = () => {
     setSelectedApplication(null);
+  };
+
+  const handleViewTrainerApplication = (trainer: ApprovedTrainerRow) => {
+    if (!trainer.application) {
+      Alert.alert('No application found', 'This trainer does not have a stored application record.');
+      return;
+    }
+    setSelectedApplication({
+      ...trainer.application,
+      firstName: trainer.firstName,
+      lastName: trainer.lastName,
+      profilePicture: trainer.profilePicture,
+      specialty: trainer.specialty,
+    });
+  };
+
+  const handleRevokeTrainerRights = async (trainer: ApprovedTrainerRow) => {
+    setTrainerToRevoke(trainer);
+    setShowRevokeModal(true);
+  };
+
+  const handleConfirmRevokeRights = async () => {
+    if (!trainerToRevoke) return;
+    try {
+      setProcessingTrainerId(trainerToRevoke.uid);
+      await AuthController.revokeTrainerRights(trainerToRevoke.uid, 'Revoked by admin from manage trainers');
+      showToast('Trainer rights removed successfully.');
+      setShowRevokeModal(false);
+      setTrainerToRevoke(null);
+      await loadAllData();
+      if (selectedApplication?.uid === trainerToRevoke.uid) setSelectedApplication(null);
+    } catch (error: any) {
+      showToast(error.message || 'Failed to remove trainer rights');
+    } finally {
+      setProcessingTrainerId(null);
+    }
   };
 
   const columns: AdminTableColumn<ExtendedTrainerApplication>[] = [
@@ -326,12 +385,78 @@ export default function ManageTrainersPage() {
           >
             <Text style={styles.actionButtonSmallText}>{isCompact ? 'Appr.' : 'Approve'}</Text>
           </TouchableOpacity>
+        </View>
+      ),
+    },
+  ];
+  const trainerColumns: AdminTableColumn<ApprovedTrainerRow>[] = [
+    {
+      key: 'trainer',
+      title: 'Trainer',
+      minWidth: 260,
+      flex: 2,
+      render: (trainer) => (
+        <View style={styles.trainerCell}>
+          {trainer.profilePicture ? (
+            <Image source={{ uri: trainer.profilePicture }} style={styles.trainerAvatar} />
+          ) : (
+            <View style={styles.trainerAvatarFallback}>
+              <Ionicons name="person" size={16} color="#6b8693" />
+            </View>
+          )}
+          <View>
+            <Text style={styles.trainerNameText}>{trainer.firstName} {trainer.lastName}</Text>
+            <Text style={styles.trainerEmailText}>{trainer.email}</Text>
+          </View>
+        </View>
+      ),
+    },
+    {
+      key: 'specialty',
+      title: 'Profile',
+      minWidth: 320,
+      flex: 2,
+      render: (trainer) => (
+        <View>
+          <Text style={styles.cellText}>{trainer.specialty || 'N/A'}</Text>
+          <Text style={styles.cellSubtleText} numberOfLines={2}>
+            {trainer.description?.trim() || 'No trainer description provided.'}
+          </Text>
+        </View>
+      ),
+    },
+    {
+      key: 'application',
+      title: 'Application',
+      minWidth: 120,
+      render: (trainer) => (
+        <StatusBadge
+          status={trainer.application ? 'Available' : 'Not found'}
+          tone={trainer.application ? 'approved' : 'pending'}
+        />
+      ),
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      minWidth: 280,
+      align: 'right',
+      render: (trainer) => (
+        <View style={[styles.actionButtonsRow, isCompact && styles.actionButtonsRowCompact]}>
           <TouchableOpacity
-            style={[styles.rejectButtonSmall, isCompact && styles.actionButtonSmallCompact]}
-            onPress={() => handleRejectClick(application.uid)}
-            disabled={processingApplication === application.uid}
+            style={[styles.viewButtonSmall, isCompact && styles.actionButtonSmallCompact]}
+            onPress={() => handleViewTrainerApplication(trainer)}
           >
-            <Text style={styles.actionButtonSmallText}>Reject</Text>
+            <Text style={styles.viewButtonSmallText}>View application</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.removeRightsButtonSmall, isCompact && styles.actionButtonSmallCompact]}
+            onPress={() => handleRevokeTrainerRights(trainer)}
+            disabled={processingTrainerId === trainer.uid}
+          >
+            <Text style={styles.actionButtonSmallText}>
+              {processingTrainerId === trainer.uid ? 'Removing...' : 'Remove rights'}
+            </Text>
           </TouchableOpacity>
         </View>
       ),
@@ -583,98 +708,9 @@ export default function ManageTrainersPage() {
                 </View>
               </View>
 
-              {/* Action Buttons */}
-              <View style={styles.detailActions}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.approveButton]}
-                  onPress={() => handleApprove(selectedApplication.uid)}
-                  disabled={processingApplication === selectedApplication.uid}
-                >
-                  {processingApplication === selectedApplication.uid ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.actionButtonText}>Approve</Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.rejectButton]}
-                  onPress={() => handleRejectClick(selectedApplication.uid)}
-                  disabled={processingApplication === selectedApplication.uid}
-                >
-                  {processingApplication === selectedApplication.uid ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.actionButtonText}>Reject</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
             </ScrollView>
           </View>
         </View>
-
-        {/* Rejection Reason Modal */}
-        <Modal
-          visible={showRejectModal}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setShowRejectModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <Text style={styles.modalTitle}>Select Rejection Reason</Text>
-              <Text style={styles.modalSubtitle}>Please select a reason for rejecting this application:</Text>
-              
-              <ScrollView style={styles.reasonsList}>
-                {rejectionReasons.map((reason, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.reasonOption,
-                      selectedRejectionReason === reason && styles.reasonOptionSelected,
-                    ]}
-                    onPress={() => setSelectedRejectionReason(reason)}
-                  >
-                    <View style={styles.reasonRadio}>
-                      {selectedRejectionReason === reason && (
-                        <View style={styles.reasonRadioSelected} />
-                      )}
-                    </View>
-                    <Text style={[
-                      styles.reasonText,
-                      selectedRejectionReason === reason && styles.reasonTextSelected,
-                    ]}>
-                      {reason}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalCancelButton]}
-                  onPress={() => {
-                    setShowRejectModal(false);
-                    setRejectingUid(null);
-                    setSelectedRejectionReason('');
-                  }}
-                >
-                  <Text style={styles.modalCancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalConfirmButton]}
-                  onPress={handleReject}
-                  disabled={!selectedRejectionReason || processingApplication === rejectingUid}
-                >
-                  {processingApplication === rejectingUid ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.modalConfirmButtonText}>Confirm Rejection</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
 
         {/* Pop-up Menu */}
         {showMenu && (
@@ -705,6 +741,46 @@ export default function ManageTrainersPage() {
           onHide={hideToast}
           duration={3000}
         />
+        <Modal visible={showRevokeModal} transparent animationType="fade" onRequestClose={() => setShowRevokeModal(false)}>
+          <View style={styles.confirmOverlay}>
+            <View style={styles.confirmCard}>
+              <View style={styles.confirmIconWrap}>
+                <Ionicons name="warning-outline" size={28} color="#ff9b8a" />
+              </View>
+              <Text style={styles.confirmTitle}>Remove trainer rights?</Text>
+              <Text style={styles.confirmBody}>
+                {trainerToRevoke
+                  ? `Are you sure you want to remove ${trainerToRevoke.firstName} ${trainerToRevoke.lastName}'s trainer rights?`
+                  : 'Are you sure you want to remove this trainer rights?'}
+              </Text>
+              <View style={styles.confirmBulletWrap}>
+                <Text style={styles.confirmBullet}>- They become an individual user.</Text>
+                <Text style={styles.confirmBullet}>- They can no longer publish modules.</Text>
+                <Text style={styles.confirmBullet}>- Published modules remain visible.</Text>
+              </View>
+              <View style={styles.confirmActions}>
+                <TouchableOpacity
+                  style={[styles.confirmBtn, styles.confirmCancelBtn]}
+                  onPress={() => { setShowRevokeModal(false); setTrainerToRevoke(null); }}
+                  disabled={!!processingTrainerId}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmBtn, styles.confirmDangerBtn]}
+                  onPress={handleConfirmRevokeRights}
+                  disabled={!!processingTrainerId}
+                >
+                  {processingTrainerId ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.confirmDangerText}>Yes, remove rights</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -767,7 +843,9 @@ export default function ManageTrainersPage() {
             />
             <Text style={styles.headerAdminText}>Admin</Text>
             <Text style={styles.subTitle}>
-              Trainer Applications {searchQuery ? `${filteredApplications.length} of ${applications.length}` : applications.length}
+              {viewMode === 'applications'
+                ? `Trainer Applications ${searchQuery ? `${filteredApplications.length} of ${applications.length}` : applications.length}`
+                : `All Trainers ${searchQuery ? `${filteredApprovedTrainers.length} of ${approvedTrainers.length}` : approvedTrainers.length}`}
             </Text>
           </View>
         </View>
@@ -786,23 +864,47 @@ export default function ManageTrainersPage() {
               }],
             },
           ]}>
+            <View style={styles.modeSwitchRow}>
+              <TouchableOpacity
+                style={[styles.modeSwitchButton, viewMode === 'applications' && styles.modeSwitchButtonActive]}
+                onPress={() => setViewMode('applications')}
+              >
+                <Text style={[styles.modeSwitchButtonText, viewMode === 'applications' && styles.modeSwitchButtonTextActive]}>
+                  Applications
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeSwitchButton, viewMode === 'trainers' && styles.modeSwitchButtonActive]}
+                onPress={() => setViewMode('trainers')}
+              >
+                <Text style={[styles.modeSwitchButtonText, viewMode === 'trainers' && styles.modeSwitchButtonTextActive]}>
+                  All Trainers
+                </Text>
+              </TouchableOpacity>
+            </View>
             <SearchInput
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Search by name, email, or specialty"
+              placeholder={viewMode === 'applications'
+                ? 'Search applications by name, email, or specialty'
+                : 'Search trainers by name, email, specialty, or description'}
             />
           </Animated.View>
 
           <AdminTable
-            columns={columns}
-            data={paginatedApplications}
+            columns={viewMode === 'applications' ? columns : trainerColumns}
+            data={viewMode === 'applications' ? paginatedApplications : paginatedApprovedTrainers}
             loading={loading}
             compact={isCompact}
-            keyExtractor={(application) => application.uid}
-            sortState={sortState}
-            onSortChange={handleSortChange}
-            emptyTitle={searchQuery ? 'No applications match your search' : 'No trainer applications found'}
-            emptyDescription="Applications will appear here when trainers submit their profiles."
+            keyExtractor={(row) => row.uid}
+            sortState={viewMode === 'applications' ? sortState : undefined}
+            onSortChange={viewMode === 'applications' ? handleSortChange : undefined}
+            emptyTitle={viewMode === 'applications'
+              ? (searchQuery ? 'No applications match your search' : 'No trainer applications found')
+              : (searchQuery ? 'No trainers match your search' : 'No approved trainers found')}
+            emptyDescription={viewMode === 'applications'
+              ? 'Applications will appear here when trainers submit their profiles.'
+              : 'Approved trainers will appear here.'}
             pagination={{
               currentPage,
               totalPages: sortedTotalPages,
@@ -842,6 +944,46 @@ export default function ManageTrainersPage() {
         onHide={hideToast}
         duration={3000}
       />
+      <Modal visible={showRevokeModal} transparent animationType="fade" onRequestClose={() => setShowRevokeModal(false)}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIconWrap}>
+              <Ionicons name="warning-outline" size={28} color="#ff9b8a" />
+            </View>
+            <Text style={styles.confirmTitle}>Remove trainer rights?</Text>
+            <Text style={styles.confirmBody}>
+              {trainerToRevoke
+                ? `Are you sure you want to remove ${trainerToRevoke.firstName} ${trainerToRevoke.lastName}'s trainer rights?`
+                : 'Are you sure you want to remove this trainer rights?'}
+            </Text>
+            <View style={styles.confirmBulletWrap}>
+              <Text style={styles.confirmBullet}>- They become an individual user.</Text>
+              <Text style={styles.confirmBullet}>- They can no longer publish modules.</Text>
+              <Text style={styles.confirmBullet}>- Published modules remain visible.</Text>
+            </View>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={[styles.confirmBtn, styles.confirmCancelBtn]}
+                onPress={() => { setShowRevokeModal(false); setTrainerToRevoke(null); }}
+                disabled={!!processingTrainerId}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmBtn, styles.confirmDangerBtn]}
+                onPress={handleConfirmRevokeRights}
+                disabled={!!processingTrainerId}
+              >
+                {processingTrainerId ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmDangerText}>Yes, remove rights</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -954,6 +1096,31 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 16,
   },
+  modeSwitchRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  modeSwitchButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(107, 134, 147, 0.45)',
+    backgroundColor: 'rgba(107, 134, 147, 0.12)',
+  },
+  modeSwitchButtonActive: {
+    borderColor: '#38a6de',
+    backgroundColor: 'rgba(56, 166, 222, 0.22)',
+  },
+  modeSwitchButtonText: {
+    color: '#b8d0dc',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modeSwitchButtonTextActive: {
+    color: '#e9f6ff',
+  },
   trainerCell: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1022,7 +1189,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
-  rejectButtonSmall: {
+  removeRightsButtonSmall: {
     backgroundColor: 'rgba(255, 108, 97, 0.18)',
     borderColor: 'rgba(255, 108, 97, 0.55)',
     borderWidth: 1,
@@ -1255,14 +1422,93 @@ const styles = StyleSheet.create({
   approveButton: {
     backgroundColor: '#38a6de',
   },
-  rejectButton: {
-    backgroundColor: '#6b8693',
-  },
   actionButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
     fontFamily: 'system-ui',
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 12, 22, 0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 520,
+    backgroundColor: '#071a2c',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.35)',
+    padding: 20,
+  },
+  confirmIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 108, 97, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 108, 97, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  confirmTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  confirmBody: {
+    color: '#b8d0dc',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  confirmBulletWrap: {
+    marginTop: 12,
+    marginBottom: 16,
+    gap: 6,
+  },
+  confirmBullet: {
+    color: '#d8eaf3',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 8,
+  },
+  confirmBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    minWidth: 130,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmCancelBtn: {
+    borderWidth: 1,
+    borderColor: 'rgba(107, 134, 147, 0.5)',
+    backgroundColor: 'rgba(107, 134, 147, 0.12)',
+  },
+  confirmDangerBtn: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 108, 97, 0.55)',
+    backgroundColor: 'rgba(255, 108, 97, 0.22)',
+  },
+  confirmCancelText: {
+    color: '#c0d4de',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  confirmDangerText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   menuOverlay: {
     position: 'absolute',
@@ -1306,118 +1552,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '500',
-  },
-  // Rejection Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContainer: {
-    backgroundColor: '#011f36',
-    borderRadius: 16,
-    padding: 24,
-    width: '100%',
-    maxWidth: 500,
-    maxHeight: '80%',
-    borderWidth: 1,
-    borderColor: '#38a6de',
-  },
-  modalTitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
-    fontFamily: 'system-ui',
-  },
-  modalSubtitle: {
-    color: '#6b8693',
-    fontSize: 14,
-    marginBottom: 20,
-    fontFamily: 'system-ui',
-  },
-  reasonsList: {
-    maxHeight: 300,
-    marginBottom: 20,
-  },
-  reasonOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    backgroundColor: '#0a3645',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  reasonOptionSelected: {
-    borderColor: '#38a6de',
-    backgroundColor: 'rgba(56, 166, 222, 0.1)',
-  },
-  reasonRadio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#6b8693',
-    marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  reasonRadioSelected: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#38a6de',
-  },
-  reasonText: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'system-ui',
-  },
-  reasonTextSelected: {
-    color: '#38a6de',
-    fontWeight: '600',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(107, 134, 147, 0.3)',
-  },
-  modalButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    minWidth: 120,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCancelButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#6b8693',
-  },
-  modalCancelButtonText: {
-    color: '#6b8693',
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: 'system-ui',
-  },
-  modalConfirmButton: {
-    backgroundColor: '#6b8693',
-  },
-  modalConfirmButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: 'system-ui',
   },
 });

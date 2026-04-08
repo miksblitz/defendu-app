@@ -55,6 +55,16 @@ function openVideoInBrowser(url: string | undefined) {
   }
 }
 
+function getTechniqueVideoUrl(module: Module | null): string {
+  if (!module) return '';
+  return (
+    getPlayableVideoUrl(module.techniqueVideoUrl) ||
+    module.techniqueVideoUrl2 ||
+    module.techniqueVideoLink ||
+    ''
+  );
+}
+
 export default function ViewModulePage() {
   const router = useRouter();
   const handleLogout = useLogout();
@@ -378,6 +388,41 @@ export default function ViewModulePage() {
                   )}
                 </View>
                 <Text style={styles.cardDescription}>{module.description}</Text>
+                <View style={styles.mediaSection}>
+                  <Text style={styles.mediaSectionTitle}>Technique Video</Text>
+                  {getTechniqueVideoUrl(module) ? (
+                    <TouchableOpacity
+                      style={styles.videoErrorButton}
+                      onPress={() => openVideoInBrowser(getTechniqueVideoUrl(module))}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="play-circle-outline" size={20} color="#07bbc0" style={{ marginRight: 8 }} />
+                      <Text style={styles.videoErrorButtonText}>Open technique video</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={styles.mediaFallbackText}>No technique video provided.</Text>
+                  )}
+                  <Text style={styles.mediaSectionTitle}>Reference Guide</Text>
+                  {module.referenceGuideUrl ? (
+                    <>
+                      <Image
+                        source={{ uri: module.referenceGuideUrl }}
+                        style={styles.referenceGuideImage}
+                        resizeMode="contain"
+                      />
+                      <TouchableOpacity
+                        style={styles.videoErrorButton}
+                        onPress={() => Linking.openURL(module.referenceGuideUrl!)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="images-outline" size={20} color="#07bbc0" style={{ marginRight: 8 }} />
+                        <Text style={styles.videoErrorButtonText}>Open reference guide</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <Text style={styles.mediaFallbackText}>No reference guide provided.</Text>
+                  )}
+                </View>
 
                 {/* Credit / Usage Info Banner */}
                 {creditAccess && (
@@ -998,6 +1043,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     marginBottom: 24,
+  },
+  mediaSection: {
+    marginBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#0a3645',
+    paddingTop: 14,
+  },
+  mediaSectionTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 10,
+    marginTop: 2,
+  },
+  mediaFallbackText: {
+    color: '#6b8693',
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  referenceGuideImage: {
+    width: '100%',
+    minHeight: 180,
+    maxHeight: 280,
+    borderRadius: 10,
+    backgroundColor: '#0a3645',
+    marginBottom: 12,
   },
   startButton: {
     backgroundColor: '#07bbc0',

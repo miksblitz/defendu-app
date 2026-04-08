@@ -1166,6 +1166,31 @@ export class AuthController {
     }
   }
 
+  // Revoke trainer rights for an approved trainer (admin only)
+  static async revokeTrainerRights(uid: string, reason?: string): Promise<void> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser || currentUser.role !== 'admin') {
+        throw new Error('Permission denied. Admin access required.');
+      }
+
+      const userUpdates: Record<string, unknown> = {
+        role: 'individual',
+        trainerApproved: false,
+        trainerRightsRevokedAt: Date.now(),
+      };
+      if (reason && reason.trim()) {
+        userUpdates.trainerRightsRevokedReason = reason.trim();
+      }
+
+      await update(ref(db, `users/${uid}`), userUpdates);
+      console.log('✅ Trainer rights revoked successfully');
+    } catch (error: any) {
+      console.error('❌ Error revoking trainer rights:', error);
+      throw new Error(error.message || 'Failed to revoke trainer rights');
+    }
+  }
+
   // Get approved trainers (accessible to all authenticated users)
   static async getApprovedTrainers(): Promise<User[]> {
     try {

@@ -297,6 +297,11 @@ export default function ManageModulesPage() {
     const start = (currentPage - 1) * PAGE_SIZE;
     return sortedModules.slice(start, start + PAGE_SIZE);
   }, [sortedModules, currentPage]);
+  const orderIndexById = useMemo(
+    () => new Map(sortedModules.map((m, idx) => [m.moduleId, idx])),
+    [sortedModules]
+  );
+  const showOrderControls = filterType === 'active' && difficultyFilter === 'all' && categoryFilter !== 'All';
 
   const handleSortChange = (columnKey: string) => {
     setSortState((prev) => {
@@ -434,11 +439,35 @@ export default function ManageModulesPage() {
       flex: 2.5,
       render: (module, index) => (
         <View style={styles.moduleCell}>
-          {filterType === 'active' && categoryFilter === 'All' && (
+          {showOrderControls && (
             <View style={styles.positionBadge}>
               <Text style={styles.positionBadgeText}>
-                {(module.sortOrder ?? index) + 1}
+                {(orderIndexById.get(module.moduleId) ?? index) + 1}
               </Text>
+            </View>
+          )}
+          {showOrderControls && (
+            <View style={styles.orderControls}>
+              <TouchableOpacity
+                style={[
+                  styles.orderButton,
+                  (orderIndexById.get(module.moduleId) ?? 0) <= 0 && styles.orderButtonDisabled,
+                ]}
+                onPress={() => moveActiveModule(module.moduleId, 'up')}
+                disabled={(orderIndexById.get(module.moduleId) ?? 0) <= 0}
+              >
+                <Ionicons name="chevron-up" size={12} color="#d9f1ff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.orderButton,
+                  (orderIndexById.get(module.moduleId) ?? 0) >= sortedModules.length - 1 && styles.orderButtonDisabled,
+                ]}
+                onPress={() => moveActiveModule(module.moduleId, 'down')}
+                disabled={(orderIndexById.get(module.moduleId) ?? 0) >= sortedModules.length - 1}
+              >
+                <Ionicons name="chevron-down" size={12} color="#d9f1ff" />
+              </TouchableOpacity>
             </View>
           )}
           {module.thumbnailUrl ? (
