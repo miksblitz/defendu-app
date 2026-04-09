@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -203,14 +204,11 @@ export default function SignUpScreen() {
 
       {/* First Name */}
       <View style={styles.inputWrapper}>
-        <Image
-          source={require('../../assets/images/profileicon.png')}
-          style={styles.iconImage}
-        />
+        <Ionicons name="person-outline" size={20} color="#07bbc0" style={styles.inputIcon} />
         <TextInput
           style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your First Name"
-          placeholderTextColor="white"
+          placeholderTextColor="rgba(255,255,255,0.4)"
           value={form.firstName}
           onChangeText={(text) => {
             setForm((f) => ({ ...f, firstName: text }));
@@ -227,14 +225,11 @@ export default function SignUpScreen() {
 
       {/* Last Name */}
       <View style={styles.inputWrapper}>
-        <Image
-          source={require('../../assets/images/profileicon.png')}
-          style={styles.iconImage}
-        />
+        <Ionicons name="person-outline" size={20} color="#07bbc0" style={styles.inputIcon} />
         <TextInput
           style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your Last Name"
-          placeholderTextColor="white"
+          placeholderTextColor="rgba(255,255,255,0.4)"
           value={form.lastName}
           onChangeText={(text) => {
             setForm((f) => ({ ...f, lastName: text }));
@@ -251,14 +246,11 @@ export default function SignUpScreen() {
 
       {/* Email */}
       <View style={styles.inputWrapper}>
-        <Image
-          source={require('../../assets/images/emailicon.png')}
-          style={styles.iconImage}
-        />
+        <Ionicons name="mail-outline" size={20} color="#07bbc0" style={styles.inputIcon} />
         <TextInput
           style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your email"
-          placeholderTextColor="white"
+          placeholderTextColor="rgba(255,255,255,0.4)"
           value={form.email}
           onChangeText={(text) => {
             setForm((f) => ({ ...f, email: text }));
@@ -277,14 +269,11 @@ export default function SignUpScreen() {
 
       {/* Password */}
       <View style={styles.inputWrapper}>
-        <Image
-          source={require('../../assets/images/passwordicon.png')}
-          style={styles.iconImage}
-        />
+        <Ionicons name="lock-closed-outline" size={20} color="#07bbc0" style={styles.inputIcon} />
         <TextInput
           style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Enter your password"
-          placeholderTextColor="white"
+          placeholderTextColor="rgba(255,255,255,0.4)"
           value={form.password}
           secureTextEntry={!showPass}
           onChangeText={(text) => {
@@ -303,24 +292,18 @@ export default function SignUpScreen() {
           activeOpacity={0.7}
           disabled={loading}
         >
-          <Image
-            source={require('../../assets/images/showpasswordicon.png')}
-            style={styles.eyeIcon}
-          />
+          <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color="rgba(255,255,255,0.55)" />
         </TouchableOpacity>
       </View>
       {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
 
       {/* Confirm Password */}
       <View style={styles.inputWrapper}>
-        <Image
-          source={require('../../assets/images/passwordicon.png')}
-          style={styles.iconImage}
-        />
+        <Ionicons name="shield-checkmark-outline" size={20} color="#07bbc0" style={styles.inputIcon} />
         <TextInput
           style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
           placeholder="Re-type your password"
-          placeholderTextColor="white"
+          placeholderTextColor="rgba(255,255,255,0.4)"
           value={form.confirmPassword}
           secureTextEntry={!showConfirmPass}
           onChangeText={(text) => {
@@ -339,10 +322,7 @@ export default function SignUpScreen() {
           activeOpacity={0.7}
           disabled={loading}
         >
-          <Image
-            source={require('../../assets/images/showpasswordicon.png')}
-            style={styles.eyeIcon}
-          />
+          <Ionicons name={showConfirmPass ? 'eye-off-outline' : 'eye-outline'} size={20} color="rgba(255,255,255,0.55)" />
         </TouchableOpacity>
       </View>
       {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
@@ -393,105 +373,94 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   logoImage: {
-    width: 140,
-    height: 160,
-    marginBottom: 24,
+    width: 120,
+    height: 130,
+    marginBottom: 20,
     resizeMode: 'contain',
   },
   title: {
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFF',
     textAlign: 'center',
     marginBottom: 8,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   subtitle: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.55)',
     textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 22,
+    marginBottom: 28,
+    lineHeight: 21,
     paddingHorizontal: 16,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#01151F',
-    borderRadius: 28,
-    paddingHorizontal: 20,
+    backgroundColor: '#031220',
+    borderRadius: 14,
+    paddingHorizontal: 18,
     marginBottom: 4,
-    height: 56,
+    height: 54,
     width: '100%',
-    borderWidth: 2,
-    borderColor: 'rgba(0, 170, 187, 0.15)',
-    shadowColor: '#000',
+    borderWidth: 1.5,
+    borderColor: 'rgba(7, 187, 192, 0.22)',
+    shadowColor: '#07bbc0',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
     elevation: 2,
   },
-  iconImage: {
-    width: 22,
-    height: 22,
+  inputIcon: {
     marginRight: 12,
-    tintColor: 'rgba(255, 255, 255, 0.7)',
-    resizeMode: 'contain',
   },
   input: {
     flex: 1,
-    fontSize: 16,
-    lineHeight: 24,
-    height: 56,
+    fontSize: 15,
+    lineHeight: 22,
+    height: 54,
     color: '#FFF',
     paddingVertical: 0,
     textAlignVertical: 'center',
   },
   eyeButton: {
-    marginLeft: 12,
-    padding: 8,
+    marginLeft: 10,
+    padding: 6,
     borderRadius: 20,
-  },
-  eyeIcon: {
-    width: 22,
-    height: 22,
-    tintColor: 'rgba(255, 255, 255, 0.7)',
-    resizeMode: 'contain',
   },
   errorText: {
     color: '#FF6B6B',
-    fontSize: 13,
-    marginBottom: 12,
+    fontSize: 12,
+    marginBottom: 10,
     marginTop: 4,
     width: '100%',
-    paddingLeft: 20,
-    paddingRight: 20,
+    paddingLeft: 6,
     lineHeight: 18,
   },
   button: {
-    backgroundColor: '#00AABB',
-    borderRadius: 28,
+    backgroundColor: '#07bbc0',
+    borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 16,
     marginBottom: 24,
     width: '100%',
     maxWidth: 400,
-    shadowColor: '#00AABB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowColor: '#07bbc0',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    elevation: 6,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
     shadowOpacity: 0.1,
   },
   buttonText: {
-    color: '#FFF',
-    fontWeight: '700',
-    fontSize: 17,
-    letterSpacing: 0.5,
+    color: '#041527',
+    fontWeight: '800',
+    fontSize: 16,
+    letterSpacing: 0.8,
   },
   bottomRow: {
     flexDirection: 'row',
@@ -499,11 +468,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   bottomText: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.55)',
     fontSize: 14,
   },
   linkText: {
-    color: '#00AABB',
+    color: '#07bbc0',
     fontWeight: '700',
     fontSize: 14,
   },

@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
   paymentLabel: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '600' },
   radioOuter: {
     width: 22, height: 22, borderRadius: 11,
-    borderWidth: 2, borderColor: '#6b8693',
+    borderWidth: 2, borderColor: 'rgba(107,134,147,0.5)',
     alignItems: 'center', justifyContent: 'center',
   },
   radioOuterActive: { borderColor: '#07bbc0' },

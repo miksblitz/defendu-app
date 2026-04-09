@@ -26,7 +26,7 @@ export function Skeleton({ width = '100%', height = 16, borderRadius = 8, style 
   return (
     <Animated.View
       style={[
-        { width: width as any, height, borderRadius, backgroundColor: '#0a3645', opacity },
+        { width: width as any, height, borderRadius, backgroundColor: 'rgba(7,187,192,0.12)', opacity },
         style,
       ]}
     />
@@ -64,7 +64,7 @@ const skeletonStyles = StyleSheet.create({
     marginBottom: 20,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#062731',
+    backgroundColor: 'rgba(4,21,39,0.7)',
   },
   cardBody: {
     padding: 12,
