@@ -655,7 +655,7 @@ const styles = StyleSheet.create({
   },
   messagesTitle: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#FFFFFF',
   },
   searchWrapper: {

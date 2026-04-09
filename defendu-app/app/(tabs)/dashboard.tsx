@@ -886,10 +886,10 @@ const styles = StyleSheet.create({
   },
   welcomeText: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#FFFFFF',
     marginBottom: 4,
-    letterSpacing: 0.2,
+    letterSpacing: 0,
   },
   welcomeSubtext: {
     fontSize: 13,
@@ -904,10 +904,10 @@ const styles = StyleSheet.create({
   },
   recommendationsTitle: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#07bbc0',
     marginBottom: 2,
-    letterSpacing: 0.5,
+    letterSpacing: 0.1,
   },
   recommendationsSubtext: {
     fontSize: 12,
@@ -938,10 +938,10 @@ const styles = StyleSheet.create({
   },
   weeklyGoalTitle: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#FFFFFF',
     marginBottom: 4,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
   weeklyGoalSubtitle: {
@@ -953,7 +953,7 @@ const styles = StyleSheet.create({
   },
   weeklyGoalPercentage: {
     fontSize: 30,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#07bbc0',
   },
   weeklyGoalLabel: {
@@ -1012,9 +1012,9 @@ const styles = StyleSheet.create({
   },
   trainingTitle: {
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#07bbc0',
-    letterSpacing: 2.5,
+    letterSpacing: 1.5,
     marginBottom: 3,
     textTransform: 'uppercase',
   },
@@ -1070,10 +1070,10 @@ const styles = StyleSheet.create({
   difficultySectionTitle: {
     color: '#07bbc0',
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '600',
     marginBottom: 10,
     marginTop: 6,
-    letterSpacing: 1.5,
+    letterSpacing: 1,
     textTransform: 'uppercase',
     paddingLeft: 2,
   },
@@ -1169,8 +1169,8 @@ const styles = StyleSheet.create({
   moduleHeaderText: {
     color: '#07bbc0',
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.5,
+    fontWeight: '600',
+    letterSpacing: 1,
     textTransform: 'uppercase',
   },
   moduleTitle: {
@@ -1202,7 +1202,7 @@ const styles = StyleSheet.create({
   moduleDuration: {
     color: '#041527',
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 0.3,
   },
   menuOverlay: {

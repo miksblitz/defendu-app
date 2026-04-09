@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     fontSize: 14, fontWeight: '700', color: '#07bbc0',
     textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 12, marginLeft: 4,
   },
-  stepNumber: { fontSize: 16, fontWeight: '800' },
+  stepNumber: { fontSize: 16, fontWeight: '700' },
   // Packages grid
   packagesGrid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 12,
@@ -293,8 +293,8 @@ const styles = StyleSheet.create({
     borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
     marginBottom: 8,
   },
-  popularText: { color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 1 },
-  packageCredits: { color: '#fff', fontSize: 28, fontWeight: '800' },
+  popularText: { color: '#fff', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  packageCredits: { color: '#fff', fontSize: 28, fontWeight: '700' },
   packageCreditsLabel: { color: '#6b8693', fontSize: 11, marginBottom: 6 },
   packagePrice: { color: '#07bbc0', fontSize: 16, fontWeight: '700' },
   packageSave: { color: '#4CAF50', fontSize: 11, fontWeight: '600', marginTop: 4 },
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     gap: 8, marginTop: 8,
   },
   payButtonDisabled: { opacity: 0.4 },
-  payButtonText: { color: '#041527', fontSize: 17, fontWeight: '800' },
+  payButtonText: { color: '#041527', fontSize: 17, fontWeight: '600' },
   disclaimer: {
     textAlign: 'center', color: '#6b8693', fontSize: 12,
     marginTop: 16, lineHeight: 18,

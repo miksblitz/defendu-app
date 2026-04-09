@@ -71,7 +71,7 @@ export default function InsufficientCreditsModal({
             <View style={styles.divider} />
             <View style={styles.costRow}>
               <Text style={[styles.costLabel, { fontWeight: '700' }]}>You need</Text>
-              <Text style={[styles.costValue, { color: '#FF9800', fontWeight: '800' }]}>
+              <Text style={[styles.costValue, { color: '#FF9800', fontWeight: '700' }]}>
                 {formatCredits(shortfall)} more
               </Text>
             </View>
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#fff',
     marginBottom: 6,
   },

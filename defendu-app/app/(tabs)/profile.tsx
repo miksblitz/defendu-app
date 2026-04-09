@@ -1367,12 +1367,12 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#FFFFFF',
     marginTop: 4,
     marginBottom: 20,
     textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 0,
   },
   editButton: {
     backgroundColor: '#07bbc0',
@@ -1388,9 +1388,9 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: '#041527',
-    fontWeight: '800',
+    fontWeight: '600',
     fontSize: 15,
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
   },
   editHint: {
     color: 'rgba(107,134,147,0.8)',
@@ -1410,9 +1410,9 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '600',
     marginBottom: 4,
-    letterSpacing: 0.3,
+    letterSpacing: 0,
   },
   sectionHint: {
     color: 'rgba(107,134,147,0.8)',
@@ -1456,7 +1456,7 @@ const styles = StyleSheet.create({
   },
   saveStatsBtnText: {
     color: '#041527',
-    fontWeight: '800',
+    fontWeight: '600',
     fontSize: 14,
   },
   buttonDisabled: {

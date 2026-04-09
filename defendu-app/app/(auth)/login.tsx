@@ -188,11 +188,11 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#FFF',
     textAlign: 'center',
     marginBottom: 8,
-    letterSpacing: 0.3,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: 14,
@@ -267,9 +267,9 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#041527',
-    fontWeight: '800',
+    fontWeight: '600',
     fontSize: 16,
-    letterSpacing: 0.8,
+    letterSpacing: 0.3,
   },
   bottomRow: {
     flexDirection: 'row',

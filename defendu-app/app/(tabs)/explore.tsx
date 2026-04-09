@@ -451,7 +451,7 @@ const s = StyleSheet.create({
 
   header: { marginBottom: 24, backgroundColor: 'rgba(7,187,192,0.04)', borderRadius: 18, padding: 20, borderWidth: 1, borderColor: 'rgba(7,187,192,0.1)' },
   logoImage: { width: 150, height: 48, marginBottom: 10 },
-  pageTitle: { fontSize: 24, fontWeight: '800', color: '#FFFFFF', marginBottom: 3, letterSpacing: 0.2 },
+  pageTitle: { fontSize: 24, fontWeight: '600', color: '#FFFFFF', marginBottom: 3, letterSpacing: 0 },
   pageSubtitle: { fontSize: 13, color: 'rgba(107,134,147,0.8)', lineHeight: 19 },
 
   searchBarWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#021422', borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(7,187,192,0.2)', paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16 },
@@ -486,7 +486,7 @@ const s = StyleSheet.create({
   cardOverlay: { flex: 1, backgroundColor: 'rgba(2,10,22,0.72)', justifyContent: 'space-between' },
   cardBadgeRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 12 },
   cardCategoryBadge: { backgroundColor: 'rgba(4,21,39,0.88)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 7, borderWidth: 1, borderColor: 'rgba(7,187,192,0.15)' },
-  cardCategoryText: { color: '#07bbc0', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
+  cardCategoryText: { color: '#07bbc0', fontSize: 10, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
   cardDifficultyBadge: { backgroundColor: 'rgba(7,187,192,0.18)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7 },
   diffIntermediate: { backgroundColor: 'rgba(240,165,0,0.18)' },
   diffAdvanced: { backgroundColor: 'rgba(229,115,115,0.18)' },
@@ -497,13 +497,13 @@ const s = StyleSheet.create({
   cardMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTrainer: { color: 'rgba(107,134,147,0.8)', fontSize: 11 },
   durationBadge: { backgroundColor: 'rgba(7,187,192,0.85)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  durationText: { color: '#041527', fontSize: 10, fontWeight: '800' },
+  durationText: { color: '#041527', fontSize: 10, fontWeight: '700' },
 
   emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12, backgroundColor: 'rgba(4,21,39,0.5)', borderRadius: 18, borderWidth: 1, borderColor: 'rgba(10,54,69,0.8)', borderStyle: 'dashed' },
   emptyTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
   emptySubtext: { color: 'rgba(107,134,147,0.8)', fontSize: 14 },
   emptyResetBtn: { marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, backgroundColor: '#07bbc0' },
-  emptyResetText: { color: '#041527', fontSize: 13, fontWeight: '800' },
+  emptyResetText: { color: '#041527', fontSize: 13, fontWeight: '600' },
 
   drawerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,14,28,0.8)', zIndex: 1000 },
   drawerContainer: { width: 275, height: '100%', backgroundColor: '#010F1C', paddingTop: 24, paddingHorizontal: 20, borderRightWidth: 1, borderRightColor: 'rgba(7,187,192,0.1)' },

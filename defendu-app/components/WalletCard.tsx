@@ -116,8 +116,8 @@ const styles = StyleSheet.create({
   brandText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 2,
+    fontWeight: '600',
+    letterSpacing: 1.5,
   },
   cardType: {
     color: 'rgba(7, 187, 192, 0.6)',
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   balanceAmount: {
     color: '#fff',
     fontSize: 48,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   balanceSub: {
     color: '#07bbc0',

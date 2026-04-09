@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   txDate: { fontSize: 12, color: '#6b8693', marginTop: 2 },
   txMeta: { fontSize: 11, color: '#6b8693', marginTop: 2, fontStyle: 'italic' },
   txAmountContainer: { alignItems: 'flex-end' },
-  txAmount: { fontSize: 16, fontWeight: '800' },
+  txAmount: { fontSize: 16, fontWeight: '700' },
   txCreditsLabel: { fontSize: 10, color: '#6b8693' },
   txBalanceAfter: { fontSize: 11, color: '#6b8693', marginTop: 2 },
 });

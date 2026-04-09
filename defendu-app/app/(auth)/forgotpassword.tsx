@@ -161,10 +161,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     color: '#fff',
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'center',
     marginBottom: 8,
-    letterSpacing: 0.5,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: 15,
