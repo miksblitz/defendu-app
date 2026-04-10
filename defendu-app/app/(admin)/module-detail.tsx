@@ -931,6 +931,8 @@ export default function ModuleDetailPage() {
   const displayTechniqueVideoUrl =
     isApproved && isEditing ? editTechniqueVideoUrl.trim() : (module.techniqueVideoUrl || '');
   const displayTechniqueVideoLink = module.techniqueVideoLink || '';
+  const displayReferenceGuideUrl =
+    isApproved && isEditing ? editReferenceGuideUrl.trim() : (module.referenceGuideUrl || '');
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1501,6 +1503,33 @@ export default function ModuleDetailPage() {
                 <Text style={styles.extractDataButtonText}>Request pose estimation (dev ticket)</Text>
               </TouchableOpacity>
             ) : null}
+
+            <Text style={styles.mediaSubsectionTitle}>Reference video guide</Text>
+            {displayReferenceGuideUrl ? (
+              <>
+                <View style={styles.referenceGuideViewWrap}>
+                  <Image
+                    source={{ uri: displayReferenceGuideUrl }}
+                    style={styles.referenceGuideViewImage}
+                    resizeMode="contain"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.videoButton}
+                  onPress={() =>
+                    Linking.openURL(displayReferenceGuideUrl).catch((err) => {
+                      console.error('Failed to open URL:', err);
+                      showToast('Failed to open reference guide');
+                    })
+                  }
+                >
+                  <Ionicons name="images-outline" size={24} color="#38a6de" />
+                  <Text style={styles.videoButtonText}>Open reference guide</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text style={styles.descriptionText}>No reference guide provided</Text>
+            )}
           </View>
 
           {/* Thumbnail Section */}
@@ -2252,6 +2281,27 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     marginBottom: 16,
+  },
+  mediaSubsectionTitle: {
+    color: '#38a6de',
+    fontSize: 17,
+    fontWeight: '600',
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  referenceGuideViewWrap: {
+    width: '100%',
+    height: 280,
+    borderRadius: 12,
+    backgroundColor: '#1a2332',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  referenceGuideViewImage: {
+    width: '100%',
+    height: '100%',
   },
   infoRow: {
     flexDirection: 'row',
