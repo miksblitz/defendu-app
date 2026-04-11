@@ -50,6 +50,40 @@ export default function RootLayout() {
             router.push(`/resetpassword?token=${token}`);
           }, 100);
         }
+
+        // Handle top-up payment success: defenduapp://wallet?status=success&credits=N
+        if (
+          (scheme === 'defenduapp' && (hostname === 'wallet' || path === 'wallet')) &&
+          queryParams?.status === 'success'
+        ) {
+          console.log('✅ Payment success deep link received');
+          setTimeout(async () => {
+            try {
+              const { WalletController } = await import('./controllers/WalletController');
+              const transactions = await WalletController.getTransactions(1);
+              const latest = transactions[0];
+              if (latest && latest.type === 'top_up') {
+                router.replace({
+                  pathname: '/(tabs)/topup-invoice',
+                  params: {
+                    transactionId: latest.transactionId ?? '',
+                    credits: String(latest.amount ?? queryParams?.credits ?? 0),
+                    phpAmount: String(latest.phpAmount ?? 0),
+                    balanceAfter: String(latest.balanceAfter ?? 0),
+                    paymentMethod: latest.paymentMethod ?? '',
+                    createdAt: String(latest.createdAt ?? Date.now()),
+                  },
+                });
+              } else {
+                router.replace('/(tabs)/wallet');
+              }
+            } catch (e) {
+              console.error('Failed to fetch transaction after top-up:', e);
+              router.replace('/(tabs)/wallet');
+            }
+          }, 300);
+          return;
+        }
       } catch (error) {
         console.error('❌ Error parsing deep link:', error);
       }

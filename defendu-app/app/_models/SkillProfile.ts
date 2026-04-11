@@ -6,13 +6,15 @@ export interface PhysicalAttributes {
   weight: number; // kg
   age: number;
   gender: 'Male' | 'Female' | 'Other';
-  limitations?: string;
+  limitations?: string[]; // array of selected limitation labels
 }
 
 // Preferences
 export interface Preferences {
   preferredTechnique: string[]; // Multiple selections allowed
   trainingGoal: string[]; // Multiple selections allowed
+  dailyModuleTarget?: number; // 1–10 modules per day
+  weeklyModuleTarget?: number; // 3–20 modules per week
 }
 
 // Past Experience

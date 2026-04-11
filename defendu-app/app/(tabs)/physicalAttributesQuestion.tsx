@@ -7,6 +7,27 @@ import { AuthController } from '../controllers/AuthController';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 
+const PHYSICAL_LIMITATIONS = [
+  'No known limitations',
+  'Knee injury / pain',
+  'Back injury / pain',
+  'Shoulder injury / pain',
+  'Hip injury / pain',
+  'Ankle injury / pain',
+  'Wrist injury / pain',
+  'Elbow injury / pain',
+  'Neck injury / pain',
+  'Chronic fatigue',
+  'Heart condition',
+  'Asthma / breathing issues',
+  'Wheelchair user',
+  'Upper limb difference / absence',
+  'Lower limb difference / absence',
+  'Joint hypermobility',
+  'Arthritis',
+  'Pregnancy',
+] as const;
+
 export default function SetupProfileScreen() {
   const router = useRouter();
   const { setPhysicalAttributes, physicalAttributes } = useSkillProfile();
@@ -26,8 +47,13 @@ export default function SetupProfileScreen() {
   const [weight, setWeight] = useState(physicalAttributes?.weight?.toString() || '');
   const [age, setAge] = useState(physicalAttributes?.age?.toString() || '');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other' | null>(physicalAttributes?.gender || null);
-  const [limitations, setLimitations] = useState(physicalAttributes?.limitations || '');
-  const [hasNoLimitations, setHasNoLimitations] = useState(!physicalAttributes?.limitations);
+  const [selectedLimitations, setSelectedLimitations] = useState<string[]>(
+    Array.isArray(physicalAttributes?.limitations)
+      ? (physicalAttributes!.limitations as string[])
+      : physicalAttributes?.limitations
+        ? [physicalAttributes.limitations as unknown as string]
+        : []
+  );
   
   const [errors, setErrors] = useState({
     height: '',
@@ -89,7 +115,7 @@ export default function SetupProfileScreen() {
       weight: Number(weight),
       age: Number(age),
       gender: gender!,
-      limitations: hasNoLimitations ? undefined : (limitations || undefined),
+      limitations: selectedLimitations.length > 0 ? selectedLimitations : undefined,
     });
 
     // Navigate to next screen
@@ -233,36 +259,29 @@ export default function SetupProfileScreen() {
         <Ionicons name="warning-outline" size={20} color="#FFF" />
         <Text style={styles.limitationsLabel}>Physical Limitations (Optional)</Text>
       </View>
-
-      {/* None Option */}
-      <TouchableOpacity
-        style={styles.noneOptionRow}
-        onPress={() => {
-          setHasNoLimitations(!hasNoLimitations);
-          if (!hasNoLimitations) {
-            setLimitations('');
-          }
-        }}
-        activeOpacity={0.7}
-      >
-        <View style={[styles.radioCircle, hasNoLimitations && styles.radioCircleSelected]}>
-          {hasNoLimitations && <View style={styles.radioInnerCircle} />}
-        </View>
-        <Text style={styles.noneOptionText}>None</Text>
-      </TouchableOpacity>
-
-      {!hasNoLimitations && (
-        <TextInput
-          style={styles.limitationsInput}
-          placeholder="Any injuries or physical limitations we should know about..."
-          placeholderTextColor="#FFF"
-          multiline
-          numberOfLines={4}
-          value={limitations}
-          onChangeText={setLimitations}
-          selectionColor="#09AEC3"
-        />
-      )}
+      <Text style={styles.limitationsHint}>Select all that apply</Text>
+      <View style={styles.limitationsGrid}>
+        {PHYSICAL_LIMITATIONS.map((item) => {
+          const selected = selectedLimitations.includes(item);
+          return (
+            <TouchableOpacity
+              key={item}
+              style={[styles.limitationChip, selected && styles.limitationChipSelected]}
+              onPress={() =>
+                setSelectedLimitations((prev) =>
+                  selected ? prev.filter((l) => l !== item) : [...prev, item]
+                )
+              }
+              activeOpacity={0.7}
+            >
+              {selected && <Ionicons name="checkmark" size={12} color="#FFF" style={{ marginRight: 4 }} />}
+              <Text style={[styles.limitationChipText, selected && styles.limitationChipTextSelected]}>
+                {item}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {/* Next Button */}
       <TouchableOpacity style={styles.nextButton} activeOpacity={0.7} onPress={handleNext}>
@@ -401,7 +420,7 @@ const styles = StyleSheet.create({
   limitationsLabelWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
     gap: 8,
   },
   limitationsLabel: {
@@ -409,30 +428,40 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
-  noneOptionRow: {
+  limitationsHint: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  limitationsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    maxWidth: 340,
+    width: '100%',
+    marginBottom: 32,
+  },
+  limitationChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    width: '100%',
-    maxWidth: 320,
-  },
-  noneOptionText: {
-    color: '#FFF',
-    fontSize: 14,
-  },
-  limitationsInput: {
-    borderColor: '#FFF',
     borderWidth: 1,
-    borderRadius: 15,
-    height: 100,
+    borderColor: '#09AEC3',
+    borderRadius: 20,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 6,
+  },
+  limitationChipSelected: {
+    backgroundColor: '#09AEC3',
+  },
+  limitationChipText: {
+    color: '#09AEC3',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  limitationChipTextSelected: {
     color: '#FFF',
-    fontSize: 14,
-    maxWidth: 320,
-    textAlignVertical: 'top',
-    marginBottom: 40,
-    width: '100%',
   },
   nextButton: {
     backgroundColor: '#09AEC3',

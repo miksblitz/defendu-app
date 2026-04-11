@@ -4,12 +4,13 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
-import { AuthController } from '../controllers/AuthController';
+import { getExpoApiBaseUrl } from '../../constants/apiBaseUrl';
 
 export default function SignUpScreen() {
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -18,6 +19,7 @@ export default function SignUpScreen() {
   const [errors, setErrors] = useState({
     firstName: '',
     lastName: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -28,6 +30,16 @@ export default function SignUpScreen() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+
+  // Username validation
+  const validateUsername = (username: string) => {
+    if (!username) return 'Username is required';
+    if (username.length < 3) return 'Username must be at least 3 characters';
+    if (username.length > 30) return 'Username is too long (max 30 characters)';
+    if (!/^[a-zA-Z0-9_]+$/.test(username))
+      return 'Username can only contain letters, numbers, and underscores';
+    return '';
+  };
 
   // Name validation function (no numbers allowed)
   const validateName = (name: string, fieldName: string) => {
@@ -116,6 +128,12 @@ export default function SignUpScreen() {
     setErrors(prev => ({ ...prev, lastName: error }));
   };
 
+  // Handle username blur
+  const handleUsernameBlur = () => {
+    const error = validateUsername(form.username);
+    setErrors(prev => ({ ...prev, username: error }));
+  };
+
   // Handle email blur
   const handleEmailBlur = () => {
     const error = validateEmail(form.email);
@@ -134,11 +152,11 @@ export default function SignUpScreen() {
     setErrors(prev => ({ ...prev, confirmPassword: error }));
   };
 
-  // Handle form submission with Firebase
+  // Handle form submission — send OTP then navigate to verification
   const handleCreateAccount = async () => {
-    // Validate all fields
     const firstNameError = validateName(form.firstName, 'First name');
     const lastNameError = validateName(form.lastName, 'Last name');
+    const usernameError = validateUsername(form.username);
     const emailError = validateEmail(form.email);
     const passwordError = validatePassword(form.password);
     const confirmPasswordError = validateConfirmPassword(form.confirmPassword, form.password);
@@ -146,44 +164,52 @@ export default function SignUpScreen() {
     setErrors({
       firstName: firstNameError,
       lastName: lastNameError,
+      username: usernameError,
       email: emailError,
       password: passwordError,
       confirmPassword: confirmPasswordError,
     });
 
-    // Check if there are any errors
-    if (firstNameError || lastNameError || emailError || passwordError || confirmPasswordError) {
+    if (firstNameError || lastNameError || usernameError || emailError || passwordError || confirmPasswordError) {
       showToast('Please fix the errors before submitting');
       return;
     }
 
-    // Double check admin email before registering
     if (form.email.toLowerCase() === 'admin@defendu.com') {
-      setErrors(prev => ({ ...prev, email: 'This email is not allowed. Please try a different one.' }));
-      showToast('This email is not allowed. Please try a different one.');
+      setErrors(prev => ({ ...prev, email: 'This email is not allowed.' }));
       return;
     }
 
-    // Register user with Firebase
     setLoading(true);
     try {
-      await AuthController.register({
-        email: form.email,
-        password: form.password,
-        firstName: form.firstName,
-        lastName: form.lastName,
+      const apiBaseUrl = getExpoApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/api/register-send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email }),
       });
-      
-      // Show success toast
-      showToast('Account created successfully! Please complete your skill profile.');
-      
-      // Navigate after a short delay to allow toast to be visible
-      setTimeout(() => {
-        setLoading(false);
-        router.replace('/(tabs)/physicalAttributesQuestion');
-      }, 2000);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        showToast(data.error || 'Failed to send verification email. Please try again.');
+        return;
+      }
+
+      // Navigate to OTP screen, passing all form data as params
+      router.push({
+        pathname: '/(auth)/verificationcode',
+        params: {
+          email: form.email,
+          firstName: form.firstName,
+          lastName: form.lastName,
+          username: form.username,
+          password: form.password,
+        },
+      });
     } catch (error: any) {
-      showToast(error.message || 'Registration failed. Please try again.');
+      showToast('Network error. Please check your connection and try again.');
+    } finally {
       setLoading(false);
     }
   };
@@ -243,6 +269,28 @@ export default function SignUpScreen() {
         />
       </View>
       {errors.lastName ? <Text style={styles.errorText}>{errors.lastName}</Text> : null}
+
+      {/* Username */}
+      <View style={styles.inputWrapper}>
+        <Ionicons name="at-outline" size={20} color="#07bbc0" style={styles.inputIcon} />
+        <TextInput
+          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+          placeholder="Choose a username"
+          placeholderTextColor="rgba(255,255,255,0.4)"
+          value={form.username}
+          onChangeText={(text) => {
+            setForm((f) => ({ ...f, username: text }));
+            if (errors.username) {
+              setErrors(prev => ({ ...prev, username: '' }));
+            }
+          }}
+          onBlur={handleUsernameBlur}
+          autoCapitalize="none"
+          maxLength={30}
+          editable={!loading}
+        />
+      </View>
+      {errors.username ? <Text style={styles.errorText}>{errors.username}</Text> : null}
 
       {/* Email */}
       <View style={styles.inputWrapper}>

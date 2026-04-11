@@ -184,6 +184,22 @@ export default function ViewModulePage() {
           freeUsesLeft: result.freeUsesLeft,
           isFree: result.freeUsesLeft > 0,
         } : prev);
+        // Show invoice when credits were actually spent
+        if (result.creditsDeducted > 0) {
+          router.push({
+            pathname: '/(tabs)/module-purchase-invoice',
+            params: {
+              transactionId: result.transactionId ?? '',
+              moduleId: module.moduleId ?? moduleId ?? '',
+              moduleTitle: module.moduleTitle ?? module.title ?? '',
+              difficultyLevel: module.difficultyLevel ?? '',
+              creditsDeducted: String(result.creditsDeducted),
+              balanceAfter: String(result.newBalance),
+              createdAt: String(Date.now()),
+            },
+          });
+          return;
+        }
       }
     } catch (err: any) {
       if (err.message === 'INSUFFICIENT_CREDITS') {

@@ -38,6 +38,9 @@ export default function SelfDefensePreferencesScreen() {
     goal: '',
   });
 
+  const [dailyTarget, setDailyTarget] = useState<number>(preferences?.dailyModuleTarget ?? 3);
+  const [weeklyTarget, setWeeklyTarget] = useState<number>(preferences?.weeklyModuleTarget ?? 7);
+
   const preferredTechniques = [
     { key: 'Punching', icon: <Ionicons name="flash" size={16} color="#09AEC3" /> },
     { key: 'Kicking', icon: <MaterialCommunityIcons name="human-handsup" size={16} color="#09AEC3" /> },
@@ -138,6 +141,48 @@ export default function SelfDefensePreferencesScreen() {
       </View>
       {errors.goal ? <Text style={styles.errorText}>{errors.goal}</Text> : null}
 
+      {/* Daily Module Target */}
+      <Text style={styles.sectionTitle}>Daily Module Target</Text>
+      <Text style={styles.targetSubtitle}>How many modules do you want to complete per day?</Text>
+      <View style={styles.targetRow}>
+        <TouchableOpacity
+          style={styles.targetBtn}
+          onPress={() => setDailyTarget(t => Math.max(1, t - 1))}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.targetBtnText}>-</Text>
+        </TouchableOpacity>
+        <Text style={styles.targetValue}>{dailyTarget}</Text>
+        <TouchableOpacity
+          style={styles.targetBtn}
+          onPress={() => setDailyTarget(t => Math.min(10, t + 1))}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.targetBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Weekly Module Target */}
+      <Text style={styles.sectionTitle}>Weekly Module Target</Text>
+      <Text style={styles.targetSubtitle}>How many modules per week?</Text>
+      <View style={styles.targetRow}>
+        <TouchableOpacity
+          style={styles.targetBtn}
+          onPress={() => setWeeklyTarget(t => Math.max(3, t - 1))}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.targetBtnText}>-</Text>
+        </TouchableOpacity>
+        <Text style={styles.targetValue}>{weeklyTarget}</Text>
+        <TouchableOpacity
+          style={styles.targetBtn}
+          onPress={() => setWeeklyTarget(t => Math.min(20, t + 1))}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.targetBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Next Button */}
       <TouchableOpacity
         style={styles.nextButton}
@@ -160,6 +205,8 @@ export default function SelfDefensePreferencesScreen() {
           setPreferences({
             preferredTechnique: selectedTechniques,
             trainingGoal: selectedGoals,
+            dailyModuleTarget: dailyTarget,
+            weeklyModuleTarget: weeklyTarget,
           });
           router.push('/(tabs)/pastexperienceQuestion');
         }}
@@ -309,5 +356,40 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     alignSelf: 'center',
     maxWidth: 320,
+  },
+  targetSubtitle: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  targetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginBottom: 28,
+  },
+  targetBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#09AEC3',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  targetBtnText: {
+    color: '#09AEC3',
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 26,
+  },
+  targetValue: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontWeight: '700',
+    minWidth: 40,
+    textAlign: 'center',
   },
 });

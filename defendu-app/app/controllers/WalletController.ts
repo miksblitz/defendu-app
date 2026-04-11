@@ -68,7 +68,7 @@ export class WalletController {
   }
 
   /** Deduct credits for module use */
-  static async deductCredits(module: Module): Promise<Wallet> {
+  static async deductCredits(module: Module): Promise<{ wallet: Wallet; transactionId: string }> {
     const uid = this.getCurrentUid();
     const wallet = await this.getWallet();
     const cost = CREDITS_PER_USE[module.difficultyLevel || 'basic'] ?? CREDITS_PER_USE.basic;
@@ -86,7 +86,7 @@ export class WalletController {
     await update(ref(db, `wallets/${uid}`), updatedWallet);
 
     // Record transaction
-    await this.recordTransaction({
+    const transactionId = await this.recordTransaction({
       uid,
       type: 'module_use',
       amount: -cost,
@@ -98,19 +98,21 @@ export class WalletController {
       difficultyLevel: module.difficultyLevel || 'basic',
     });
 
-    return { ...wallet, ...updatedWallet } as Wallet;
+    return { wallet: { ...wallet, ...updatedWallet } as Wallet, transactionId };
   }
 
   // ---------- Transaction history ----------
 
-  private static async recordTransaction(data: Omit<WalletTransaction, 'transactionId' | 'createdAt'>): Promise<void> {
+  private static async recordTransaction(data: Omit<WalletTransaction, 'transactionId' | 'createdAt'>): Promise<string> {
     const transactionRef = push(ref(db, `walletTransactions/${data.uid}`));
+    const transactionId = transactionRef.key!;
     const transaction: WalletTransaction = {
       ...data,
-      transactionId: transactionRef.key!,
+      transactionId,
       createdAt: Date.now(),
     };
     await set(transactionRef, transaction);
+    return transactionId;
   }
 
   /** Get transaction history for current user, most recent first */
@@ -203,6 +205,7 @@ export class WalletController {
     creditsDeducted: number;
     newBalance: number;
     freeUsesLeft: number;
+    transactionId?: string;
   }> {
     const access = await this.checkModuleAccess(module);
     if (!access.allowed) {
@@ -226,12 +229,13 @@ export class WalletController {
     }
 
     // Paid use — deduct credits
-    const wallet = await this.deductCredits(module);
+    const { wallet, transactionId } = await this.deductCredits(module);
     return {
       usedFree: false,
       creditsDeducted: access.creditCost,
       newBalance: wallet.balance,
       freeUsesLeft: 0,
+      transactionId,
     };
   }
 }
