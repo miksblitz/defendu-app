@@ -20,15 +20,11 @@ import {
     View,
 } from 'react-native';
 import OfflineModeModal from '../../components/OfflineModeModal';
-import WalletCard from '../../components/WalletCard';
 import { getSidebarWidth, Breakpoints } from '../../constants/layout';
-import { getDifficultyColor, getDifficultyLabel } from '../../constants/credits';
 import { useLogout } from '../../hooks/useLogout';
-import { WalletTransaction } from '../_models/Wallet';
 import { OfflineStorage } from '../_utils/offlineStorage';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController } from '../controllers/AuthController';
-import { WalletController } from '../controllers/WalletController';
 
 const PRIVACY_URL = 'https://defendu.com/privacy';
 const TERMS_URL = 'https://defendu.com/terms';
@@ -56,37 +52,6 @@ export default function ProfilePage() {
   const [showMenu, setShowMenu] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [offlineEnabled, setOfflineEnabled] = useState(false);
-  const [walletBalance, setWalletBalance] = useState(0);
-
-  // Purchased modules modal
-  const [showPurchasedModules, setShowPurchasedModules] = useState(false);
-  const [purchasedModules, setPurchasedModules] = useState<WalletTransaction[]>([]);
-  const [purchasedModulesLoading, setPurchasedModulesLoading] = useState(false);
-
-  const loadPurchasedModules = useCallback(async () => {
-    try {
-      setPurchasedModulesLoading(true);
-      const allTx = await WalletController.getTransactions();
-      const moduleTx = allTx.filter(tx => tx.type === 'module_use');
-      // Deduplicate by moduleId, keep latest transaction per module
-      const seen = new Map<string, WalletTransaction>();
-      for (const tx of moduleTx) {
-        if (tx.moduleId && !seen.has(tx.moduleId)) {
-          seen.set(tx.moduleId, tx);
-        }
-      }
-      setPurchasedModules(Array.from(seen.values()));
-    } catch (e) {
-      console.error('Error loading purchased modules:', e);
-    } finally {
-      setPurchasedModulesLoading(false);
-    }
-  }, []);
-
-  const handleOpenPurchasedModules = () => {
-    setShowPurchasedModules(true);
-    loadPurchasedModules();
-  };
 
   // Height & weight editing
   const [height, setHeight] = useState<string>('');
@@ -167,14 +132,6 @@ export default function ProfilePage() {
       // Check offline mode status
       const isEnabled = await OfflineStorage.isOfflineEnabled();
       setOfflineEnabled(isEnabled);
-
-      // Load wallet balance
-      try {
-        const wallet = await WalletController.getWallet();
-        setWalletBalance(wallet.balance);
-      } catch (walletErr) {
-        console.error('Error loading wallet:', walletErr);
-      }
     } catch (error) {
       console.error('Error loading user data:', error);
       router.replace('/(auth)/login');
@@ -874,11 +831,6 @@ export default function ProfilePage() {
             </TouchableOpacity>
           </View>
 
-          {/* Wallet Card */}
-          <View style={{ marginHorizontal: 20, marginBottom: 10 }}>
-            <WalletCard balance={walletBalance} />
-          </View>
-
           {/* Menu Options Section */}
           <View style={styles.menuOptionsSection}>
             <TouchableOpacity style={styles.menuOption} onPress={() => router.push('/settings')}>
@@ -897,11 +849,6 @@ export default function ProfilePage() {
               <Text style={styles.menuOptionText}>Help & Support</Text>
               <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuOption} onPress={() => router.push('/wallet')}>
-              <Ionicons name="wallet-outline" size={20} color="#07bbc0" />
-              <Text style={styles.menuOptionText}>Wallet & Credits</Text>
-              <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
-            </TouchableOpacity>
             <TouchableOpacity 
               style={styles.menuOption}
               onPress={() => setShowOfflineModal(true)}
@@ -913,11 +860,6 @@ export default function ProfilePage() {
                   <Text style={styles.enabledBadgeText}>ON</Text>
                 </View>
               )}
-              <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuOption} onPress={handleOpenPurchasedModules}>
-              <Ionicons name="library-outline" size={20} color="#07bbc0" />
-              <Text style={styles.menuOptionText}>Purchased Modules</Text>
               <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
             </TouchableOpacity>
           </View>
@@ -1118,62 +1060,6 @@ export default function ProfilePage() {
           setOfflineEnabled(true);
         }}
       />
-
-      {/* Purchased Modules Modal */}
-      <Modal
-        visible={showPurchasedModules}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPurchasedModules(false)}
-      >
-        <View style={styles.purchasedModalOverlay}>
-          <View style={styles.purchasedModalSheet}>
-            <View style={styles.purchasedModalHeader}>
-              <Text style={styles.purchasedModalTitle}>Purchased Modules</Text>
-              <TouchableOpacity onPress={() => setShowPurchasedModules(false)}>
-                <Ionicons name="close" size={24} color="#07bbc0" />
-              </TouchableOpacity>
-            </View>
-            {purchasedModulesLoading ? (
-              <ActivityIndicator color="#07bbc0" style={{ marginTop: 32 }} />
-            ) : purchasedModules.length === 0 ? (
-              <View style={styles.purchasedEmptyWrap}>
-                <Ionicons name="library-outline" size={48} color="rgba(7,187,192,0.3)" />
-                <Text style={styles.purchasedEmptyText}>No purchased modules yet.</Text>
-                <Text style={styles.purchasedEmptyHint}>Credits are deducted when you start a paid module.</Text>
-              </View>
-            ) : (
-              <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
-                {purchasedModules.map((tx) => (
-                  <TouchableOpacity
-                    key={tx.transactionId}
-                    style={styles.purchasedModuleRow}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      setShowPurchasedModules(false);
-                      if (tx.moduleId) router.push({ pathname: '/(tabs)/view-module', params: { moduleId: tx.moduleId } });
-                    }}
-                  >
-                    <View style={styles.purchasedModuleInfo}>
-                      <Text style={styles.purchasedModuleTitle} numberOfLines={2}>
-                        {tx.moduleTitle ?? 'Module'}
-                      </Text>
-                      {tx.difficultyLevel ? (
-                        <View style={[styles.purchasedDiffBadge, { backgroundColor: getDifficultyColor(tx.difficultyLevel) + '22' }]}>
-                          <Text style={[styles.purchasedDiffText, { color: getDifficultyColor(tx.difficultyLevel) }]}>
-                            {getDifficultyLabel(tx.difficultyLevel)}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Ionicons name="chevron-forward-outline" size={18} color="#07bbc0" />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
 
       {/* Edit Profile Modal */}
       <Modal

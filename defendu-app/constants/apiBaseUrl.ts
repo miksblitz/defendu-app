@@ -1,5 +1,5 @@
 /**
- * Base URL for Vercel serverless APIs (password reset, pose ticket, payments, etc.).
+ * Base URL for Vercel serverless APIs (password reset, pose ticket, etc.).
  * Set EXPO_PUBLIC_API_BASE_URL in .env for a custom domain or preview deploy.
  */
 const DEFAULT_API_BASE = 'https://defendu-app.vercel.app';

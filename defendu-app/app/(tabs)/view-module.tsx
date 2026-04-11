@@ -17,14 +17,11 @@ import {
     View,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import InsufficientCreditsModal from '../../components/InsufficientCreditsModal';
-import { formatCredits, getDifficultyColor, getDifficultyLabel } from '../../constants/credits';
 import { useLogout } from '../../hooks/useLogout';
 import { Module } from '../_models/Module';
 import { ModuleReview } from '../_models/ModuleReview';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController } from '../controllers/AuthController';
-import { WalletController } from '../controllers/WalletController';
 
 type Step = 'intro' | 'safety' | 'video' | 'tryIt' | 'complete';
 
@@ -89,13 +86,6 @@ export default function ViewModulePage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [showAllReviewsModal, setShowAllReviewsModal] = useState(false);
-  // Credit system state
-  const [creditAccess, setCreditAccess] = useState<{
-    allowed: boolean; isFree: boolean; freeUsesLeft: number;
-    creditCost: number; balance: number; reason?: string;
-  } | null>(null);
-  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
-  const [creditConsumed, setCreditConsumed] = useState(false);
 
 
   useEffect(() => {
@@ -148,13 +138,6 @@ export default function ViewModulePage() {
       setModule(data);
       setStep('intro');
       setIntroVideoError(false);
-      // Check credit access
-      try {
-        const access = await WalletController.checkModuleAccess(data);
-        setCreditAccess(access);
-      } catch (accessErr) {
-        console.error('Error checking credit access:', accessErr);
-      }
     } catch (error) {
       console.error('Error loading module:', error);
       router.replace('/dashboard');
@@ -163,51 +146,8 @@ export default function ViewModulePage() {
     }
   };
 
-  const handleStart = async () => {
+  const handleStart = () => {
     if (!module) return;
-    // Re-check access before starting
-    try {
-      const access = await WalletController.checkModuleAccess(module);
-      setCreditAccess(access);
-      if (!access.allowed) {
-        setShowInsufficientModal(true);
-        return;
-      }
-      // Consume the use (free or paid)
-      if (!creditConsumed) {
-        const result = await WalletController.consumeModuleUse(module);
-        setCreditConsumed(true);
-        // Update access info
-        setCreditAccess(prev => prev ? {
-          ...prev,
-          balance: result.newBalance,
-          freeUsesLeft: result.freeUsesLeft,
-          isFree: result.freeUsesLeft > 0,
-        } : prev);
-        // Show invoice when credits were actually spent
-        if (result.creditsDeducted > 0) {
-          router.push({
-            pathname: '/(tabs)/module-purchase-invoice',
-            params: {
-              transactionId: result.transactionId ?? '',
-              moduleId: module.moduleId ?? moduleId ?? '',
-              moduleTitle: module.moduleTitle ?? module.title ?? '',
-              difficultyLevel: module.difficultyLevel ?? '',
-              creditsDeducted: String(result.creditsDeducted),
-              balanceAfter: String(result.newBalance),
-              createdAt: String(Date.now()),
-            },
-          });
-          return;
-        }
-      }
-    } catch (err: any) {
-      if (err.message === 'INSUFFICIENT_CREDITS') {
-        setShowInsufficientModal(true);
-        return;
-      }
-      console.error('Error consuming module use:', err);
-    }
     setStep('safety');
   };
 
@@ -440,53 +380,8 @@ export default function ViewModulePage() {
                   )}
                 </View>
 
-                {/* Credit / Usage Info Banner */}
-                {creditAccess && (
-                  <View style={{
-                    backgroundColor: creditAccess.isFree ? 'rgba(76,175,80,0.1)' : 'rgba(7,187,192,0.08)',
-                    borderRadius: 12, padding: 14, marginBottom: 16,
-                    borderWidth: 1, borderColor: creditAccess.isFree ? 'rgba(76,175,80,0.2)' : 'rgba(7,187,192,0.15)',
-                  }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Ionicons
-                          name={creditAccess.isFree ? 'gift-outline' : 'wallet-outline'}
-                          size={16}
-                          color={creditAccess.isFree ? '#4CAF50' : '#07bbc0'}
-                        />
-                        <Text style={{ color: creditAccess.isFree ? '#4CAF50' : '#07bbc0', fontSize: 13, fontWeight: '700' }}>
-                          {creditAccess.isFree
-                            ? `Free trial: ${creditAccess.freeUsesLeft} use${creditAccess.freeUsesLeft === 1 ? '' : 's'} left`
-                            : `Cost: ${formatCredits(creditAccess.creditCost)}`
-                          }
-                        </Text>
-                      </View>
-                      {!creditAccess.isFree && (
-                        <Text style={{ color: '#6b8693', fontSize: 12 }}>
-                          Balance: {formatCredits(creditAccess.balance)}
-                        </Text>
-                      )}
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 4 }}>
-                      <View style={{
-                        backgroundColor: getDifficultyColor(module.difficultyLevel || 'basic') + '25',
-                        borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2,
-                      }}>
-                        <Text style={{
-                          color: getDifficultyColor(module.difficultyLevel || 'basic'),
-                          fontSize: 11, fontWeight: '700',
-                        }}>
-                          {getDifficultyLabel(module.difficultyLevel || 'basic')}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                )}
-
                 <TouchableOpacity style={styles.startButton} onPress={handleStart} activeOpacity={0.8}>
-                  <Text style={styles.startButtonText}>
-                    {creditAccess && !creditAccess.allowed ? 'Top Up to Start' : 'Start'}
-                  </Text>
+                  <Text style={styles.startButtonText}>Start</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -824,17 +719,6 @@ export default function ViewModulePage() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Insufficient Credits Modal */}
-      {module && creditAccess && (
-        <InsufficientCreditsModal
-          visible={showInsufficientModal}
-          onClose={() => setShowInsufficientModal(false)}
-          balance={creditAccess.balance}
-          creditCost={creditAccess.creditCost}
-          difficultyLevel={module.difficultyLevel || 'basic'}
-          moduleTitle={module.moduleTitle}
-        />
-      )}
     </SafeAreaView>
   );
 }

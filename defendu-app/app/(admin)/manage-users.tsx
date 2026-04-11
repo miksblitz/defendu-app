@@ -162,14 +162,6 @@ export default function ManageUsersPage() {
     return role;
   };
 
-  const getWalletDisplay = (user: User): string => {
-    const dynamicUser = user as any;
-    const value = dynamicUser.creditsBalance ?? dynamicUser.credits ?? dynamicUser.walletBalance;
-    if (value === undefined || value === null || value === '') return 'N/A';
-    if (typeof value === 'number') return value.toLocaleString();
-    return String(value);
-  };
-
   const requestToggleBlock = (user: User) => {
     setUserToToggleBlock(user);
   };
@@ -217,14 +209,6 @@ export default function ManageUsersPage() {
       minWidth: 130,
       sortable: true,
       render: (user) => <StatusBadge status={getRoleDisplay(user.role)} tone="info" />,
-    },
-    {
-      key: 'wallet',
-      title: 'Wallet / Credits',
-      flex: 1,
-      minWidth: 130,
-      align: 'right',
-      render: (user) => <Text style={styles.valueText}>{getWalletDisplay(user)}</Text>,
     },
     {
       key: 'last-active',
