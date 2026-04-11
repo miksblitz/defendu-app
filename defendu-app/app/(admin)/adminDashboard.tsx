@@ -15,7 +15,7 @@ import {
 import Svg, { Polyline } from 'react-native-svg';
 import EmptyState from '../../components/admin/EmptyState';
 import { useLogout } from '../../hooks/useLogout';
-import { AnalyticsController, AnalyticsData } from '../controllers/AnalyticsController';
+import { AnalyticsController, AnalyticsData, TopModule, TrainerLeaderboardEntry } from '../controllers/AnalyticsController';
 import LoadingSkeleton from './LoadingSkeleton';
 
 export default function AdminDashboard() {
@@ -37,7 +37,7 @@ export default function AdminDashboard() {
   const kpiCard2Anim = useRef(new Animated.Value(0)).current;
   const kpiCard3Anim = useRef(new Animated.Value(0)).current;
   const chartAnim = useRef(new Animated.Value(0)).current;
-  const revenueAnim = useRef(new Animated.Value(0)).current;
+  const insightsAnim = useRef(new Animated.Value(0)).current;
   
   // Hover scale animations
   const activeBox1Scale = useRef(new Animated.Value(1)).current;
@@ -46,7 +46,7 @@ export default function AdminDashboard() {
   const kpiCard2Scale = useRef(new Animated.Value(1)).current;
   const kpiCard3Scale = useRef(new Animated.Value(1)).current;
   const chartScale = useRef(new Animated.Value(1)).current;
-  const revenueScale = useRef(new Animated.Value(1)).current;
+  const insightsScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     loadAnalytics();
@@ -98,7 +98,7 @@ export default function AdminDashboard() {
           duration: 600,
           useNativeDriver: true,
         }),
-        Animated.timing(revenueAnim, {
+        Animated.timing(insightsAnim, {
           toValue: 1,
           duration: 600,
           useNativeDriver: true,
@@ -260,6 +260,7 @@ export default function AdminDashboard() {
     ? Math.round((topTechnique.count / totalTechniqueRuns) * 100)
     : 0;
   const registrationSummary = `${formatNumber(data.totalRegistrations)} accounts in total`;
+  const pendingTotal = data.pendingTrainerVerifications + data.pendingModuleReviews;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -280,10 +281,15 @@ export default function AdminDashboard() {
               <TouchableOpacity 
                 onPress={() => router.push('/(admin)/adminManaging')}
               >
-                <Image
-                  source={require('../../assets/images/adminmanageicon.png')}
-                  style={styles.navIconImage}
-                />
+                <View style={{ position: 'relative' }}>
+                  <Image
+                    source={require('../../assets/images/adminmanageicon.png')}
+                    style={styles.navIconImage}
+                  />
+                  {pendingTotal > 0 && (
+                    <View style={styles.navPendingDot} />
+                  )}
+                </View>
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -560,57 +566,112 @@ export default function AdminDashboard() {
             </TouchableOpacity>
           </Animated.View>
 
-          <Text style={styles.sectionLabel}>Revenue</Text>
-          {/* Revenue Card */}
+          <Text style={styles.sectionLabel}>Content Insights</Text>
+          {/* Top Rated Modules + Trainer Leaderboard side by side */}
           <Animated.View style={[
-            styles.revenueCard,
+            styles.insightsRow,
             {
-              opacity: revenueAnim,
+              opacity: insightsAnim,
               transform: [
                 {
-                  translateY: revenueAnim.interpolate({
+                  translateY: insightsAnim.interpolate({
                     inputRange: [0, 1],
                     outputRange: [50, 0],
                   }),
                 },
-                { scale: revenueScale },
+                { scale: insightsScale },
               ],
             },
           ]}>
+            {/* Top Rated Modules */}
             <TouchableOpacity
+              style={styles.insightCard}
               activeOpacity={1}
-              onPressIn={() => handleCardHover(revenueScale, true)}
-              onPressOut={() => handleCardHover(revenueScale, false)}
+              onPressIn={() => handleCardHover(insightsScale, true)}
+              onPressOut={() => handleCardHover(insightsScale, false)}
             >
-              <View style={styles.revenueHeader}>
-                <Text style={styles.revenueTitle}>Revenue Overview</Text>
-                <View style={[styles.profitabilityBadge, data.revenue.isProfitable ? styles.profitable : styles.losing]}>
-                  <Ionicons 
-                    name={data.revenue.isProfitable ? "trending-up" : "trending-down"} 
-                    size={16} 
-                    color="#FFFFFF" 
-                  />
-                  <Text style={styles.profitabilityText}>
-                    {data.revenue.isProfitable ? 'Profitable' : 'Losing Money'}
-                  </Text>
-                </View>
+              <View style={styles.insightCardHeader}>
+                <Ionicons name="star-outline" size={18} color="#f5c842" />
+                <Text style={styles.insightCardTitle}>Top Rated Modules</Text>
               </View>
-              <View style={styles.revenueGrid}>
-                <View style={styles.revenueItem}>
-                  <Text style={styles.revenueLabel}>Total Revenue</Text>
-                  <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.totalRevenue)}</Text>
-                </View>
-                <View style={styles.revenueItem}>
-                  <Text style={styles.revenueLabel}>Monthly Revenue</Text>
-                  <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.monthlyRevenue)}</Text>
-                </View>
-                <View style={styles.revenueItem}>
-                  <Text style={styles.revenueLabel}>Subscription Revenue</Text>
-                  <Text style={styles.revenueAmount}>{formatCurrency(data.revenue.subscriptionRevenue)}</Text>
-                </View>
+              <Text style={styles.insightCardSubtitle}>Based on user ratings from the mobile app</Text>
+              {data.topModules.length === 0 ? (
+                <EmptyState
+                  title="No ratings yet"
+                  description="Module ratings submitted in the mobile app will appear here."
+                  iconName="star-outline"
+                />
+              ) : (
+                data.topModules.map((mod: TopModule, index: number) => (
+                  <TouchableOpacity
+                    key={mod.moduleId}
+                    style={styles.insightRow}
+                    activeOpacity={0.7}
+                    onPress={() => router.push({ pathname: '/(admin)/module-detail', params: { moduleId: mod.moduleId } })}
+                  >
+                    <View style={styles.insightRankBadge}>
+                      <Text style={styles.insightRank}>{index + 1}</Text>
+                    </View>
+                    <View style={styles.insightInfo}>
+                      <Text style={styles.insightTitle} numberOfLines={1}>{mod.moduleTitle}</Text>
+                      <Text style={styles.insightMeta}>{mod.trainerName} · {mod.category}</Text>
+                    </View>
+                    <View style={styles.insightRatingCluster}>
+                      <Text style={styles.insightRatingValue}>{'★'} {mod.averageRating.toFixed(1)}</Text>
+                      <Text style={styles.insightRatingCount}>{mod.reviewCount} reviews</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={14} color="#4a7a93" style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                ))
+              )}
+            </TouchableOpacity>
+
+            {/* Trainer Leaderboard */}
+            <TouchableOpacity
+              style={styles.insightCard}
+              activeOpacity={1}
+            >
+              <View style={styles.insightCardHeader}>
+                <Ionicons name="trophy-outline" size={18} color="#f5a742" />
+                <Text style={styles.insightCardTitle}>Trainer Leaderboard</Text>
               </View>
+              <Text style={styles.insightCardSubtitle}>Avg rating across all their approved modules</Text>
+              {data.trainerLeaderboard.length === 0 ? (
+                <EmptyState
+                  title="No trainer data yet"
+                  description="Trainer rankings will appear once their modules receive ratings."
+                  iconName="trophy-outline"
+                />
+              ) : (
+                data.trainerLeaderboard.map((trainer: TrainerLeaderboardEntry, index: number) => (
+                  <TouchableOpacity
+                    key={trainer.trainerId}
+                    style={styles.insightRow}
+                    activeOpacity={0.7}
+                    onPress={() => router.push('/(admin)/manage-modules')}
+                  >
+                    <View style={[
+                      styles.insightRankBadge,
+                      index === 0 && styles.insightRankGold,
+                      index === 1 && styles.insightRankSilver,
+                      index === 2 && styles.insightRankBronze,
+                    ]}>
+                      <Text style={styles.insightRank}>{index + 1}</Text>
+                    </View>
+                    <View style={styles.insightInfo}>
+                      <Text style={styles.insightTitle} numberOfLines={1}>{trainer.trainerName}</Text>
+                      <Text style={styles.insightMeta}>{trainer.moduleCount} module{trainer.moduleCount !== 1 ? 's' : ''}</Text>
+                    </View>
+                    <View style={styles.insightRatingCluster}>
+                      <Text style={styles.insightRatingValue}>{'★'} {trainer.averageRating.toFixed(1)}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={14} color="#4a7a93" style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                ))
+              )}
             </TouchableOpacity>
           </Animated.View>
+
         </ScrollView>
       </View>
 
@@ -737,6 +798,15 @@ const styles = StyleSheet.create({
     height: 28,
     tintColor: '#38a6de',
     resizeMode: 'contain',
+  },
+  navPendingDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#e0a243',
   },
   navIconActiveButton: {
     backgroundColor: 'rgba(41, 125, 167, 0.35)',
@@ -1054,71 +1124,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     lineHeight: 24,
   },
-  revenueCard: {
-    backgroundColor: '#0e1e2d',
-    borderRadius: 14,
-    padding: 22,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(80, 160, 155, 0.18)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 3,
-    cursor: 'pointer',
-  },
-  revenueHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  revenueTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  profitabilityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  profitable: {
-    backgroundColor: '#4CAF50',
-  },
-  losing: {
-    backgroundColor: '#F44336',
-  },
-  profitabilityText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  revenueGrid: {
-    gap: 12,
-  },
-  revenueItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  revenueLabel: {
-    color: '#B0BEC5',
-    fontSize: 14,
-  },
-  revenueAmount: {
-    color: '#6ad9c6',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   menuOverlay: {
     position: 'absolute',
     top: 0,
@@ -1161,5 +1166,100 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '500',
+  },
+  insightsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    marginBottom: 24,
+  },
+  insightCard: {
+    flex: 1,
+    minWidth: 280,
+    backgroundColor: '#0d1f2e',
+    borderRadius: 14,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(80, 150, 180, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+    cursor: 'pointer',
+  },
+  insightCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  insightCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  insightCardSubtitle: {
+    color: '#7a9cad',
+    fontSize: 12,
+    marginBottom: 16,
+  },
+  insightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.07)',
+  },
+  insightRankBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(100, 170, 210, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  insightRankGold: {
+    backgroundColor: 'rgba(245, 200, 66, 0.22)',
+  },
+  insightRankSilver: {
+    backgroundColor: 'rgba(190, 200, 210, 0.2)',
+  },
+  insightRankBronze: {
+    backgroundColor: 'rgba(205, 127, 50, 0.2)',
+  },
+  insightRank: {
+    color: '#d0eaf8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  insightInfo: {
+    flex: 1,
+  },
+  insightTitle: {
+    color: '#e4f0f8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  insightMeta: {
+    color: '#7a9cad',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  insightRatingCluster: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
+  },
+  insightRatingValue: {
+    color: '#f5c842',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  insightRatingCount: {
+    color: '#7a9cad',
+    fontSize: 10,
+    marginTop: 2,
   },
 });

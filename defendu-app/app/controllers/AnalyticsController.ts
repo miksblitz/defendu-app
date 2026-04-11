@@ -3,6 +3,22 @@ import { ref, get } from 'firebase/database';
 import { db } from '../config/firebaseConfig';
 import { User } from '../_models/User';
 
+export interface TopModule {
+  moduleId: string;
+  moduleTitle: string;
+  trainerName: string;
+  category: string;
+  averageRating: number;
+  reviewCount: number;
+}
+
+export interface TrainerLeaderboardEntry {
+  trainerId: string;
+  trainerName: string;
+  moduleCount: number;
+  averageRating: number;
+}
+
 export interface AnalyticsData {
   totalActiveUsers: number;
   activeUsersOnline: number;
@@ -12,6 +28,8 @@ export interface AnalyticsData {
   pendingTrainerVerifications: number;
   pendingModuleReviews: number;
   topPerformedTechniques: { technique: string; count: number }[];
+  topModules: TopModule[];
+  trainerLeaderboard: TrainerLeaderboardEntry[];
   revenue: {
     totalRevenue: number;
     monthlyRevenue: number;
@@ -141,9 +159,98 @@ export class AnalyticsController {
         .sort((a, b) => b.count - a.count)
         .slice(0, 5); // Top 5
 
-      // Check for pending module reviews (placeholder - would need modules collection)
-      // For now, we'll use a placeholder value
-      const pendingModuleReviews = 0; // TODO: Implement when modules collection exists
+      // ── Module ratings & trainer leaderboard ─────────────────────────
+      // Fetch all approved modules
+      const modulesSnap = await get(ref(db, 'modules'));
+      const approvedModules: { moduleId: string; moduleTitle: string; trainerName: string; trainerId: string; category: string }[] = [];
+      if (modulesSnap.exists()) {
+        const modulesData = modulesSnap.val();
+        for (const moduleId in modulesData) {
+          if (!Object.prototype.hasOwnProperty.call(modulesData, moduleId)) continue;
+          const m = modulesData[moduleId];
+          if (m && m.status === 'approved') {
+            approvedModules.push({
+              moduleId,
+              moduleTitle: m.moduleTitle || 'Untitled',
+              trainerName: m.trainerName || 'Unknown Trainer',
+              trainerId: m.trainerId || '',
+              category: m.category || 'Uncategorized',
+            });
+          }
+        }
+      }
+
+      // Fetch all reviews and compute per-module averages
+      const reviewsSnap = await get(ref(db, 'moduleReviews'));
+      const reviewsData = reviewsSnap.exists() ? reviewsSnap.val() : {};
+
+      // pendingModuleReviews = modules with status pending review
+      const pendingModuleReviews = modulesSnap.exists()
+        ? Object.values(modulesSnap.val() as Record<string, any>).filter(
+            (m: any) => m && m.status === 'pending review'
+          ).length
+        : 0;
+
+      // Build topModules with real avg ratings
+      const topModules: TopModule[] = approvedModules
+        .map((mod) => {
+          const moduleReviewsRaw = reviewsData[mod.moduleId];
+          let totalRating = 0;
+          let reviewCount = 0;
+          if (moduleReviewsRaw && typeof moduleReviewsRaw === 'object') {
+            for (const uid in moduleReviewsRaw) {
+              if (!Object.prototype.hasOwnProperty.call(moduleReviewsRaw, uid)) continue;
+              const r = moduleReviewsRaw[uid];
+              if (r && typeof r.rating === 'number') {
+                totalRating += r.rating;
+                reviewCount++;
+              }
+            }
+          }
+          const averageRating = reviewCount > 0 ? Math.round((totalRating / reviewCount) * 10) / 10 : 0;
+          return { ...mod, averageRating, reviewCount };
+        })
+        .filter((m) => m.reviewCount > 0)
+        .sort((a, b) => b.averageRating - a.averageRating || b.reviewCount - a.reviewCount)
+        .slice(0, 5);
+
+      // Build trainer leaderboard — aggregate ratings across all their approved modules
+      const trainerMap: Record<string, { trainerName: string; totalRating: number; ratedModules: number; moduleCount: number }> = {};
+      for (const mod of approvedModules) {
+        if (!trainerMap[mod.trainerId]) {
+          trainerMap[mod.trainerId] = { trainerName: mod.trainerName, totalRating: 0, ratedModules: 0, moduleCount: 0 };
+        }
+        trainerMap[mod.trainerId].moduleCount++;
+        const moduleReviewsRaw = reviewsData[mod.moduleId];
+        if (moduleReviewsRaw && typeof moduleReviewsRaw === 'object') {
+          let mTotal = 0;
+          let mCount = 0;
+          for (const uid in moduleReviewsRaw) {
+            if (!Object.prototype.hasOwnProperty.call(moduleReviewsRaw, uid)) continue;
+            const r = moduleReviewsRaw[uid];
+            if (r && typeof r.rating === 'number') {
+              mTotal += r.rating;
+              mCount++;
+            }
+          }
+          if (mCount > 0) {
+            trainerMap[mod.trainerId].totalRating += mTotal / mCount;
+            trainerMap[mod.trainerId].ratedModules++;
+          }
+        }
+      }
+
+      const trainerLeaderboard: TrainerLeaderboardEntry[] = Object.entries(trainerMap)
+        .map(([trainerId, t]) => ({
+          trainerId,
+          trainerName: t.trainerName,
+          moduleCount: t.moduleCount,
+          averageRating: t.ratedModules > 0 ? Math.round((t.totalRating / t.ratedModules) * 10) / 10 : 0,
+        }))
+        .filter((t) => t.averageRating > 0)
+        .sort((a, b) => b.averageRating - a.averageRating || b.moduleCount - a.moduleCount)
+        .slice(0, 5);
+      // ──────────────────────────────────────────────────────────────────
 
       // Calculate if profitable (assuming operational costs)
       const estimatedMonthlyCosts = 500; // Placeholder for server costs, etc.
@@ -158,6 +265,8 @@ export class AnalyticsController {
         pendingTrainerVerifications,
         pendingModuleReviews,
         topPerformedTechniques,
+        topModules,
+        trainerLeaderboard,
         revenue: {
           totalRevenue,
           monthlyRevenue,
@@ -181,6 +290,8 @@ export class AnalyticsController {
       pendingTrainerVerifications: 0,
       pendingModuleReviews: 0,
       topPerformedTechniques: [],
+      topModules: [],
+      trainerLeaderboard: [],
       revenue: {
         totalRevenue: 0,
         monthlyRevenue: 0,
