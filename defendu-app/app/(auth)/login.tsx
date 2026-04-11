@@ -97,6 +97,10 @@ export default function LoginScreen() {
           keyboardType="email-address"
           onChangeText={setEmail}
           autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
           editable={!loading}
         />
       </View>
@@ -111,6 +115,9 @@ export default function LoginScreen() {
           value={password}
           secureTextEntry={!showPassword}
           onChangeText={setPassword}
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
           editable={!loading}
         />
         <TouchableOpacity

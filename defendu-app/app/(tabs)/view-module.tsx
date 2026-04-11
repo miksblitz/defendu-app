@@ -1,6 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -22,8 +23,28 @@ import { Module } from '../_models/Module';
 import { ModuleReview } from '../_models/ModuleReview';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController } from '../controllers/AuthController';
+import { markTrainingSafetyAcknowledged, shouldShowTrainingSafetyFirst } from '../_utils/trainingSafetySession';
 
 type Step = 'intro' | 'safety' | 'video' | 'tryIt' | 'complete';
+
+const CATEGORY_INTRO_STORAGE_PREFIX = '@defendu/category_intro_shown_v1/';
+
+function routeParamToString(value: string | string[] | undefined): string {
+  if (value == null) return '';
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+function normalizeCategoryKey(cat: string | undefined): string {
+  return (cat ?? '').trim().toLowerCase();
+}
+
+function moduleHasIntroductionContent(m: Module | null): boolean {
+  if (!m) return false;
+  if (m.introductionType === 'video' && (m.introductionVideoUrl ?? '').trim().length > 0) return true;
+  if (typeof m.introduction === 'string' && m.introduction.trim().length > 0) return true;
+  return false;
+}
 
 /**
  * Normalize video URL for reliable playback (e.g. force MP4 for Cloudinary).
@@ -66,7 +87,15 @@ export default function ViewModulePage() {
   const router = useRouter();
   const handleLogout = useLogout();
   const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
-  const { moduleId } = useLocalSearchParams<{ moduleId: string }>();
+  const params = useLocalSearchParams<{
+    moduleId: string;
+    categoryKey?: string;
+  }>();
+  const { moduleId } = params;
+  const categoryKeyFromRoute = routeParamToString(params.categoryKey);
+  const showedModuleIntroThisSession = useRef(false);
+  const [enteredViaSafety, setEnteredViaSafety] = useState(false);
+
   const [module, setModule] = useState<Module | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<Step>('intro');
@@ -136,8 +165,12 @@ export default function ViewModulePage() {
         return;
       }
       setModule(data);
-      setStep('intro');
+      showedModuleIntroThisSession.current = false;
       setIntroVideoError(false);
+      setIntroVideoWatched(false);
+      const showSafety = shouldShowTrainingSafetyFirst();
+      setEnteredViaSafety(showSafety);
+      setStep(showSafety ? 'safety' : 'intro');
     } catch (error) {
       console.error('Error loading module:', error);
       router.replace('/dashboard');
@@ -146,26 +179,61 @@ export default function ViewModulePage() {
     }
   };
 
-  const handleStart = () => {
-    if (!module) return;
-    setStep('safety');
-  };
+  const categoryStorageKey = useMemo(
+    () =>
+      module ? normalizeCategoryKey(categoryKeyFromRoute || module.category || 'uncategorized') : '',
+    [module, categoryKeyFromRoute]
+  );
 
-  const handleSafetyConfirm = () => {
-    // Skip introduction, go straight to Try it yourself
-    handleTryItYourself();
-  };
-
-  const handleIntroDone = () => {
-    setStep('complete');
-  };
-
-  const handleTryItYourself = () => {
+  const beginTryItPractice = () => {
     const total = module?.trainingDurationSeconds ?? 60;
     setTryItTotalSeconds(total);
     setTryItRemainingSeconds(total);
     setTryItPaused(false);
     setStep('tryIt');
+  };
+
+  const handleStart = () => {
+    beginTryItPractice();
+  };
+
+  const finishModuleIntroToPractice = async () => {
+    try {
+      if (categoryStorageKey) {
+        await AsyncStorage.setItem(`${CATEGORY_INTRO_STORAGE_PREFIX}${categoryStorageKey}`, '1');
+      }
+    } catch {
+      /* ignore */
+    }
+    beginTryItPractice();
+  };
+
+  const handleSafetyConfirm = async () => {
+    if (!module) return;
+    markTrainingSafetyAcknowledged();
+    const key = categoryStorageKey
+      ? `${CATEGORY_INTRO_STORAGE_PREFIX}${categoryStorageKey}`
+      : '';
+    try {
+      const seen = key ? await AsyncStorage.getItem(key) : null;
+      if (!seen && moduleHasIntroductionContent(module)) {
+        showedModuleIntroThisSession.current = true;
+        setStep('video');
+        return;
+      }
+      showedModuleIntroThisSession.current = false;
+      if (!seen && key) {
+        await AsyncStorage.setItem(key, '1');
+      }
+      beginTryItPractice();
+    } catch {
+      showedModuleIntroThisSession.current = moduleHasIntroductionContent(module);
+      if (moduleHasIntroductionContent(module)) {
+        setStep('video');
+      } else {
+        beginTryItPractice();
+      }
+    }
   };
 
   // Timer tick for Try it yourself (depends only on step and pause so we don't recreate interval every second)
@@ -198,7 +266,7 @@ export default function ViewModulePage() {
   }, [step, tryItPaused]);
 
   const handleReviewModule = () => setStep('intro');
-  const handlePracticeAgain = () => setStep('video');
+  const handlePracticeAgain = () => beginTryItPractice();
   const handleMessages = () => {
     clearUnread();
     setShowMenu(false);
@@ -287,10 +355,15 @@ export default function ViewModulePage() {
             style={styles.backButton}
             onPress={() => {
               if (step === 'intro') router.replace('/dashboard');
-              else if (step === 'safety') setStep('intro');
-              else if (step === 'video') setStep('safety');
-              else if (step === 'tryIt') setStep('video');
-
+              else if (step === 'safety') {
+                if (enteredViaSafety) router.replace('/dashboard');
+                else setStep('intro');
+              } else if (step === 'video') setStep(enteredViaSafety ? 'safety' : 'intro');
+              else if (step === 'tryIt') {
+                if (showedModuleIntroThisSession.current) setStep('video');
+                else if (enteredViaSafety) setStep('safety');
+                else setStep('intro');
+              }
               else if (step === 'complete') router.replace('/dashboard');
             }}
           >
@@ -399,7 +472,14 @@ export default function ViewModulePage() {
                 <TouchableOpacity style={styles.startButton} onPress={handleSafetyConfirm} activeOpacity={0.8}>
                   <Text style={styles.startButtonText}>Confirm & Continue</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.continueButton} onPress={() => setStep('intro')} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={styles.continueButton}
+                  onPress={() => {
+                    if (enteredViaSafety) router.replace('/dashboard');
+                    else setStep('intro');
+                  }}
+                  activeOpacity={0.8}
+                >
                   <Text style={styles.continueButtonText}>Back</Text>
                 </TouchableOpacity>
               </View>
@@ -423,7 +503,14 @@ export default function ViewModulePage() {
                             <Ionicons name="open-outline" size={20} color="#07bbc0" style={{ marginRight: 8 }} />
                             <Text style={styles.videoErrorButtonText}>Open video in new tab</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.continueButton} onPress={() => { setIntroVideoWatched(true); handleIntroDone(); }} activeOpacity={0.8}>
+                          <TouchableOpacity
+                            style={styles.continueButton}
+                            onPress={() => {
+                              setIntroVideoWatched(true);
+                              finishModuleIntroToPractice();
+                            }}
+                            activeOpacity={0.8}
+                          >
                             <Text style={styles.continueButtonText}>Continue without watching</Text>
                           </TouchableOpacity>
                         </View>
@@ -451,12 +538,8 @@ export default function ViewModulePage() {
                         </TouchableOpacity>
                       </View>
                     )}
-                    <TouchableOpacity style={styles.tryItButton} onPress={handleTryItYourself} activeOpacity={0.8}>
-                      <Ionicons name="fitness-outline" size={22} color="#FFFFFF" style={{ marginRight: 8 }} />
-                      <Text style={styles.tryItButtonText}>Try it yourself</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.continueButton} onPress={handleIntroDone} activeOpacity={0.8}>
-                      <Text style={styles.continueButtonText}>Continue to Complete</Text>
+                    <TouchableOpacity style={styles.primaryButton} onPress={finishModuleIntroToPractice} activeOpacity={0.8}>
+                      <Text style={styles.primaryButtonText}>Continue to practice</Text>
                     </TouchableOpacity>
                   </>
                 ) : (
@@ -464,21 +547,32 @@ export default function ViewModulePage() {
                     {module.introduction ? (
                       <Text style={styles.introText}>{module.introduction}</Text>
                     ) : null}
-                    <TouchableOpacity style={styles.tryItButton} onPress={handleTryItYourself} activeOpacity={0.8}>
-                      <Ionicons name="fitness-outline" size={22} color="#FFFFFF" style={{ marginRight: 8 }} />
-                      <Text style={styles.tryItButtonText}>Try it yourself</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.continueButton} onPress={handleIntroDone} activeOpacity={0.8}>
-                      <Text style={styles.continueButtonText}>Continue to Complete</Text>
+                    <TouchableOpacity style={styles.primaryButton} onPress={finishModuleIntroToPractice} activeOpacity={0.8}>
+                      <Text style={styles.primaryButtonText}>Continue to practice</Text>
                     </TouchableOpacity>
                   </>
                 )}
+                {enteredViaSafety ? (
+                  <TouchableOpacity style={styles.continueButton} onPress={() => setStep('safety')} activeOpacity={0.8}>
+                    <Text style={styles.continueButtonText}>Back</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             )}
 
             {step === 'tryIt' && (
               <View style={styles.card}>
                 <Text style={styles.sectionLabel}>Try it yourself</Text>
+                {module.referenceGuideUrl ? (
+                  <View style={styles.tryItGuideBlock}>
+                    <Text style={styles.tryItGuideLabel}>Form guide</Text>
+                    <Image
+                      source={{ uri: module.referenceGuideUrl }}
+                      style={styles.tryItReferenceGuide}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ) : null}
                 <Text style={styles.tryItSubtext}>
                   Practice for {formatTime(tryItTotalSeconds)}. Timer counts down; you can pause and resume.
                 </Text>
@@ -552,7 +646,30 @@ export default function ViewModulePage() {
                   </View>
                   <Text style={styles.progressPercent}>100%</Text>
                 </View>
-                <Text style={styles.metricsText}>Accuracy: 92% | Consistency: 88%</Text>
+
+                <View style={styles.posePromoCard}>
+                  <View style={styles.posePromoAccentBar} />
+                  <View style={styles.posePromoInner}>
+                    <Text style={styles.posePromoKicker}>
+                      ⚡ Visit the DEFENDU mobile application to try our pose estimation feature
+                    </Text>
+                    <Text style={styles.posePromoTitle}>🎮 TRAIN LIKE A FIGHTER</Text>
+                    <Text style={styles.posePromoLead}>Your body is the controller.</Text>
+                    <Text style={styles.posePromoLeadSecondary}>Our AI is your coach.</Text>
+                    <View style={styles.posePromoCallouts}>
+                      <Text style={styles.posePromoCallout}>🥊 Strike Accuracy Detection</Text>
+                      <Text style={styles.posePromoCallout}>🧠 Smart Pose Analysis</Text>
+                      <Text style={styles.posePromoCallout}>📊 Real-Time Scoring System</Text>
+                      <Text style={styles.posePromoCallout}>🔥 Perfect Rep Recognition</Text>
+                    </View>
+                    <Text style={styles.posePromoTagline}>“Every move counts. Every rep matters.”</Text>
+                    <Text style={styles.posePromoCta}>
+                      {Platform.OS === 'web'
+                        ? '👉 Download now and master your form!'
+                        : '👉 Keep the app updated — pose estimation & live scoring are built for mobile.'}
+                    </Text>
+                  </View>
+                </View>
 
                 {/* Rate this module - Amazon style (one review per user) */}
                 <View style={styles.rateSection}>
@@ -970,6 +1087,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a3645',
     marginBottom: 12,
   },
+  tryItGuideBlock: {
+    width: '100%',
+    marginBottom: 8,
+  },
+  tryItGuideLabel: {
+    color: '#07bbc0',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  tryItReferenceGuide: {
+    width: '100%',
+    minHeight: 260,
+    maxHeight: 520,
+    borderRadius: 16,
+    backgroundColor: '#0a3645',
+    marginBottom: 8,
+  },
   startButton: {
     backgroundColor: '#07bbc0',
     paddingVertical: 14,
@@ -1063,19 +1200,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   continueButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  tryItButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0a3645',
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 16,
-    borderWidth: 2,
-    borderColor: '#07bbc0',
-  },
-  tryItButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-
   tryItSubtext: {
     color: '#6b8693',
     fontSize: 14,
@@ -1155,7 +1279,94 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   progressPercent: { color: '#07bbc0', fontSize: 14, fontWeight: '700' },
-  metricsText: { color: '#FFFFFF', fontSize: 14, marginBottom: 24 },
+  posePromoCard: {
+    marginTop: 8,
+    marginBottom: 22,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(240, 193, 75, 0.45)',
+    backgroundColor: '#050f18',
+    shadowColor: '#07bbc0',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  posePromoAccentBar: {
+    height: 4,
+    width: '100%',
+    backgroundColor: '#f0c14b',
+  },
+  posePromoInner: {
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    borderLeftWidth: 3,
+    borderLeftColor: '#07bbc0',
+  },
+  posePromoKicker: {
+    color: 'rgba(184, 205, 217, 0.95)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 14,
+    lineHeight: 16,
+  },
+  posePromoTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+    textShadowColor: 'rgba(7, 187, 192, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  posePromoLead: {
+    color: '#07bbc0',
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  posePromoLeadSecondary: {
+    color: '#e8f4f8',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  posePromoCallouts: {
+    gap: 10,
+    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(7, 187, 192, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.22)',
+  },
+  posePromoCallout: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  posePromoTagline: {
+    color: '#f0c14b',
+    fontSize: 14,
+    fontStyle: 'italic',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 14,
+    lineHeight: 20,
+  },
+  posePromoCta: {
+    color: '#07bbc0',
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
   outlineButton: {
     borderWidth: 2,
     borderColor: '#07bbc0',

@@ -117,7 +117,13 @@ export default function ExploreScreen() {
   const cardWidth = Math.floor((contentWidth - totalGaps) / columns);
 
   const handleModulePress = (m: Module) => {
-    router.push(`/view-module?moduleId=${m.moduleId}` as any);
+    router.push({
+      pathname: '/view-module',
+      params: {
+        moduleId: m.moduleId,
+        categoryKey: normalizeCategory(m.category),
+      },
+    } as any);
   };
 
   const handleMessages = () => {

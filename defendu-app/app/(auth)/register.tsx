@@ -1,16 +1,40 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { getExpoApiBaseUrl } from '../../constants/apiBaseUrl';
+
+const INPUT_BG = '#031220';
+
+/** Extra DOM props on web to discourage password managers / autofill heuristics. */
+const webNoAutofill = (field: string) =>
+  Platform.OS === 'web'
+    ? ({
+        spellCheck: false,
+        name: `defendu-reg-${field}`,
+        'data-lpignore': 'true',
+        'data-1p-ignore': 'true',
+        'data-bwignore': 'true',
+        'data-form-type': 'other',
+      } as Record<string, unknown>)
+    : {};
 
 export default function SignUpScreen() {
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
-    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -19,7 +43,6 @@ export default function SignUpScreen() {
   const [errors, setErrors] = useState({
     firstName: '',
     lastName: '',
-    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -31,15 +54,29 @@ export default function SignUpScreen() {
   const router = useRouter();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
 
-  // Username validation
-  const validateUsername = (username: string) => {
-    if (!username) return 'Username is required';
-    if (username.length < 3) return 'Username must be at least 3 characters';
-    if (username.length > 30) return 'Username is too long (max 30 characters)';
-    if (!/^[a-zA-Z0-9_]+$/.test(username))
-      return 'Username can only contain letters, numbers, and underscores';
-    return '';
-  };
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const id = 'defendu-register-no-autofill-style';
+    if (document.getElementById(id)) return;
+    const el = document.createElement('style');
+    el.id = id;
+    el.textContent = `
+      #defendu-register-root input:-webkit-autofill,
+      #defendu-register-root input:-webkit-autofill:hover,
+      #defendu-register-root input:-webkit-autofill:focus,
+      #defendu-register-root input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 1000px ${INPUT_BG} inset !important;
+        box-shadow: 0 0 0 1000px ${INPUT_BG} inset !important;
+        -webkit-text-fill-color: #ffffff !important;
+        caret-color: #ffffff;
+        transition: background-color 99999s ease-out 0s;
+      }
+    `;
+    document.head.appendChild(el);
+    return () => {
+      document.getElementById(id)?.remove();
+    };
+  }, []);
 
   // Name validation function (no numbers allowed)
   const validateName = (name: string, fieldName: string) => {
@@ -128,12 +165,6 @@ export default function SignUpScreen() {
     setErrors(prev => ({ ...prev, lastName: error }));
   };
 
-  // Handle username blur
-  const handleUsernameBlur = () => {
-    const error = validateUsername(form.username);
-    setErrors(prev => ({ ...prev, username: error }));
-  };
-
   // Handle email blur
   const handleEmailBlur = () => {
     const error = validateEmail(form.email);
@@ -156,7 +187,6 @@ export default function SignUpScreen() {
   const handleCreateAccount = async () => {
     const firstNameError = validateName(form.firstName, 'First name');
     const lastNameError = validateName(form.lastName, 'Last name');
-    const usernameError = validateUsername(form.username);
     const emailError = validateEmail(form.email);
     const passwordError = validatePassword(form.password);
     const confirmPasswordError = validateConfirmPassword(form.confirmPassword, form.password);
@@ -164,13 +194,12 @@ export default function SignUpScreen() {
     setErrors({
       firstName: firstNameError,
       lastName: lastNameError,
-      username: usernameError,
       email: emailError,
       password: passwordError,
       confirmPassword: confirmPasswordError,
     });
 
-    if (firstNameError || lastNameError || usernameError || emailError || passwordError || confirmPasswordError) {
+    if (firstNameError || lastNameError || emailError || passwordError || confirmPasswordError) {
       showToast('Please fix the errors before submitting');
       return;
     }
@@ -203,7 +232,6 @@ export default function SignUpScreen() {
           email: form.email,
           firstName: form.firstName,
           lastName: form.lastName,
-          username: form.username,
           password: form.password,
         },
       });
@@ -215,7 +243,7 @@ export default function SignUpScreen() {
   };
 
   return (
-    <View style={styles.wrapper}>
+    <View style={styles.wrapper} {...(Platform.OS === 'web' ? ({ id: 'defendu-register-root' } as any) : {})}>
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       {/* Logo Image */}
       <Image
@@ -244,7 +272,12 @@ export default function SignUpScreen() {
           }}
           onBlur={handleFirstNameBlur}
           maxLength={50}
+          autoCorrect={false}
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
           editable={!loading}
+          {...(webNoAutofill('firstname') as any)}
         />
       </View>
       {errors.firstName ? <Text style={styles.errorText}>{errors.firstName}</Text> : null}
@@ -265,32 +298,15 @@ export default function SignUpScreen() {
           }}
           onBlur={handleLastNameBlur}
           maxLength={50}
+          autoCorrect={false}
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
           editable={!loading}
+          {...(webNoAutofill('lastname') as any)}
         />
       </View>
       {errors.lastName ? <Text style={styles.errorText}>{errors.lastName}</Text> : null}
-
-      {/* Username */}
-      <View style={styles.inputWrapper}>
-        <Ionicons name="at-outline" size={20} color="#07bbc0" style={styles.inputIcon} />
-        <TextInput
-          style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-          placeholder="Choose a username"
-          placeholderTextColor="rgba(255,255,255,0.4)"
-          value={form.username}
-          onChangeText={(text) => {
-            setForm((f) => ({ ...f, username: text }));
-            if (errors.username) {
-              setErrors(prev => ({ ...prev, username: '' }));
-            }
-          }}
-          onBlur={handleUsernameBlur}
-          autoCapitalize="none"
-          maxLength={30}
-          editable={!loading}
-        />
-      </View>
-      {errors.username ? <Text style={styles.errorText}>{errors.username}</Text> : null}
 
       {/* Email */}
       <View style={styles.inputWrapper}>
@@ -310,7 +326,12 @@ export default function SignUpScreen() {
           keyboardType="email-address"
           autoCapitalize="none"
           maxLength={254}
+          autoCorrect={false}
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
           editable={!loading}
+          {...(webNoAutofill('email') as any)}
         />
       </View>
       {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
@@ -332,7 +353,12 @@ export default function SignUpScreen() {
           }}
           onBlur={handlePasswordBlur}
           maxLength={128}
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
           editable={!loading}
+          passwordRules={null}
+          {...(webNoAutofill('password') as any)}
         />
         <TouchableOpacity
           onPress={() => setShowPass(!showPass)}
@@ -362,7 +388,12 @@ export default function SignUpScreen() {
           }}
           onBlur={handleConfirmPasswordBlur}
           maxLength={128}
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
           editable={!loading}
+          passwordRules={null}
+          {...(webNoAutofill('password2') as any)}
         />
         <TouchableOpacity
           onPress={() => setShowConfirmPass(!showConfirmPass)}

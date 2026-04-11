@@ -26,6 +26,9 @@ export interface User {
   // Preferences
   preferredTechnique?: string[]; // Multiple selections allowed
   trainingGoal?: string[]; // Multiple selections allowed
+  /** From skill profile (preferences step); used for dashboard weekly goal. */
+  dailyModuleTarget?: number;
+  weeklyModuleTarget?: number;
   // Past Experience
   experienceLevel?: string;
   martialArtsBackground?: string[]; // Multiple selections allowed

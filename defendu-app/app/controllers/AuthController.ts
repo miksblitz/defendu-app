@@ -165,6 +165,8 @@ export class AuthController {
         // Normalize arrays to ensure they're always arrays
         preferredTechnique: this.normalizeArray(userDataRaw.preferredTechnique),
         trainingGoal: this.normalizeArray(userDataRaw.trainingGoal),
+        dailyModuleTarget: userDataRaw.dailyModuleTarget,
+        weeklyModuleTarget: userDataRaw.weeklyModuleTarget,
         experienceLevel: userDataRaw.experienceLevel,
         martialArtsBackground: this.normalizeArray(userDataRaw.martialArtsBackground),
         previousTrainingDetails: userDataRaw.previousTrainingDetails,
@@ -350,6 +352,40 @@ export class AuthController {
     return undefined;
   }
 
+  /** True if Firebase status should be treated as approved (case/whitespace tolerant). */
+  private static isApprovedModuleStatus(status: unknown): boolean {
+    if (status == null) return false;
+    return String(status).trim().toLowerCase() === 'approved';
+  }
+
+  /** Map a Firebase `modules/{id}` record to `Module` (handles `thumbnailURL` vs `thumbnailUrl`). */
+  private static moduleFromDbSnapshot(moduleId: string, moduleDataRaw: Record<string, any>): Module {
+    const thumbnailUrl =
+      (typeof moduleDataRaw.thumbnailUrl === 'string' && moduleDataRaw.thumbnailUrl.trim()) ||
+      (typeof moduleDataRaw.thumbnailURL === 'string' && moduleDataRaw.thumbnailURL.trim()) ||
+      undefined;
+    const stancePosition: Module['stancePosition'] =
+      moduleDataRaw.stancePosition === 'front view'
+        ? 'front view'
+        : moduleDataRaw.stancePosition === 'side view'
+          ? 'side view'
+          : 'side view';
+    return {
+      ...moduleDataRaw,
+      moduleId,
+      thumbnailUrl,
+      stancePosition,
+      createdAt: moduleDataRaw.createdAt ? new Date(moduleDataRaw.createdAt) : new Date(),
+      updatedAt: moduleDataRaw.updatedAt ? new Date(moduleDataRaw.updatedAt) : new Date(),
+      submittedAt: moduleDataRaw.submittedAt ? new Date(moduleDataRaw.submittedAt) : undefined,
+      reviewedAt: moduleDataRaw.reviewedAt ? new Date(moduleDataRaw.reviewedAt) : undefined,
+      status: moduleDataRaw.status || 'draft',
+      certificationChecked: moduleDataRaw.certificationChecked || false,
+      spaceRequirements: this.normalizeArray(moduleDataRaw.spaceRequirements) || [],
+      physicalDemandTags: this.normalizeArray(moduleDataRaw.physicalDemandTags) || [],
+    } as Module;
+  }
+
   // Get current user
   static async getCurrentUser(): Promise<User | null> {
     try {
@@ -386,6 +422,8 @@ export class AuthController {
         // Normalize arrays to ensure they're always arrays
         preferredTechnique: this.normalizeArray(userDataRaw.preferredTechnique),
         trainingGoal: this.normalizeArray(userDataRaw.trainingGoal),
+        dailyModuleTarget: userDataRaw.dailyModuleTarget,
+        weeklyModuleTarget: userDataRaw.weeklyModuleTarget,
         experienceLevel: userDataRaw.experienceLevel,
         martialArtsBackground: this.normalizeArray(userDataRaw.martialArtsBackground),
         previousTrainingDetails: userDataRaw.previousTrainingDetails,
@@ -503,6 +541,12 @@ export class AuthController {
         preferences: {
           preferredTechnique: profile.preferences.preferredTechnique || [],
           trainingGoal: profile.preferences.trainingGoal || [],
+          ...(typeof profile.preferences.dailyModuleTarget === 'number'
+            ? { dailyModuleTarget: profile.preferences.dailyModuleTarget }
+            : {}),
+          ...(typeof profile.preferences.weeklyModuleTarget === 'number'
+            ? { weeklyModuleTarget: profile.preferences.weeklyModuleTarget }
+            : {}),
         },
         pastExperience: {
           experienceLevel: profile.pastExperience.experienceLevel,
@@ -541,7 +585,7 @@ export class AuthController {
       }
 
       // Update user record with individual skill profile fields
-      const userUpdates: any = {
+      const userUpdates: Record<string, unknown> = {
         hasCompletedSkillProfile: true,
         // Physical Attributes
         height: profile.physicalAttributes.height,
@@ -561,6 +605,12 @@ export class AuthController {
         trainingFrequency: profile.fitnessCapabilities.trainingFrequency,
         currentInjuries: profile.fitnessCapabilities.injuries || null,
       };
+      if (typeof profile.preferences.dailyModuleTarget === 'number') {
+        userUpdates.dailyModuleTarget = profile.preferences.dailyModuleTarget;
+      }
+      if (typeof profile.preferences.weeklyModuleTarget === 'number') {
+        userUpdates.weeklyModuleTarget = profile.preferences.weeklyModuleTarget;
+      }
 
       console.log('🔵 Saving skill profile data to user record:', JSON.stringify(userUpdates, null, 2));
       console.log('🔵 User UID:', currentUser.uid);
@@ -1319,6 +1369,8 @@ export class AuthController {
       /** Change the trainer assigned to this module */
       trainerId?: string;
       trainerName?: string;
+      /** Stance / camera angle; null clears */
+      stancePosition?: Module['stancePosition'];
     }
   ): Promise<void> {
     try {
@@ -1362,6 +1414,9 @@ export class AuthController {
       }
       if (updates.trainerId !== undefined) patch.trainerId = updates.trainerId;
       if (updates.trainerName !== undefined) patch.trainerName = updates.trainerName;
+      if (updates.stancePosition !== undefined) {
+        patch.stancePosition = updates.stancePosition ?? null;
+      }
       if (Object.keys(patch).length === 0) return;
 
       const now = Date.now();
@@ -1771,6 +1826,7 @@ export class AuthController {
     referenceGuideUrl?: string;
     repRange?: string;
     trainingDurationSeconds?: number;
+    stancePosition?: Module['stancePosition'];
   }): Promise<string> {
     try {
       const currentUser = await this.getCurrentUser();
@@ -1800,6 +1856,7 @@ export class AuthController {
         referenceGuideUrl: moduleData.referenceGuideUrl || null,
         repRange: moduleData.repRange || null,
         trainingDurationSeconds: moduleData.trainingDurationSeconds ?? null,
+        stancePosition: moduleData.stancePosition === 'front view' ? 'front view' : 'side view',
         status: 'approved',
         certificationChecked: true,
         createdAt: now,
@@ -1877,6 +1934,7 @@ export class AuthController {
         repRange: moduleData.repRange || null,
         difficultyLevel: moduleData.difficultyLevel ?? null,
         trainingDurationSeconds: moduleData.trainingDurationSeconds ?? null,
+        stancePosition: moduleData.stancePosition === 'front view' ? 'front view' : 'side view',
         status: isDraft ? 'draft' : 'pending review',
         createdAt: new Date().getTime(),
         updatedAt: new Date().getTime(),
@@ -1980,20 +2038,7 @@ export class AuthController {
         }
         
         try {
-          const module: Module = {
-            ...moduleDataRaw,
-            moduleId,
-            createdAt: moduleDataRaw.createdAt ? new Date(moduleDataRaw.createdAt) : new Date(),
-            updatedAt: moduleDataRaw.updatedAt ? new Date(moduleDataRaw.updatedAt) : new Date(),
-            submittedAt: moduleDataRaw.submittedAt ? new Date(moduleDataRaw.submittedAt) : undefined,
-            reviewedAt: moduleDataRaw.reviewedAt ? new Date(moduleDataRaw.reviewedAt) : undefined,
-            status: moduleDataRaw.status || 'draft',
-            certificationChecked: moduleDataRaw.certificationChecked || false,
-            // Normalize arrays
-            spaceRequirements: this.normalizeArray(moduleDataRaw.spaceRequirements) || [],
-            physicalDemandTags: this.normalizeArray(moduleDataRaw.physicalDemandTags) || [],
-          };
-          modules.push(module);
+          modules.push(this.moduleFromDbSnapshot(moduleId, moduleDataRaw));
         } catch (moduleError) {
           console.error(`❌ Error processing module ${moduleId}:`, moduleError);
           // Continue with other modules
@@ -2121,22 +2166,10 @@ export class AuthController {
         if (!modulesData.hasOwnProperty(moduleId)) continue;
         const moduleDataRaw = modulesData[moduleId];
         if (!moduleDataRaw || typeof moduleDataRaw !== 'object') continue;
-        if (moduleDataRaw.status !== 'approved') continue;
+        if (!this.isApprovedModuleStatus(moduleDataRaw.status)) continue;
 
         try {
-          const module: Module = {
-            ...moduleDataRaw,
-            moduleId,
-            createdAt: moduleDataRaw.createdAt ? new Date(moduleDataRaw.createdAt) : new Date(),
-            updatedAt: moduleDataRaw.updatedAt ? new Date(moduleDataRaw.updatedAt) : new Date(),
-            submittedAt: moduleDataRaw.submittedAt ? new Date(moduleDataRaw.submittedAt) : undefined,
-            reviewedAt: moduleDataRaw.reviewedAt ? new Date(moduleDataRaw.reviewedAt) : undefined,
-            status: moduleDataRaw.status || 'draft',
-            certificationChecked: moduleDataRaw.certificationChecked || false,
-            spaceRequirements: this.normalizeArray(moduleDataRaw.spaceRequirements) || [],
-            physicalDemandTags: this.normalizeArray(moduleDataRaw.physicalDemandTags) || [],
-          };
-          modules.push(module);
+          modules.push(this.moduleFromDbSnapshot(moduleId, moduleDataRaw));
         } catch (moduleError) {
           console.error(`Error processing module ${moduleId}:`, moduleError);
         }
@@ -2171,24 +2204,11 @@ export class AuthController {
       }
 
       const moduleDataRaw = moduleSnapshot.val();
-      if (moduleDataRaw.status !== 'approved') {
+      if (!this.isApprovedModuleStatus(moduleDataRaw.status)) {
         return null;
       }
 
-      const module: Module = {
-        ...moduleDataRaw,
-        moduleId,
-        createdAt: moduleDataRaw.createdAt ? new Date(moduleDataRaw.createdAt) : new Date(),
-        updatedAt: moduleDataRaw.updatedAt ? new Date(moduleDataRaw.updatedAt) : new Date(),
-        submittedAt: moduleDataRaw.submittedAt ? new Date(moduleDataRaw.submittedAt) : undefined,
-        reviewedAt: moduleDataRaw.reviewedAt ? new Date(moduleDataRaw.reviewedAt) : undefined,
-        status: moduleDataRaw.status || 'draft',
-        certificationChecked: moduleDataRaw.certificationChecked || false,
-        spaceRequirements: this.normalizeArray(moduleDataRaw.spaceRequirements) || [],
-        physicalDemandTags: this.normalizeArray(moduleDataRaw.physicalDemandTags) || [],
-      };
-
-      return module;
+      return this.moduleFromDbSnapshot(moduleId, moduleDataRaw);
     } catch (error: any) {
       console.error('Error fetching module:', error);
       throw new Error(error.message || 'Failed to fetch module');
@@ -2216,20 +2236,7 @@ export class AuthController {
       }
 
       const moduleDataRaw = moduleSnapshot.val();
-      const module: Module = {
-        ...moduleDataRaw,
-        moduleId,
-        createdAt: moduleDataRaw.createdAt ? new Date(moduleDataRaw.createdAt) : new Date(),
-        updatedAt: moduleDataRaw.updatedAt ? new Date(moduleDataRaw.updatedAt) : new Date(),
-        submittedAt: moduleDataRaw.submittedAt ? new Date(moduleDataRaw.submittedAt) : undefined,
-        reviewedAt: moduleDataRaw.reviewedAt ? new Date(moduleDataRaw.reviewedAt) : undefined,
-        status: moduleDataRaw.status || 'draft',
-        certificationChecked: moduleDataRaw.certificationChecked || false,
-        spaceRequirements: this.normalizeArray(moduleDataRaw.spaceRequirements) || [],
-        physicalDemandTags: this.normalizeArray(moduleDataRaw.physicalDemandTags) || [],
-      };
-
-      return module;
+      return this.moduleFromDbSnapshot(moduleId, moduleDataRaw);
     } catch (error: any) {
       console.error('❌ Error fetching module:', error);
       throw new Error(error.message || 'Failed to fetch module');

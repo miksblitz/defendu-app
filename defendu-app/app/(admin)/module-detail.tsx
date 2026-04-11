@@ -53,6 +53,11 @@ function getExtractOutputPath(title: string, trainer: string, category: string):
   return `${folder}/${titleSlug}_${trainerSlug}_pose_data.csv`;
 }
 
+function formatStancePositionLabel(v: Module['stancePosition']): string {
+  if (v === 'front view') return 'Front view';
+  return 'Side view';
+}
+
 /** Force Cloudinary video URLs to MP4 for reliable playback. */
 function getPlayableVideoUrl(url: string | undefined): string {
   if (!url || typeof url !== 'string' || !url.trim()) return '';
@@ -105,6 +110,7 @@ export default function ModuleDetailPage() {
   const [editIntroduction, setEditIntroduction] = useState('');
   const [editCategory, setEditCategory] = useState('');
   const [editDifficulty, setEditDifficulty] = useState<Module['difficultyLevel']>('basic');
+  const [editStancePosition, setEditStancePosition] = useState<Module['stancePosition']>('side view');
   const [editThumbnailUrl, setEditThumbnailUrl] = useState('');
   const [editTechniqueVideoUrl, setEditTechniqueVideoUrl] = useState('');
   const [editReferenceGuideUrl, setEditReferenceGuideUrl] = useState('');
@@ -171,9 +177,11 @@ export default function ModuleDetailPage() {
       setEditPhysicalDemandTags(module.physicalDemandTags || []);
       setEditTrainerId(module.trainerId || '');
       setEditTrainerName(module.trainerName || '');
-      if (module.status !== 'approved') setIsEditing(false);
+      setEditStancePosition(module.stancePosition === 'front view' ? 'front view' : 'side view');
+      // Keep edit mode when opened via manage-modules (mode=edit) for pending/draft; only auto-exit for other statuses.
+      if (module.status !== 'approved' && mode !== 'edit') setIsEditing(false);
     }
-  }, [module]);
+  }, [module, mode]);
 
   const techniqueVideoForExtract = useMemo(() => {
     if (!module) return '';
@@ -379,12 +387,19 @@ export default function ModuleDetailPage() {
       showToast('Title cannot be empty');
       return;
     }
+    if (!editTrainerId) {
+      showToast('Please select a trainer');
+      return;
+    }
     try {
       setProcessing(true);
       const vid = editTechniqueVideoUrl.trim();
       const savedLink = (module.techniqueVideoLink || '').trim();
-      const trainerChanged = editTrainerId && editTrainerId !== module.trainerId;
-      const categoryChanged = editCategory.trim() && editCategory.trim() !== module.category;
+      const trimmedTrainerName = (editTrainerName || '').trim();
+      const trainerNeedsUpdate =
+        !!editTrainerId &&
+        (editTrainerId !== module.trainerId ||
+          trimmedTrainerName !== (module.trainerName || '').trim());
       await AuthController.updateModuleMetadata(moduleId, {
         moduleTitle: trimmedTitle,
         description: editDescription.trim(),
@@ -398,7 +413,8 @@ export default function ModuleDetailPage() {
         physicalDemandTags: editPhysicalDemandTags,
         techniqueVideoUrl: vid || null,
         techniqueVideoUrl2: !vid && !savedLink ? null : undefined,
-        ...(trainerChanged ? { trainerId: editTrainerId, trainerName: editTrainerName } : {}),
+        ...(trainerNeedsUpdate ? { trainerId: editTrainerId, trainerName: trimmedTrainerName } : {}),
+        stancePosition: editStancePosition === 'front view' ? 'front view' : 'side view',
       });
       const updated: Module = {
         ...module,
@@ -407,6 +423,7 @@ export default function ModuleDetailPage() {
         introduction: editIntroduction.trim() || module.introduction,
         category: editCategory.trim() || module.category,
         difficultyLevel: editDifficulty,
+        stancePosition: editStancePosition === 'front view' ? 'front view' : 'side view',
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
         referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
         intensityLevel: editIntensity,
@@ -414,7 +431,7 @@ export default function ModuleDetailPage() {
         physicalDemandTags: editPhysicalDemandTags,
         techniqueVideoUrl: vid || undefined,
         techniqueVideoUrl2: !vid && !savedLink ? undefined : module.techniqueVideoUrl2,
-        ...(trainerChanged ? { trainerId: editTrainerId, trainerName: editTrainerName } : {}),
+        ...(trainerNeedsUpdate ? { trainerId: editTrainerId, trainerName: trimmedTrainerName } : {}),
         updatedAt: new Date(),
       };
       setModule(updated);
@@ -448,6 +465,7 @@ export default function ModuleDetailPage() {
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
         techniqueVideoUrl: editTechniqueVideoUrl.trim() || undefined,
         referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
+        stancePosition: editStancePosition === 'front view' ? 'front view' : 'side view',
       });
       showToast('Module created successfully!');
       router.replace({
@@ -775,6 +793,26 @@ export default function ModuleDetailPage() {
                 ))}
               </View>
 
+              <Text style={styles.editLabel}>Stance position</Text>
+              <View style={styles.difficultyRow}>
+                <TouchableOpacity
+                  style={[styles.difficultyChip, editStancePosition === 'front view' && styles.difficultyChipActive]}
+                  onPress={() => setEditStancePosition('front view')}
+                >
+                  <Text style={[styles.difficultyChipText, editStancePosition === 'front view' && styles.difficultyChipTextActive]}>
+                    Front view
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.difficultyChip, editStancePosition === 'side view' && styles.difficultyChipActive]}
+                  onPress={() => setEditStancePosition('side view')}
+                >
+                  <Text style={[styles.difficultyChipText, editStancePosition === 'side view' && styles.difficultyChipTextActive]}>
+                    Side view
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               <Text style={styles.editLabel}>Trainer *</Text>
               <TouchableOpacity
                 style={styles.trainerPickerButton}
@@ -924,9 +962,24 @@ export default function ModuleDetailPage() {
     );
   }
 
+  if (!module) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.errorText}>Module not found</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const isPending = module.status === 'pending review';
   const isApproved = module.status === 'approved';
   const isRejected = module.status === 'rejected';
+  const isDraft = module.status === 'draft';
+  const canOpenModuleEditor = isApproved || isPending || isDraft;
 
   const displayTechniqueVideoUrl =
     isApproved && isEditing ? editTechniqueVideoUrl.trim() : (module.techniqueVideoUrl || '');
@@ -1006,7 +1059,7 @@ export default function ModuleDetailPage() {
           {/* Module Title */}
           <View style={styles.titleRow}>
             <Text style={styles.moduleTitle}>{module.moduleTitle}</Text>
-            {isApproved && (
+            {canOpenModuleEditor && (
               <TouchableOpacity
                 style={styles.editToggleButton}
                 onPress={() => setIsEditing((prev) => !prev)}
@@ -1017,7 +1070,7 @@ export default function ModuleDetailPage() {
             )}
           </View>
 
-          {isApproved && isEditing && (
+          {canOpenModuleEditor && isEditing && (
             <View style={styles.editSection}>
               <Text style={styles.editLabel}>Title</Text>
               <TextInput
@@ -1119,6 +1172,26 @@ export default function ModuleDetailPage() {
                     </Text>
                   </TouchableOpacity>
                 ))}
+              </View>
+
+              <Text style={styles.editLabel}>Stance position</Text>
+              <View style={styles.difficultyRow}>
+                <TouchableOpacity
+                  style={[styles.difficultyChip, editStancePosition === 'front view' && styles.difficultyChipActive]}
+                  onPress={() => setEditStancePosition('front view')}
+                >
+                  <Text style={[styles.difficultyChipText, editStancePosition === 'front view' && styles.difficultyChipTextActive]}>
+                    Front view
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.difficultyChip, editStancePosition === 'side view' && styles.difficultyChipActive]}
+                  onPress={() => setEditStancePosition('side view')}
+                >
+                  <Text style={[styles.difficultyChipText, editStancePosition === 'side view' && styles.difficultyChipTextActive]}>
+                    Side view
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               <Text style={styles.editLabel}>Trainer</Text>
@@ -1429,6 +1502,11 @@ export default function ModuleDetailPage() {
                 <Text style={styles.infoValue}>{formatDate(module.reviewedAt)}</Text>
               </View>
             )}
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Stance position:</Text>
+              <Text style={styles.infoValue}>{formatStancePositionLabel(module.stancePosition)}</Text>
+            </View>
           </View>
 
           {/* Description Section */}
@@ -1612,8 +1690,8 @@ export default function ModuleDetailPage() {
             </View>
           )}
 
-          {/* Action Buttons (only show for pending modules) */}
-          {isPending && (
+          {/* Action Buttons (only show for pending modules, hidden while editing) */}
+          {isPending && !isEditing && (
             <View style={styles.actionButtonsContainer}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.rejectButton]}

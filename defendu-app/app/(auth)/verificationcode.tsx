@@ -16,7 +16,14 @@ import {
 import { getExpoApiBaseUrl } from '../../constants/apiBaseUrl';
 import { AuthController } from '../controllers/AuthController';
 
-const RESEND_COOLDOWN = 30; // seconds
+/** Must match server cooldown in `api/register-send-otp.ts` (60s). */
+const RESEND_COOLDOWN = 60;
+
+function routeParamToString(value: string | string[] | undefined): string {
+  if (value == null) return '';
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
 
 export default function VerificationCodeScreen() {
   const router = useRouter();
@@ -24,11 +31,13 @@ export default function VerificationCodeScreen() {
     email: string;
     firstName: string;
     lastName: string;
-    username: string;
     password: string;
   }>();
 
-  const { email, firstName, lastName, username, password } = params;
+  const email = routeParamToString(params.email).toLowerCase();
+  const firstName = routeParamToString(params.firstName);
+  const lastName = routeParamToString(params.lastName);
+  const password = routeParamToString(params.password);
 
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -61,14 +70,36 @@ export default function VerificationCodeScreen() {
   };
 
   const handleChange = (text: string, index: number) => {
-    if (text.length > 1) return;
+    const digitsOnly = text.replace(/\D/g, '');
+
+    if (digitsOnly.length === 0) {
+      const newCode = [...code];
+      newCode[index] = '';
+      setCode(newCode);
+      setError('');
+      return;
+    }
+
+    if (digitsOnly.length === 1) {
+      const newCode = [...code];
+      newCode[index] = digitsOnly;
+      setCode(newCode);
+      setError('');
+      if (index < inputsRef.current.length - 1) {
+        inputsRef.current[index + 1]?.focus();
+      }
+      return;
+    }
+
+    // Paste / SMS autofill: spread digits across boxes from this index
     const newCode = [...code];
-    newCode[index] = text;
+    for (let i = 0; i < digitsOnly.length && index + i < 6; i++) {
+      newCode[index + i] = digitsOnly[i]!;
+    }
     setCode(newCode);
     setError('');
-    if (text && index < inputsRef.current.length - 1) {
-      inputsRef.current[index + 1]?.focus();
-    }
+    const next = Math.min(index + digitsOnly.length, 5);
+    inputsRef.current[next]?.focus();
   };
 
   const handleKeyPress = (
@@ -81,9 +112,13 @@ export default function VerificationCodeScreen() {
   };
 
   const handleVerify = async () => {
-    const enteredCode = code.join('');
+    const enteredCode = code.join('').replace(/\D/g, '');
     if (enteredCode.length < 6) {
       setError('Please enter the complete 6-digit code.');
+      return;
+    }
+    if (!email) {
+      setError('Missing email. Go back and start registration again.');
       return;
     }
     setLoading(true);
@@ -100,8 +135,13 @@ export default function VerificationCodeScreen() {
         setError(verifyData.error || 'Invalid code. Please try again.');
         return;
       }
-      await AuthController.register({ email, password, firstName, lastName, username });
-      router.replace('/(tabs)/physicalAttributesQuestion');
+      await AuthController.register({ email, password, firstName, lastName });
+      try {
+        await AuthController.logout();
+      } catch (signOutErr) {
+        console.error('Post-registration sign-out failed:', signOutErr);
+      }
+      router.replace('/(auth)/login');
     } catch (err: any) {
       setError(err.message || 'Verification failed. Please try again.');
     } finally {
@@ -115,6 +155,10 @@ export default function VerificationCodeScreen() {
     setError('');
     try {
       const apiBaseUrl = getExpoApiBaseUrl();
+      if (!email) {
+        setError('Missing email. Go back and start registration again.');
+        return;
+      }
       const res = await fetch(`${apiBaseUrl}/api/register-send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,7 +199,7 @@ export default function VerificationCodeScreen() {
             key={index}
             style={[styles.codeInput, error ? styles.codeInputError : null]}
             keyboardType="number-pad"
-            maxLength={1}
+            inputMode="numeric"
             value={digit}
             ref={(el: TextInput | null) => { inputsRef.current[index] = el; }}
             onChangeText={(text) => handleChange(text, index)}
@@ -165,6 +209,8 @@ export default function VerificationCodeScreen() {
             autoFocus={index === 0}
             caretHidden={false}
             editable={!loading}
+            textContentType={index === 0 ? 'oneTimeCode' : 'none'}
+            autoComplete={index === 0 ? 'one-time-code' : 'off'}
           />
         ))}
       </View>

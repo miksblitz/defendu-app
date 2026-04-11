@@ -36,6 +36,9 @@ export interface Module {
   
   // Difficulty Level
   difficultyLevel?: 'basic' | 'intermediate' | 'advanced';
+
+  /** Technique camera stance (admin). Used for pose / display consistency. */
+  stancePosition?: 'front view' | 'side view' | null;
   
   // Status & Metadata
   status: 'draft' | 'pending review' | 'approved' | 'rejected' | 'disabled';
