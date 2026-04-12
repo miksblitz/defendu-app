@@ -1545,10 +1545,8 @@ export class AuthController {
       const applicationData: any = {
         uid: data.uid,
         fullLegalName: data.fullLegalName,
-        email: data.email,
         appliedDate: data.appliedDate.getTime(), // Convert Date to timestamp
         status: data.status,
-        dateOfBirth: data.dateOfBirth,
         phone: data.phone,
         physicalAddress: data.physicalAddress,
         defenseStyles: data.defenseStyles,
@@ -1560,6 +1558,13 @@ export class AuthController {
         certifyAccurate: data.certifyAccurate,
         agreeConduct: data.agreeConduct,
       };
+
+      if (data.email && String(data.email).trim()) {
+        applicationData.email = String(data.email).trim();
+      }
+      if (data.dateOfBirth && String(data.dateOfBirth).trim()) {
+        applicationData.dateOfBirth = String(data.dateOfBirth).trim();
+      }
 
       // Only add optional fields if they have values (not undefined, null, or empty strings)
       if (data.professionalAlias && data.professionalAlias.trim()) {

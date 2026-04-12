@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
-import { getExpoApiBaseUrl } from '../../constants/apiBaseUrl';
+import { AuthController } from '../controllers/AuthController';
 
 const INPUT_BG = '#031220';
 
@@ -89,9 +89,9 @@ export default function SignUpScreen() {
     if (name.length > 50) {
       return `${fieldName} is too long (max 50 characters)`;
     }
-    const nameRegex = /^[a-zA-Z\s'-]+$/;
+    const nameRegex = /^[\p{L}\p{M}\s'.,·-]+$/u;
     if (!nameRegex.test(name)) {
-      return `${fieldName} can only contain letters, spaces, hyphens, and apostrophes`;
+      return `${fieldName} can only contain letters (including accents), spaces, and common punctuation`;
     }
     return '';
   };
@@ -183,7 +183,7 @@ export default function SignUpScreen() {
     setErrors(prev => ({ ...prev, confirmPassword: error }));
   };
 
-  // Handle form submission — send OTP then navigate to verification
+  // TEMPORARY: create account immediately (OTP / email verification disabled). Re-enable OTP by restoring register-send-otp + verificationcode flow.
   const handleCreateAccount = async () => {
     const firstNameError = validateName(form.firstName, 'First name');
     const lastNameError = validateName(form.lastName, 'Last name');
@@ -211,32 +211,21 @@ export default function SignUpScreen() {
 
     setLoading(true);
     try {
-      const apiBaseUrl = getExpoApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/api/register-send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: form.email }),
+      await AuthController.register({
+        email: form.email.trim(),
+        password: form.password,
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        showToast(data.error || 'Failed to send verification email. Please try again.');
-        return;
+      try {
+        await AuthController.logout();
+      } catch (signOutErr) {
+        console.error('Post-registration sign-out failed:', signOutErr);
       }
-
-      // Navigate to OTP screen, passing all form data as params
-      router.push({
-        pathname: '/(auth)/verificationcode',
-        params: {
-          email: form.email,
-          firstName: form.firstName,
-          lastName: form.lastName,
-          password: form.password,
-        },
-      });
+      showToast('Account created. Please sign in.');
+      router.replace('/(auth)/login');
     } catch (error: any) {
-      showToast('Network error. Please check your connection and try again.');
+      showToast(error?.message || 'Could not create account. Please try again.');
     } finally {
       setLoading(false);
     }

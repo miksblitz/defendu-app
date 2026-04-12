@@ -4,13 +4,14 @@ export interface TrainerApplication {
   // Basic Info
   fullLegalName: string;
   professionalAlias?: string;
-  email: string;
+  /** Optional on apply; admins may still see account email on the user record. */
+  email?: string;
   academyName?: string;
   appliedDate: Date;
   status: 'awaiting review' | 'approved' | 'rejected';
   
   // Personal Information
-  dateOfBirth: string;
+  dateOfBirth?: string;
   phone: string;
   physicalAddress: string;
   

@@ -102,7 +102,7 @@ export default function ManageTrainersPage() {
     const query = searchQuery.toLowerCase().trim();
     return applications.filter((app) => {
       const fullName = `${app.firstName} ${app.lastName}`.toLowerCase();
-      const email = app.email.toLowerCase();
+      const email = (app.email ?? '').toLowerCase();
       const specialty = (app.specialty || '').toLowerCase();
       return fullName.includes(query) || email.includes(query) || specialty.includes(query);
     });
@@ -204,7 +204,6 @@ export default function ManageTrainersPage() {
             email: user.email,
             appliedDate: user.createdAt,
             status: 'awaiting review' as const,
-            dateOfBirth: '',
             phone: '',
             physicalAddress: '',
             defenseStyles: [],
@@ -343,7 +342,7 @@ export default function ManageTrainersPage() {
           )}
           <View>
             <Text style={styles.trainerNameText}>{application.firstName} {application.lastName}</Text>
-            <Text style={styles.trainerEmailText}>{application.email}</Text>
+            <Text style={styles.trainerEmailText}>{application.email?.trim() ? application.email : '—'}</Text>
           </View>
         </View>
       ),

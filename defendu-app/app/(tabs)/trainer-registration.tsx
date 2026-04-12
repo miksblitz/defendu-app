@@ -24,49 +24,43 @@ import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 
 const MOBILE_BREAKPOINT = 768;
 
-// Famous martial arts list
+// Defense styles (searchable). Regional / specialty labels kept for clarity.
 const martialArts = [
-  'Brazilian Jiu-Jitsu (BJJ)',
-  'Judo',
-  'Karate',
-  'Taekwondo',
-  'Muay Thai',
-  'Boxing',
-  'Wrestling',
-  'Kickboxing',
-  'Krav Maga',
   'Aikido',
-  'Wing Chun',
-  'Jeet Kune Do',
-  'Capoeira',
-  'Sambo',
-  'Kyokushin Karate',
-  'Shotokan Karate',
-  'Wado-Ryu Karate',
-  'Tang Soo Do',
-  'Hapkido',
-  'Kung Fu',
-  'Mixed Martial Arts (MMA)',
-  'Kali/Eskrima/Arnis',
-  'Silat',
-  'Savate',
-  'Lethwei',
-];
-
-// Belt-based martial arts
-const beltBasedMartialArts = [
+  'Boxing',
   'Brazilian Jiu-Jitsu (BJJ)',
-  'Judo',
-  'Karate',
-  'Taekwondo',
-  'Kyokushin Karate',
-  'Shotokan Karate',
-  'Wado-Ryu Karate',
-  'Tang Soo Do',
+  'Capoeira (Brazil)',
+  'Dambe (Nigeria)',
+  'Eskrima (Philippines)',
   'Hapkido',
+  'HEMA (Europe)',
+  'Jeet Kune Do',
+  'Judo (Japan)',
+  'Karate (Okinawa/Japan)',
+  'Kickboxing',
+  'Krav Maga (Israeli military)',
+  'Kung Fu (China)',
+  'Kyokushin Karate',
+  'Kali / Arnis / Eskrima',
+  'Lethwei',
+  'Mixed Martial Arts (MMA)',
+  'Muay Thai (Thailand)',
+  'Sambo (Russia)',
+  'Savate (France)',
+  'Shotokan Karate',
+  'Silat (Indonesia)',
+  'Systema (Russian military)',
+  'Taekwondo (Korea)',
+  'Tang Soo Do',
+  'Wado-Ryu Karate',
+  'Wing Chun',
+  'Wrestling',
+  'Wushu (China)',
+  'Xtreme Martial Arts (XMA)',
+  'Yawyan (Philippines)',
 ];
 
-// Belt systems
+// Belt systems (canonical keys — some UI labels map here via beltArtAliases below)
 const beltSystems: { [key: string]: string[] } = {
   'Brazilian Jiu-Jitsu (BJJ)': ['White', 'Blue', 'Purple', 'Brown', 'Black'],
   'Judo': ['White', 'Yellow', 'Orange', 'Green', 'Blue', 'Brown', 'Black'],
@@ -78,6 +72,20 @@ const beltSystems: { [key: string]: string[] } = {
   'Tang Soo Do': ['White', 'Orange', 'Green', 'Red', 'Blue', 'Brown', 'Black'],
   'Hapkido': ['White', 'Yellow', 'Orange', 'Green', 'Blue', 'Red', 'Brown', 'Black'],
 };
+
+/** Selected list label → beltSystems key when the label includes region/suffix. */
+const beltArtAliases: Record<string, string> = {
+  'Karate (Okinawa/Japan)': 'Karate',
+  'Judo (Japan)': 'Judo',
+  'Taekwondo (Korea)': 'Taekwondo',
+};
+
+function beltKeyForSelectedArt(art: string): string | null {
+  if (beltSystems[art]) return art;
+  const mapped = beltArtAliases[art];
+  if (mapped && beltSystems[mapped]) return mapped;
+  return null;
+}
 
 // Years options
 const yearsOptions = Array.from({ length: 51 }, (_, i) => i.toString());
@@ -191,15 +199,14 @@ export default function TrainerRegistrationScreen() {
   }, []);
 
 
-  // Check if any selected martial art uses belts
-  const hasBeltSystem = selectedMartialArts.some(art => beltBasedMartialArts.includes(art));
-  
-  // Get available belts based on selected martial arts
+  const hasBeltSystem = selectedMartialArts.some((art) => beltKeyForSelectedArt(art) !== null);
+
   const getAvailableBelts = (): string[] => {
     const allBelts = new Set<string>();
-    selectedMartialArts.forEach(art => {
-      if (beltSystems[art]) {
-        beltSystems[art].forEach(belt => allBelts.add(belt));
+    selectedMartialArts.forEach((art) => {
+      const key = beltKeyForSelectedArt(art);
+      if (key && beltSystems[key]) {
+        beltSystems[key].forEach((belt) => allBelts.add(belt));
       }
     });
     return Array.from(allBelts).sort();
@@ -259,19 +266,20 @@ export default function TrainerRegistrationScreen() {
     if (/\d/.test(name)) {
       return 'Full name cannot contain numbers';
     }
-    const nameRegex = /^[a-zA-Z\s'-]+$/;
+    // Letters in any script (ñ, é, ü, …) plus combining marks; spaces and common name punctuation
+    const nameRegex = /^[\p{L}\p{M}\s'.,·-]+$/u;
     if (!nameRegex.test(name)) {
-      return 'Full name can only contain letters, spaces, hyphens, and apostrophes';
+      return 'Full name can only contain letters (including accents), spaces, and common punctuation';
     }
     return '';
   };
 
   const validateEmail = (email: string): string => {
     if (!email.trim()) {
-      return 'Email address is required';
+      return '';
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(email.trim())) {
       return 'Please enter a valid email address';
     }
     return '';
@@ -294,7 +302,7 @@ export default function TrainerRegistrationScreen() {
 
   const validateDateOfBirth = (date: Date | null): string => {
     if (!date) {
-      return 'Date of birth is required';
+      return '';
     }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -419,11 +427,11 @@ export default function TrainerRegistrationScreen() {
         uid: currentUser.uid,
         fullLegalName: fullName,
         professionalAlias: professionalAlias.trim() || undefined,
-        email: emailAddress,
+        email: emailAddress.trim() || undefined,
         academyName: academyName.trim() || undefined,
         appliedDate: new Date(),
         status: 'awaiting review',
-        dateOfBirth: dateOfBirth,
+        dateOfBirth: dateOfBirth.trim() || undefined,
         phone: phoneNumber,
         physicalAddress: physicalAddress,
         defenseStyles: selectedMartialArts,
@@ -793,7 +801,7 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Date of birth <Text style={styles.requiredDot}>*</Text></Text>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Date of birth (optional)</Text>
                   {Platform.OS === 'web' ? (
                     <View style={[styles.inputWrapper, errors.dateOfBirth ? styles.inputWrapperError : null, isMobile && styles.inputWrapperMobile]}>
                       {/* @ts-ignore - Web-specific input element */}
@@ -924,7 +932,7 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Email address <Text style={styles.requiredDot}>*</Text></Text>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Email address (optional)</Text>
                   <View style={[styles.inputWrapper, errors.emailAddress ? styles.inputWrapperError : null, isMobile && styles.inputWrapperMobile]}>
                     <TextInput
                       style={[styles.input, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
@@ -1008,22 +1016,28 @@ export default function TrainerRegistrationScreen() {
                       {selectedMartialArts.length === 0 ? (
                         <Text style={styles.placeholderText}>Tap to choose (e.g. Karate, BJJ)</Text>
                       ) : (
-                        <View style={styles.chipsContainer}>
+                        <ScrollView
+                          style={styles.chipsScroll}
+                          contentContainerStyle={styles.chipsContainer}
+                          nestedScrollEnabled
+                          keyboardShouldPersistTaps="handled"
+                          showsVerticalScrollIndicator={selectedMartialArts.length > 3}
+                        >
                           {selectedMartialArts.map((art) => (
                             <View key={art} style={styles.chip}>
-                              <Text style={styles.chipText}>{art}</Text>
+                              <Text style={styles.chipText} numberOfLines={2}>
+                                {art}
+                              </Text>
                               <TouchableOpacity
-                                onPress={(e) => {
-                                  e.stopPropagation();
-                                  removeMartialArt(art);
-                                }}
+                                onPress={() => removeMartialArt(art)}
                                 style={styles.chipRemove}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               >
                                 <Ionicons name="close-circle" size={18} color="#FFFFFF" />
                               </TouchableOpacity>
                             </View>
                           ))}
-                        </View>
+                        </ScrollView>
                       )}
                     </View>
                     <Ionicons name="chevron-down" size={20} color="#07bbc0" style={styles.selectIcon} />
@@ -2064,32 +2078,42 @@ const styles = StyleSheet.create({
   },
   selectInput: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: '#011f36',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#0a3645',
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 10,
     minHeight: 56,
+    maxHeight: 220,
     justifyContent: 'space-between',
+    overflow: 'hidden',
   },
   selectInputMobile: {
     minHeight: 48,
+    maxHeight: 220,
     borderRadius: 8,
-    paddingVertical: 14,
+    paddingVertical: 10,
   },
   selectedItemsContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    paddingVertical: 8,
+    minWidth: 0,
+    marginRight: 4,
+    maxHeight: 200,
+    justifyContent: 'center',
+  },
+  chipsScroll: {
+    maxHeight: 200,
+    width: '100%',
   },
   chipsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    alignItems: 'flex-start',
+    paddingVertical: 4,
+    paddingRight: 4,
   },
   chip: {
     flexDirection: 'row',
@@ -2098,15 +2122,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    marginRight: 4,
-    marginBottom: 4,
+    maxWidth: '100%',
     borderWidth: 1,
     borderColor: '#07bbc0',
+    flexShrink: 1,
   },
   chipText: {
     color: '#FFFFFF',
     fontSize: 12,
     marginRight: 4,
+    flexShrink: 1,
+    maxWidth: 240,
   },
   chipRemove: {
     marginLeft: 2,
@@ -2121,6 +2147,8 @@ const styles = StyleSheet.create({
   },
   selectIcon: {
     marginLeft: 8,
+    marginTop: 4,
+    flexShrink: 0,
   },
   dropdownOverlay: {
     position: 'fixed',
