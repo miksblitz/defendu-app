@@ -101,7 +101,7 @@ export default function ExploreScreen() {
       result = result.filter(
         (m) =>
           m.moduleTitle.toLowerCase().includes(q) ||
-          m.category.toLowerCase().includes(q) ||
+          (m.category || '').toLowerCase().includes(q) ||
           (m.trainerName ?? '').toLowerCase().includes(q) ||
           (m.description ?? '').toLowerCase().includes(q),
       );
@@ -116,15 +116,24 @@ export default function ExploreScreen() {
   const totalGaps = CARD_GAP * (columns - 1);
   const cardWidth = Math.floor((contentWidth - totalGaps) / columns);
 
-  const handleModulePress = (m: Module) => {
-    router.push({
-      pathname: '/view-module',
-      params: {
-        moduleId: m.moduleId,
-        categoryKey: normalizeCategory(m.category),
-      },
-    } as any);
-  };
+  const exploreProgramOrderParam = useMemo(
+    () => filteredModules.map((mod) => mod.moduleId).join(','),
+    [filteredModules],
+  );
+
+  const handleModulePress = useCallback(
+    (m: Module) => {
+      router.push({
+        pathname: '/view-module',
+        params: {
+          moduleId: m.moduleId,
+          categoryKey: normalizeCategory(m.category),
+          programOrder: exploreProgramOrderParam,
+        },
+      } as any);
+    },
+    [router, exploreProgramOrderParam],
+  );
 
   const handleMessages = () => {
     clearUnread();

@@ -851,7 +851,13 @@ export default function PublishModulePage() {
         certification: certificationError,
       });
 
-      const hasFieldErrors = titleError || descError || categoryError || introductionError || videoError || thumbnailError;
+      const hasFieldErrors =
+        titleError ||
+        descError ||
+        categoryError ||
+        introductionError ||
+        videoError ||
+        thumbnailError;
       if (hasFieldErrors || certificationError) {
         // Build a guiding toast listing what's missing
         const missing: string[] = [];
@@ -982,7 +988,7 @@ export default function PublishModulePage() {
       setRepRange('');
       setTrainingDurationSeconds('');
       setCertificationChecked(false);
-      
+
       showToast('Module successfully submitted. Please wait for approval.');
       setTimeout(() => {
         router.replace('/dashboard');
@@ -1812,7 +1818,7 @@ export default function PublishModulePage() {
                   </View>
                 </View>
 
-                {/* Thumbnail (optional, part of step 3 flow) */}
+                {/* Thumbnail (optional, part of technique step) */}
                 <View style={styles.section}>
                   <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Cover image (optional)</Text>
                   <Text style={styles.sectionHint}>A picture that appears in the module list. Helps learners spot your module.</Text>

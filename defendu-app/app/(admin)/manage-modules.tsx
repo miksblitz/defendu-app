@@ -50,10 +50,26 @@ const DELETION_REASONS = [
 
 type FilterType = 'active' | 'pending';
 
+/** Which rows the main AdminTable shows: technique modules or warm-up / cool-down entries. */
+type ModuleTableSegment = 'technique' | 'warmup' | 'cooldown';
+
 const PAGE_SIZE = 15;
 
+/** Warm-up / cool-down picks per category (admin dashboard program). */
+const SEGMENT_ASSIGN_COUNT = 3;
+
+function isApprovedModuleStatus(status: unknown): boolean {
+  if (status == null) return false;
+  return String(status).trim().toLowerCase() === 'approved';
+}
+
+function isPendingReviewModuleStatus(status: unknown): boolean {
+  if (status == null) return false;
+  return String(status).trim().toLowerCase() === 'pending review';
+}
+
 export default function ManageModulesPage() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isCompact = width < 1100;
   const router = useRouter();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
@@ -94,13 +110,35 @@ export default function ManageModulesPage() {
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
   const [assignSearchQuery, setAssignSearchQuery] = useState('');
   const [assignCategoryFilter, setAssignCategoryFilter] = useState<string>('All');
+  const [moduleTableSegment, setModuleTableSegment] = useState<ModuleTableSegment>('technique');
+  const [showAssignSegmentModal, setShowAssignSegmentModal] = useState(false);
+  const [assignSegmentCategory, setAssignSegmentCategory] = useState('');
+  const [assignSegmentWarmupIds, setAssignSegmentWarmupIds] = useState<string[]>([]);
+  const [assignSegmentCooldownIds, setAssignSegmentCooldownIds] = useState<string[]>([]);
+  const [assignSegmentLoading, setAssignSegmentLoading] = useState(false);
+  const [savingAssignSegment, setSavingAssignSegment] = useState(false);
+
+  /** Firebase list + any category strings used on technique modules (covers bad/missing `moduleCategories` data). */
+  const displayCategories = useMemo(() => {
+    const byLower = new Map<string, string>();
+    for (const c of categories) {
+      const t = (c || '').trim();
+      if (t) byLower.set(t.toLowerCase(), t);
+    }
+    for (const m of modules) {
+      if (m.moduleSegment) continue;
+      const t = m.category?.trim();
+      if (t) {
+        const k = t.toLowerCase();
+        if (!byLower.has(k)) byLower.set(k, t);
+      }
+    }
+    return Array.from(byLower.values()).sort((a, b) => a.localeCompare(b));
+  }, [categories, modules]);
 
   const categoryFilterOptions = useMemo(
-    () => [
-      { label: 'All', value: 'All' },
-      ...categories.map((c) => ({ label: c, value: c })),
-    ],
-    [categories]
+    () => [{ label: 'All', value: 'All' }, ...displayCategories.map((c) => ({ label: c, value: c }))],
+    [displayCategories]
   );
 
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -138,7 +176,7 @@ export default function ManageModulesPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterType, categoryFilter, difficultyFilter, trainerFilter]);
+  }, [searchQuery, filterType, categoryFilter, difficultyFilter, trainerFilter, moduleTableSegment]);
 
   const loadModules = async () => {
     try {
@@ -160,6 +198,7 @@ export default function ManageModulesPage() {
       setCategories(cats);
     } catch (error: any) {
       console.error('Error loading categories:', error);
+      setCategories(AuthController.getFallbackModuleCategories());
     }
   };
 
@@ -223,47 +262,130 @@ export default function ManageModulesPage() {
     ];
   }, [modules]);
 
+  const modulesWithoutSegment = useMemo(
+    () => modules.filter((m) => !m.moduleSegment),
+    [modules]
+  );
+
+  const applyCommonFilters = useCallback(
+    (list: Module[]) => {
+      let filtered = list;
+      if (filterType === 'active') {
+        filtered = filtered.filter((module) => isApprovedModuleStatus(module.status));
+      } else {
+        filtered = filtered.filter(
+          (module) => isPendingReviewModuleStatus(module.status) || module.status === 'disabled'
+        );
+      }
+      if (difficultyFilter !== 'all') {
+        filtered = filtered.filter((module) => (module.difficultyLevel || 'basic') === difficultyFilter);
+      }
+      if (trainerFilter !== 'all') {
+        filtered = filtered.filter((module) => {
+          const trainer = module.trainerName?.trim() || module.trainerId;
+          return trainer === trainerFilter;
+        });
+      }
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        filtered = filtered.filter((module) => {
+          const trainer = (module.trainerName || module.trainerId || '').toLowerCase();
+          return (
+            module.moduleTitle.toLowerCase().includes(query) ||
+            (module.category || '').toLowerCase().includes(query) ||
+            module.moduleId.toLowerCase().includes(query) ||
+            trainer.includes(query)
+          );
+        });
+      }
+      return filtered;
+    },
+    [filterType, difficultyFilter, trainerFilter, searchQuery]
+  );
+
   const filteredModules = useMemo(() => {
-    let filtered = modules;
-
-    if (filterType === 'active') {
-      filtered = filtered.filter((module) => module.status === 'approved');
-    } else {
-      filtered = filtered.filter((module) => module.status === 'pending review' || module.status === 'disabled');
-    }
-
+    let filtered = applyCommonFilters(modulesWithoutSegment);
     if (categoryFilter !== 'All') {
       filtered = filtered.filter((module) => module.category === categoryFilter);
     }
-
-    if (difficultyFilter !== 'all') {
-      filtered = filtered.filter((module) => (module.difficultyLevel || 'basic') === difficultyFilter);
-    }
-
-    if (trainerFilter !== 'all') {
-      filtered = filtered.filter((module) => {
-        const trainer = module.trainerName?.trim() || module.trainerId;
-        return trainer === trainerFilter;
-      });
-    }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter((module) => {
-        const trainer = (module.trainerName || module.trainerId || '').toLowerCase();
-        return (
-          module.moduleTitle.toLowerCase().includes(query) ||
-          module.category.toLowerCase().includes(query) ||
-          module.moduleId.toLowerCase().includes(query) ||
-          trainer.includes(query)
-        );
-      });
-    }
-
     return filtered;
-  }, [modules, filterType, categoryFilter, difficultyFilter, trainerFilter, searchQuery]);
+  }, [modulesWithoutSegment, categoryFilter, applyCommonFilters]);
 
-  const sortedModules = useMemo(() => {
+  const warmupModulesFiltered = useMemo(
+    () => applyCommonFilters(modules.filter((m) => m.moduleSegment === 'warmup')),
+    [modules, applyCommonFilters]
+  );
+
+  const cooldownModulesFiltered = useMemo(
+    () => applyCommonFilters(modules.filter((m) => m.moduleSegment === 'cooldown')),
+    [modules, applyCommonFilters]
+  );
+
+  const sortModuleListLikeMain = useCallback(
+    (list: Module[]) => {
+      const result = [...list];
+      if (filterType === 'active') {
+        result.sort((a, b) => {
+          const orderA = a.sortOrder ?? 999999;
+          const orderB = b.sortOrder ?? 999999;
+          if (orderA !== orderB) return orderA - orderB;
+          return (b.createdAt?.getTime?.() ?? 0) - (a.createdAt?.getTime?.() ?? 0);
+        });
+        return result;
+      }
+      const multiplier = sortState.direction === 'asc' ? 1 : -1;
+      result.sort((a, b) => {
+        if (sortState.columnKey === 'status') {
+          return a.status.localeCompare(b.status) * multiplier;
+        }
+        if (sortState.columnKey === 'updated') {
+          return ((a.updatedAt?.getTime?.() ?? 0) - (b.updatedAt?.getTime?.() ?? 0)) * multiplier;
+        }
+        return ((a.createdAt?.getTime?.() ?? 0) - (b.createdAt?.getTime?.() ?? 0)) * multiplier;
+      });
+      return result;
+    },
+    [filterType, sortState]
+  );
+
+  const sortedWarmupModules = useMemo(
+    () => sortModuleListLikeMain(warmupModulesFiltered),
+    [warmupModulesFiltered, sortModuleListLikeMain]
+  );
+
+  const sortedCooldownModules = useMemo(
+    () => sortModuleListLikeMain(cooldownModulesFiltered),
+    [cooldownModulesFiltered, sortModuleListLikeMain]
+  );
+
+  const approvedWarmupLibraryForAssign = useMemo(
+    () =>
+      sortModuleListLikeMain(
+        modules.filter((m) => m.moduleSegment === 'warmup' && isApprovedModuleStatus(m.status))
+      ),
+    [modules, sortModuleListLikeMain]
+  );
+
+  const approvedCooldownLibraryForAssign = useMemo(
+    () =>
+      sortModuleListLikeMain(
+        modules.filter((m) => m.moduleSegment === 'cooldown' && isApprovedModuleStatus(m.status))
+      ),
+    [modules, sortModuleListLikeMain]
+  );
+
+  /** Shown as read-only rows so admins see warm-ups that still need approval. */
+  const pendingWarmupLibraryForAssign = useMemo(() => {
+    const list = modules.filter((m) => m.moduleSegment === 'warmup' && isPendingReviewModuleStatus(m.status));
+    return [...list].sort((a, b) => (a.moduleTitle || '').localeCompare(b.moduleTitle || ''));
+  }, [modules]);
+
+  const pendingCooldownLibraryForAssign = useMemo(() => {
+    const list = modules.filter((m) => m.moduleSegment === 'cooldown' && isPendingReviewModuleStatus(m.status));
+    return [...list].sort((a, b) => (a.moduleTitle || '').localeCompare(b.moduleTitle || ''));
+  }, [modules]);
+
+  const sortedTechniqueModules = useMemo(() => {
     const result = [...filteredModules];
     if (filterType === 'active') {
       // Active tab: sort by display order (sortOrder) then createdAt for stable order; drag reorder updates sortOrder
@@ -288,18 +410,24 @@ export default function ManageModulesPage() {
     return result;
   }, [filteredModules, filterType, sortState]);
 
+  const sortedDisplayModules = useMemo(() => {
+    if (moduleTableSegment === 'warmup') return sortedWarmupModules;
+    if (moduleTableSegment === 'cooldown') return sortedCooldownModules;
+    return sortedTechniqueModules;
+  }, [moduleTableSegment, sortedWarmupModules, sortedCooldownModules, sortedTechniqueModules]);
+
   const totalPages = Math.max(
     1,
-    Math.ceil(sortedModules.length / PAGE_SIZE)
+    Math.ceil(sortedDisplayModules.length / PAGE_SIZE)
   );
 
   const paginatedModules = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
-    return sortedModules.slice(start, start + PAGE_SIZE);
-  }, [sortedModules, currentPage]);
+    return sortedDisplayModules.slice(start, start + PAGE_SIZE);
+  }, [sortedDisplayModules, currentPage]);
   const orderIndexById = useMemo(
-    () => new Map(sortedModules.map((m, idx) => [m.moduleId, idx])),
-    [sortedModules]
+    () => new Map(sortedTechniqueModules.map((m, idx) => [m.moduleId, idx])),
+    [sortedTechniqueModules]
   );
   const showOrderControls = filterType === 'active' && difficultyFilter === 'all' && categoryFilter !== 'All';
 
@@ -324,13 +452,13 @@ export default function ManageModulesPage() {
       // Only allow reordering in the Active tab
       if (filterType !== 'active') return;
 
-      const idx = sortedModules.findIndex((m) => m.moduleId === moduleId);
+      const idx = sortedTechniqueModules.findIndex((m) => m.moduleId === moduleId);
       if (idx < 0) return;
 
       const nextIdx = direction === 'up' ? idx - 1 : idx + 1;
-      if (nextIdx < 0 || nextIdx >= sortedModules.length) return;
+      if (nextIdx < 0 || nextIdx >= sortedTechniqueModules.length) return;
 
-      const next = [...sortedModules];
+      const next = [...sortedTechniqueModules];
       const temp = next[idx];
       next[idx] = next[nextIdx];
       next[nextIdx] = temp;
@@ -346,7 +474,7 @@ export default function ManageModulesPage() {
         setSavingOrder(false);
       }
     },
-    [filterType, sortedModules, showToast]
+    [filterType, sortedTechniqueModules, showToast]
   );
 
   const formatDate = (date: Date | undefined): string => {
@@ -428,8 +556,98 @@ export default function ManageModulesPage() {
     }
   };
 
-  const activeCount = modules.filter((m) => m.status === 'approved').length;
-  const pendingCount = modules.filter((m) => m.status === 'pending review' || m.status === 'disabled').length;
+  const openAssignSegmentModal = useCallback(() => {
+    if (!displayCategories.length) {
+      showToast('Add a category first');
+      return;
+    }
+    const initialCat = categoryFilter !== 'All' ? categoryFilter : displayCategories[0];
+    setAssignSegmentCategory(initialCat);
+    setAssignSegmentWarmupIds([]);
+    setAssignSegmentCooldownIds([]);
+    setShowAssignSegmentModal(true);
+  }, [displayCategories, categoryFilter, showToast]);
+
+  useEffect(() => {
+    if (!showAssignSegmentModal || !assignSegmentCategory) return;
+    let cancelled = false;
+    (async () => {
+      setAssignSegmentLoading(true);
+      try {
+        const all = await AuthController.getAllCategorySegmentPrograms();
+        if (cancelled) return;
+        const key = AuthController.categorySegmentProgramKey(assignSegmentCategory);
+        const row = all[key];
+        setAssignSegmentWarmupIds(
+          row?.warmupModuleIds?.length === SEGMENT_ASSIGN_COUNT ? [...row.warmupModuleIds] : []
+        );
+        setAssignSegmentCooldownIds(
+          row?.cooldownModuleIds?.length === SEGMENT_ASSIGN_COUNT ? [...row.cooldownModuleIds] : []
+        );
+      } catch (e: any) {
+        if (!cancelled) showToast(e.message || 'Failed to load category program');
+      } finally {
+        if (!cancelled) setAssignSegmentLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showAssignSegmentModal, assignSegmentCategory, showToast]);
+
+  const toggleAssignWarmup = (moduleId: string) => {
+    setAssignSegmentWarmupIds((prev) => {
+      if (prev.includes(moduleId)) return prev.filter((id) => id !== moduleId);
+      if (prev.length >= SEGMENT_ASSIGN_COUNT) {
+        showToast(`Pick exactly ${SEGMENT_ASSIGN_COUNT} warm-ups (uncheck one to change).`);
+        return prev;
+      }
+      return [...prev, moduleId];
+    });
+  };
+
+  const toggleAssignCooldown = (moduleId: string) => {
+    setAssignSegmentCooldownIds((prev) => {
+      if (prev.includes(moduleId)) return prev.filter((id) => id !== moduleId);
+      if (prev.length >= SEGMENT_ASSIGN_COUNT) {
+        showToast(`Pick exactly ${SEGMENT_ASSIGN_COUNT} cool-downs (uncheck one to change).`);
+        return prev;
+      }
+      return [...prev, moduleId];
+    });
+  };
+
+  const handleSaveCategorySegmentProgram = async () => {
+    if (
+      assignSegmentWarmupIds.length !== SEGMENT_ASSIGN_COUNT ||
+      assignSegmentCooldownIds.length !== SEGMENT_ASSIGN_COUNT
+    ) {
+      showToast(`Select exactly ${SEGMENT_ASSIGN_COUNT} warm-ups and ${SEGMENT_ASSIGN_COUNT} cool-downs`);
+      return;
+    }
+    try {
+      setSavingAssignSegment(true);
+      await AuthController.setCategorySegmentProgram(
+        assignSegmentCategory,
+        assignSegmentWarmupIds,
+        assignSegmentCooldownIds
+      );
+      showToast(`Warm-up / cool-down program saved for "${assignSegmentCategory}".`);
+      setShowAssignSegmentModal(false);
+    } catch (e: any) {
+      showToast(e.message || 'Failed to save');
+    } finally {
+      setSavingAssignSegment(false);
+    }
+  };
+
+  // Technique modules only — warm-up / cool-down segments are managed separately, not counted as "active modules"
+  const activeCount = modules.filter(
+    (m) => !m.moduleSegment && isApprovedModuleStatus(m.status)
+  ).length;
+  const pendingCount = modules.filter(
+    (m) => isPendingReviewModuleStatus(m.status) || m.status === 'disabled'
+  ).length;
 
   const columns: AdminTableColumn<Module>[] = [
     {
@@ -439,14 +657,14 @@ export default function ManageModulesPage() {
       flex: 2.5,
       render: (module, index) => (
         <View style={styles.moduleCell}>
-          {showOrderControls && (
+          {showOrderControls && !module.moduleSegment && (
             <View style={styles.positionBadge}>
               <Text style={styles.positionBadgeText}>
                 {(orderIndexById.get(module.moduleId) ?? index) + 1}
               </Text>
             </View>
           )}
-          {showOrderControls && (
+          {showOrderControls && !module.moduleSegment && (
             <View style={styles.orderControls}>
               <TouchableOpacity
                 style={[
@@ -461,10 +679,10 @@ export default function ManageModulesPage() {
               <TouchableOpacity
                 style={[
                   styles.orderButton,
-                  (orderIndexById.get(module.moduleId) ?? 0) >= sortedModules.length - 1 && styles.orderButtonDisabled,
+                  (orderIndexById.get(module.moduleId) ?? 0) >= sortedTechniqueModules.length - 1 && styles.orderButtonDisabled,
                 ]}
                 onPress={() => moveActiveModule(module.moduleId, 'down')}
-                disabled={(orderIndexById.get(module.moduleId) ?? 0) >= sortedModules.length - 1}
+                disabled={(orderIndexById.get(module.moduleId) ?? 0) >= sortedTechniqueModules.length - 1}
               >
                 <Ionicons name="chevron-down" size={12} color="#d9f1ff" />
               </TouchableOpacity>
@@ -479,7 +697,9 @@ export default function ManageModulesPage() {
           )}
           <View style={{ flex: 1 }}>
             <Text style={styles.moduleTitle} numberOfLines={1}>{module.moduleTitle}</Text>
-            <Text style={styles.moduleSubtext}>#{module.moduleId.slice(-6)}</Text>
+            {!module.moduleSegment ? (
+              <Text style={styles.moduleSubtext}>#{module.moduleId.slice(-6)}</Text>
+            ) : null}
           </View>
         </View>
       ),
@@ -494,7 +714,15 @@ export default function ManageModulesPage() {
       key: 'category',
       title: 'Category',
       minWidth: 140,
-      render: (module) => <Text style={styles.cellText}>{module.category}</Text>,
+      render: (module) => (
+        <Text style={styles.cellText}>
+          {module.moduleSegment === 'warmup'
+            ? 'Warmup'
+            : module.moduleSegment === 'cooldown'
+              ? 'Cooldown'
+              : module.category || '—'}
+        </Text>
+      ),
     },
     {
       key: 'trainer',
@@ -687,88 +915,203 @@ export default function ManageModulesPage() {
                 placeholder="Search by title, category, trainer, or ID"
               />
 
-              <View>
-                <View style={styles.categoryRow}>
-                  <Text style={styles.categoryRowLabel}>CATEGORY</Text>
-                  <View style={styles.categoryActions}>
-                    <TouchableOpacity
-                      style={styles.addCategoryButton}
-                      onPress={() => setShowAddCategoryModal(true)}
-                      activeOpacity={0.7}
+              <View style={styles.segmentPickerCard}>
+                <Text style={styles.segmentPickerHeading}>Warm-up & cool-down</Text>
+                <Text style={styles.segmentPickerHint}>
+                  Tap a circle to list those entries in the main table. Tap the active circle again to return to techniques.
+                </Text>
+                <View style={styles.segmentPickerRow}>
+                  <TouchableOpacity
+                    style={styles.segmentCircleHit}
+                    onPress={() =>
+                      setModuleTableSegment((prev) => (prev === 'warmup' ? 'technique' : 'warmup'))
+                    }
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: moduleTableSegment === 'warmup' }}
+                  >
+                    <View
+                      style={[
+                        styles.segmentCircleOuter,
+                        moduleTableSegment === 'warmup' && styles.segmentCircleOuterActive,
+                      ]}
                     >
-                      <Ionicons name="add-circle-outline" size={15} color="#38a6de" />
-                      <Text style={styles.addCategoryButtonText}>Add</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.removeCategoryButton}
-                      onPress={() => { setConfirmRemoveStep(false); setShowRemoveCategoryModal(true); }}
-                      activeOpacity={0.7}
+                      <View
+                        style={[
+                          styles.segmentCircleInner,
+                          moduleTableSegment === 'warmup' && styles.segmentCircleInnerActive,
+                        ]}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.segmentCircleLabel,
+                        moduleTableSegment === 'warmup' && styles.segmentCircleLabelActive,
+                      ]}
                     >
-                      <Ionicons name="remove-circle-outline" size={15} color="#e57373" />
-                      <Text style={styles.removeCategoryButtonText}>Remove</Text>
-                    </TouchableOpacity>
-                  </View>
+                      Warm-up
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.segmentCircleHit}
+                    onPress={() =>
+                      setModuleTableSegment((prev) => (prev === 'cooldown' ? 'technique' : 'cooldown'))
+                    }
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: moduleTableSegment === 'cooldown' }}
+                  >
+                    <View
+                      style={[
+                        styles.segmentCircleOuter,
+                        moduleTableSegment === 'cooldown' && styles.segmentCircleOuterActive,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.segmentCircleInner,
+                          moduleTableSegment === 'cooldown' && styles.segmentCircleInnerActive,
+                        ]}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.segmentCircleLabel,
+                        moduleTableSegment === 'cooldown' && styles.segmentCircleLabelActive,
+                      ]}
+                    >
+                      Cool-down
+                    </Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.segmentPickerSpacer} />
+
+                  <TouchableOpacity
+                    style={styles.segmentAddButton}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(admin)/module-detail',
+                        params: { mode: 'create', segment: 'warmup' },
+                      } as any)
+                    }
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="#38a6de" />
+                    <Text style={styles.segmentAddButtonText}>Add warm up</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.segmentAddButton}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(admin)/module-detail',
+                        params: { mode: 'create', segment: 'cooldown' },
+                      } as any)
+                    }
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="#38a6de" />
+                    <Text style={styles.segmentAddButtonText}>Add cooldown</Text>
+                  </TouchableOpacity>
                 </View>
-                <FilterBar
-                  options={categoryFilterOptions}
-                  selectedValue={categoryFilter}
-                  onSelect={setCategoryFilter}
-                />
               </View>
+
+              {moduleTableSegment === 'technique' ? (
+                <View>
+                  <View style={styles.categoryRow}>
+                    <Text style={styles.categoryRowLabel}>CATEGORY</Text>
+                    <View style={styles.categoryActions}>
+                      <TouchableOpacity
+                        style={styles.addCategoryButton}
+                        onPress={() => setShowAddCategoryModal(true)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="add-circle-outline" size={15} color="#38a6de" />
+                        <Text style={styles.addCategoryButtonText}>Add</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.removeCategoryButton}
+                        onPress={() => { setConfirmRemoveStep(false); setShowRemoveCategoryModal(true); }}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="remove-circle-outline" size={15} color="#e57373" />
+                        <Text style={styles.removeCategoryButtonText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <FilterBar
+                    options={categoryFilterOptions}
+                    selectedValue={categoryFilter}
+                    onSelect={setCategoryFilter}
+                  />
+                </View>
+              ) : null}
               <FilterBar
                 label="Difficulty"
                 options={DIFFICULTY_OPTIONS}
                 selectedValue={difficultyFilter}
                 onSelect={setDifficultyFilter}
               />
-              <View style={styles.trainerDropdownWrap}>
-                <Text style={styles.trainerDropdownLabel}>TRAINER</Text>
-                <TouchableOpacity
-                  style={styles.trainerDropdownButton}
-                  onPress={() => setShowTrainerDropdown((prev) => !prev)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.trainerDropdownButtonText}>
-                    {trainerOptions.find((o) => o.value === trainerFilter)?.label || 'All Trainers'}
-                  </Text>
-                  <Ionicons
-                    name={showTrainerDropdown ? 'chevron-up' : 'chevron-down'}
-                    size={16}
-                    color="#9db3be"
-                  />
-                </TouchableOpacity>
-                {showTrainerDropdown && (
-                  <ScrollView
-                    style={styles.trainerDropdownList}
-                    nestedScrollEnabled
+              <View style={styles.trainerAndAssignRow}>
+                <View style={styles.trainerDropdownWrap}>
+                  <Text style={styles.trainerDropdownLabel}>TRAINER</Text>
+                  <TouchableOpacity
+                    style={styles.trainerDropdownButton}
+                    onPress={() => setShowTrainerDropdown((prev) => !prev)}
+                    activeOpacity={0.7}
                   >
-                    {trainerOptions.map((option) => {
-                      const isSelected = option.value === trainerFilter;
-                      return (
-                        <TouchableOpacity
-                          key={option.value}
-                          style={[
-                            styles.trainerDropdownItem,
-                            isSelected && styles.trainerDropdownItemSelected,
-                          ]}
-                          onPress={() => {
-                            setTrainerFilter(option.value);
-                            setShowTrainerDropdown(false);
-                          }}
-                        >
-                          <Text
+                    <Text style={styles.trainerDropdownButtonText}>
+                      {trainerOptions.find((o) => o.value === trainerFilter)?.label || 'All Trainers'}
+                    </Text>
+                    <Ionicons
+                      name={showTrainerDropdown ? 'chevron-up' : 'chevron-down'}
+                      size={16}
+                      color="#9db3be"
+                    />
+                  </TouchableOpacity>
+                  {showTrainerDropdown && (
+                    <ScrollView
+                      style={styles.trainerDropdownList}
+                      nestedScrollEnabled
+                    >
+                      {trainerOptions.map((option) => {
+                        const isSelected = option.value === trainerFilter;
+                        return (
+                          <TouchableOpacity
+                            key={option.value}
                             style={[
-                              styles.trainerDropdownItemText,
-                              isSelected && styles.trainerDropdownItemTextSelected,
+                              styles.trainerDropdownItem,
+                              isSelected && styles.trainerDropdownItemSelected,
                             ]}
+                            onPress={() => {
+                              setTrainerFilter(option.value);
+                              setShowTrainerDropdown(false);
+                            }}
                           >
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                )}
+                            <Text
+                              style={[
+                                styles.trainerDropdownItemText,
+                                isSelected && styles.trainerDropdownItemTextSelected,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.assignSegmentProgramButton}
+                  onPress={openAssignSegmentModal}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="fitness-outline" size={20} color="#38a6de" />
+                  <Text style={styles.assignSegmentProgramButtonText}>
+                    Assign warm-up and cooldowns
+                  </Text>
+                </TouchableOpacity>
               </View>
             </Animated.View>
 
@@ -780,8 +1123,26 @@ export default function ManageModulesPage() {
               keyExtractor={(module) => module.moduleId}
               sortState={filterType === 'active' ? undefined : sortState}
               onSortChange={filterType === 'active' ? undefined : handleSortChange}
-              emptyTitle={searchQuery ? 'No modules match your search' : 'No modules found'}
-              emptyDescription="Try updating your filters or review module approval data in the backend."
+              emptyTitle={
+                moduleTableSegment === 'warmup'
+                  ? searchQuery.trim()
+                    ? 'No warm ups match your search'
+                    : 'No warm ups yet'
+                  : moduleTableSegment === 'cooldown'
+                    ? searchQuery.trim()
+                      ? 'No cooldowns match your search'
+                      : 'No cooldowns yet'
+                    : searchQuery.trim()
+                      ? 'No modules match your search'
+                      : 'No modules found'
+              }
+              emptyDescription={
+                moduleTableSegment === 'warmup'
+                  ? 'Use "Add warm up" above, or tap the Warm-up circle again to return to technique modules.'
+                  : moduleTableSegment === 'cooldown'
+                    ? 'Use "Add cooldown" above, or tap the Cool-down circle again to return to technique modules.'
+                    : 'Try updating your filters or review module approval data in the backend.'
+              }
               pagination={{
                 currentPage,
                 totalPages,
@@ -799,6 +1160,268 @@ export default function ManageModulesPage() {
           </View>
         </ScrollView>
       </View>
+
+      <Modal
+        visible={showAssignSegmentModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAssignSegmentModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, styles.assignSegmentModalContainer]}>
+            <Text style={styles.modalTitle}>Assign warm-up & cool-downs</Text>
+            <Text style={styles.modalSubtitle}>
+              Pick a technique category, then choose exactly {SEGMENT_ASSIGN_COUNT} approved warm-ups and{' '}
+              {SEGMENT_ASSIGN_COUNT} cool-downs. Learners see this program on the dashboard for that category.
+            </Text>
+
+            <ScrollView
+              style={[styles.assignSegmentBodyScroll, { maxHeight: Math.min(height * 0.58, 560) }]}
+              contentContainerStyle={styles.assignSegmentBodyScrollContent}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
+              <Text style={[styles.assignSegmentFieldLabel, styles.assignSegmentCategoryFieldLabel]}>Category</Text>
+              {assignSegmentCategory ? (
+                <Text style={styles.assignSegmentCategoryForLine} numberOfLines={2}>
+                  Program for{' '}
+                  <Text style={styles.assignSegmentCategoryForName}>{assignSegmentCategory}</Text>
+                </Text>
+              ) : (
+                <Text style={styles.assignSegmentCategoryHintMuted}>Select a category below.</Text>
+              )}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator
+                style={styles.assignSegmentCategoryScroll}
+                contentContainerStyle={styles.assignSegmentCategoryScrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {displayCategories.map((cat) => {
+                    const active = assignSegmentCategory === cat;
+                    return (
+                      <TouchableOpacity
+                        key={cat}
+                        style={[styles.assignSegmentCatPill, active && styles.assignSegmentCatPillActive]}
+                        onPress={() => setAssignSegmentCategory(cat)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.assignSegmentCatPillText, active && styles.assignSegmentCatPillTextActive]}>
+                          {cat}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+              </ScrollView>
+
+              {assignSegmentLoading ? (
+                <View style={styles.assignSegmentLoadingBox}>
+                  <ActivityIndicator color="#38a6de" />
+                  <Text style={styles.assignSegmentLoadingText}>Loading saved program…</Text>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.assignSegmentCounterRow}>
+                    <Text style={styles.assignSegmentCounterText}>
+                      Warm-ups: {assignSegmentWarmupIds.length}/{SEGMENT_ASSIGN_COUNT}
+                    </Text>
+                    <Text style={styles.assignSegmentCounterText}>
+                      Cool-downs: {assignSegmentCooldownIds.length}/{SEGMENT_ASSIGN_COUNT}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.assignSegmentFieldLabel}>Warm-up library</Text>
+                  <ScrollView style={styles.assignSegmentList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                    {approvedWarmupLibraryForAssign.length === 0 &&
+                    pendingWarmupLibraryForAssign.length === 0 ? (
+                      <Text style={styles.assignSegmentEmpty}>
+                        No warm-up segment modules yet. Use Add warm-up on this page, then approve them to assign
+                        here.
+                      </Text>
+                    ) : null}
+                    {approvedWarmupLibraryForAssign.length === 0 &&
+                    pendingWarmupLibraryForAssign.length > 0 ? (
+                      <Text style={styles.assignSegmentEmptyHint}>
+                        Only approved warm-ups can be selected. Approve pending entries below (or under the Pending
+                        tab), then return here.
+                      </Text>
+                    ) : null}
+                    {approvedWarmupLibraryForAssign.map((m) => {
+                      const selected = assignSegmentWarmupIds.includes(m.moduleId);
+                      const atCap = assignSegmentWarmupIds.length >= SEGMENT_ASSIGN_COUNT && !selected;
+                      return (
+                        <TouchableOpacity
+                          key={m.moduleId}
+                          style={[
+                            styles.assignSegmentRow,
+                            selected && styles.assignSegmentRowSelected,
+                            atCap && styles.assignSegmentRowDimmed,
+                          ]}
+                          onPress={() => toggleAssignWarmup(m.moduleId)}
+                          disabled={atCap}
+                        >
+                          <View
+                            style={[
+                              styles.assignSegmentCheckbox,
+                              selected && styles.assignSegmentCheckboxChecked,
+                            ]}
+                          >
+                            {selected ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+                          </View>
+                          {m.thumbnailUrl ? (
+                            <Image source={{ uri: m.thumbnailUrl }} style={styles.assignSegmentThumb} />
+                          ) : (
+                            <View style={styles.assignSegmentThumbFallback}>
+                              <Ionicons name="barbell-outline" size={18} color="#6b8693" />
+                            </View>
+                          )}
+                          <Text style={styles.assignSegmentRowTitle} numberOfLines={2}>
+                            {m.moduleTitle}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                    {pendingWarmupLibraryForAssign.length > 0 ? (
+                      <>
+                        <View style={styles.assignSegmentPendingDivider}>
+                          <Text style={styles.assignSegmentPendingDividerText}>Pending approval</Text>
+                        </View>
+                        {pendingWarmupLibraryForAssign.map((m) => (
+                          <View key={m.moduleId} style={[styles.assignSegmentRow, styles.assignSegmentRowPending]}>
+                            <View style={[styles.assignSegmentCheckbox, styles.assignSegmentCheckboxMuted]} />
+                            {m.thumbnailUrl ? (
+                              <Image source={{ uri: m.thumbnailUrl }} style={styles.assignSegmentThumb} />
+                            ) : (
+                              <View style={styles.assignSegmentThumbFallback}>
+                                <Ionicons name="barbell-outline" size={18} color="#6b8693" />
+                              </View>
+                            )}
+                            <View style={styles.assignSegmentRowTitleCol}>
+                              <Text style={styles.assignSegmentRowTitleMuted} numberOfLines={2}>
+                                {m.moduleTitle}
+                              </Text>
+                            </View>
+                            <View style={styles.assignSegmentPendingBadge}>
+                              <Text style={styles.assignSegmentPendingBadgeText}>Pending</Text>
+                            </View>
+                          </View>
+                        ))}
+                      </>
+                    ) : null}
+                  </ScrollView>
+
+                  <Text style={styles.assignSegmentFieldLabel}>Cool-down library</Text>
+                  <ScrollView style={styles.assignSegmentList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                    {approvedCooldownLibraryForAssign.length === 0 &&
+                    pendingCooldownLibraryForAssign.length === 0 ? (
+                      <Text style={styles.assignSegmentEmpty}>
+                        No cool-down segment modules yet. Use Add cooldown on this page, then approve them to assign
+                        here.
+                      </Text>
+                    ) : null}
+                    {approvedCooldownLibraryForAssign.length === 0 &&
+                    pendingCooldownLibraryForAssign.length > 0 ? (
+                      <Text style={styles.assignSegmentEmptyHint}>
+                        Only approved cool-downs can be selected. Approve pending entries below (or under the Pending
+                        tab), then return here.
+                      </Text>
+                    ) : null}
+                    {approvedCooldownLibraryForAssign.map((m) => {
+                      const selected = assignSegmentCooldownIds.includes(m.moduleId);
+                      const atCap = assignSegmentCooldownIds.length >= SEGMENT_ASSIGN_COUNT && !selected;
+                      return (
+                        <TouchableOpacity
+                          key={m.moduleId}
+                          style={[
+                            styles.assignSegmentRow,
+                            selected && styles.assignSegmentRowSelected,
+                            atCap && styles.assignSegmentRowDimmed,
+                          ]}
+                          onPress={() => toggleAssignCooldown(m.moduleId)}
+                          disabled={atCap}
+                        >
+                          <View
+                            style={[
+                              styles.assignSegmentCheckbox,
+                              selected && styles.assignSegmentCheckboxChecked,
+                            ]}
+                          >
+                            {selected ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+                          </View>
+                          {m.thumbnailUrl ? (
+                            <Image source={{ uri: m.thumbnailUrl }} style={styles.assignSegmentThumb} />
+                          ) : (
+                            <View style={styles.assignSegmentThumbFallback}>
+                              <Ionicons name="leaf-outline" size={18} color="#6b8693" />
+                            </View>
+                          )}
+                          <Text style={styles.assignSegmentRowTitle} numberOfLines={2}>
+                            {m.moduleTitle}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                    {pendingCooldownLibraryForAssign.length > 0 ? (
+                      <>
+                        <View style={styles.assignSegmentPendingDivider}>
+                          <Text style={styles.assignSegmentPendingDividerText}>Pending approval</Text>
+                        </View>
+                        {pendingCooldownLibraryForAssign.map((m) => (
+                          <View key={m.moduleId} style={[styles.assignSegmentRow, styles.assignSegmentRowPending]}>
+                            <View style={[styles.assignSegmentCheckbox, styles.assignSegmentCheckboxMuted]} />
+                            {m.thumbnailUrl ? (
+                              <Image source={{ uri: m.thumbnailUrl }} style={styles.assignSegmentThumb} />
+                            ) : (
+                              <View style={styles.assignSegmentThumbFallback}>
+                                <Ionicons name="leaf-outline" size={18} color="#6b8693" />
+                              </View>
+                            )}
+                            <View style={styles.assignSegmentRowTitleCol}>
+                              <Text style={styles.assignSegmentRowTitleMuted} numberOfLines={2}>
+                                {m.moduleTitle}
+                              </Text>
+                            </View>
+                            <View style={styles.assignSegmentPendingBadge}>
+                              <Text style={styles.assignSegmentPendingBadgeText}>Pending</Text>
+                            </View>
+                          </View>
+                        ))}
+                      </>
+                    ) : null}
+                  </ScrollView>
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowAssignSegmentModal(false)}
+                disabled={savingAssignSegment}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.addCategoryConfirmButton]}
+                onPress={handleSaveCategorySegmentProgram}
+                disabled={
+                  savingAssignSegment ||
+                  assignSegmentLoading ||
+                  assignSegmentWarmupIds.length !== SEGMENT_ASSIGN_COUNT ||
+                  assignSegmentCooldownIds.length !== SEGMENT_ASSIGN_COUNT
+                }
+              >
+                {savingAssignSegment ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmDeleteButtonText}>Save program</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showDeleteModal} transparent animationType="slide" onRequestClose={closeDeleteModal}>
         <View style={styles.modalOverlay}>
@@ -923,7 +1546,7 @@ export default function ManageModulesPage() {
                 />
                 {/* Category filter pills */}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.assignCategoryRow}>
-                  {['All', ...categories].map((cat) => (
+                  {['All', ...displayCategories].map((cat) => (
                     <TouchableOpacity
                       key={cat}
                       style={[styles.assignCategoryPill, assignCategoryFilter === cat && styles.assignCategoryPillActive]}
@@ -935,6 +1558,7 @@ export default function ManageModulesPage() {
                 </ScrollView>
                 <ScrollView style={styles.moduleSelectList} nestedScrollEnabled>
                   {modules.filter((m) => {
+                    if (m.moduleSegment) return false;
                     if (m.status !== 'approved') return false;
                     if (assignCategoryFilter !== 'All' && m.category !== assignCategoryFilter) return false;
                     if (assignSearchQuery.trim()) {
@@ -1194,6 +1818,90 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 4,
     opacity: 0.9,
+  },
+  segmentPickerCard: {
+    backgroundColor: 'rgba(56, 166, 222, 0.06)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.2)',
+    padding: 14,
+    marginBottom: 4,
+  },
+  segmentPickerHeading: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginBottom: 6,
+  },
+  segmentPickerHint: {
+    color: '#9db3be',
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 12,
+  },
+  segmentPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  segmentCircleHit: {
+    alignItems: 'center',
+    minWidth: 72,
+  },
+  segmentCircleOuter: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: 'rgba(126, 153, 166, 0.45)',
+    backgroundColor: 'rgba(2, 68, 70, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentCircleOuterActive: {
+    borderColor: '#38a6de',
+    backgroundColor: 'rgba(56, 166, 222, 0.18)',
+  },
+  segmentCircleInner: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(157, 179, 190, 0.35)',
+  },
+  segmentCircleInnerActive: {
+    backgroundColor: '#38a6de',
+  },
+  segmentCircleLabel: {
+    marginTop: 6,
+    color: '#9db3be',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  segmentCircleLabelActive: {
+    color: '#e5f5ff',
+  },
+  segmentPickerSpacer: {
+    flexGrow: 1,
+    flexBasis: 8,
+    minWidth: 8,
+  },
+  segmentAddButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#38a6de',
+    backgroundColor: 'rgba(56, 166, 222, 0.12)',
+  },
+  segmentAddButtonText: {
+    color: '#38a6de',
+    fontSize: 14,
+    fontWeight: '600',
   },
   mainContent: {
     paddingLeft: 20,
@@ -1665,8 +2373,238 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  trainerAndAssignRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    gap: 12,
+  },
+  assignSegmentProgramButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.45)',
+    backgroundColor: 'rgba(56, 166, 222, 0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  assignSegmentProgramButtonText: {
+    color: '#38a6de',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  assignSegmentModalContainer: {
+    maxWidth: 560,
+  },
+  assignSegmentBodyScroll: {
+    flexGrow: 0,
+  },
+  assignSegmentBodyScrollContent: {
+    paddingBottom: 8,
+  },
+  assignSegmentCategoryForLine: {
+    color: '#b8ccd6',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+    marginBottom: 10,
+    marginTop: 2,
+  },
+  assignSegmentCategoryForName: {
+    color: '#38a6de',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  assignSegmentCategoryHintMuted: {
+    color: '#6b8693',
+    fontSize: 13,
+    marginBottom: 10,
+    marginTop: 2,
+  },
+  assignSegmentCategoryScroll: {
+    marginBottom: 12,
+  },
+  assignSegmentCategoryScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+    paddingRight: 4,
+  },
+  assignSegmentCatPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(126, 153, 166, 0.55)',
+    backgroundColor: 'rgba(15, 41, 63, 0.65)',
+  },
+  assignSegmentCatPillActive: {
+    borderColor: '#38a6de',
+    backgroundColor: 'rgba(56, 166, 222, 0.28)',
+    borderWidth: 2,
+  },
+  assignSegmentCatPillText: {
+    color: '#dce9f0',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  assignSegmentCatPillTextActive: {
+    color: '#f4fbff',
+  },
+  assignSegmentCategoryFieldLabel: {
+    marginTop: 0,
+  },
+  assignSegmentFieldLabel: {
+    color: '#9db3be',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  assignSegmentLoadingBox: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    gap: 10,
+  },
+  assignSegmentLoadingText: {
+    color: '#6b8693',
+    fontSize: 13,
+  },
+  assignSegmentCounterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  assignSegmentCounterText: {
+    color: '#38a6de',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  assignSegmentList: {
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: 'rgba(126, 153, 166, 0.35)',
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  assignSegmentEmpty: {
+    color: '#6b8693',
+    fontSize: 13,
+    padding: 16,
+  },
+  assignSegmentEmptyHint: {
+    color: '#c5a572',
+    fontSize: 12,
+    lineHeight: 17,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 6,
+    fontWeight: '600',
+  },
+  assignSegmentPendingDivider: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 193, 7, 0.08)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 193, 7, 0.25)',
+  },
+  assignSegmentPendingDividerText: {
+    color: '#e6c35c',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  assignSegmentRowPending: {
+    opacity: 0.92,
+    backgroundColor: 'rgba(15, 41, 63, 0.35)',
+  },
+  assignSegmentCheckboxMuted: {
+    borderColor: 'rgba(126, 153, 166, 0.25)',
+    backgroundColor: 'rgba(15, 41, 63, 0.5)',
+  },
+  assignSegmentRowTitleCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  assignSegmentRowTitleMuted: {
+    color: '#9db3be',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  assignSegmentPendingBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 193, 7, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 193, 7, 0.45)',
+  },
+  assignSegmentPendingBadgeText: {
+    color: '#ffd54f',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  assignSegmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(126, 153, 166, 0.12)',
+  },
+  assignSegmentRowSelected: {
+    backgroundColor: 'rgba(56, 166, 222, 0.14)',
+  },
+  assignSegmentRowDimmed: {
+    opacity: 0.38,
+  },
+  assignSegmentCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(126, 153, 166, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assignSegmentCheckboxChecked: {
+    backgroundColor: '#38a6de',
+    borderColor: '#38a6de',
+  },
+  assignSegmentThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+  },
+  assignSegmentThumbFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: 'rgba(15, 41, 63, 0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assignSegmentRowTitle: {
+    flex: 1,
+    color: '#e8f4fa',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   trainerDropdownWrap: {
     gap: 7,
+    flexGrow: 1,
+    minWidth: 200,
   },
   trainerDropdownLabel: {
     color: '#9db3be',

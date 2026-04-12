@@ -9,7 +9,7 @@ import {
     signOut,
     updatePassword,
 } from 'firebase/auth';
-import { get, off, onValue, ref, remove, set, update } from 'firebase/database';
+import { equalTo, get, off, onValue, orderByChild, query, ref, remove, set, update } from 'firebase/database';
 import { Module } from '../_models/Module';
 import { ModuleReview } from '../_models/ModuleReview';
 import { SkillProfile } from '../_models/SkillProfile';
@@ -19,6 +19,14 @@ import { SEED_TEST_MODULES } from '../_seed/testModules';
 import { getExpoApiBaseUrl } from '../../constants/apiBaseUrl';
 import { auth, cloudinaryConfig, db } from '../config/firebaseConfig';
 import { MessageController } from './MessageController';
+
+/** Per-category warm-up / cool-down library picks (admin → dashboard program). */
+export interface CategorySegmentProgramRecord {
+  category?: string;
+  warmupModuleIds: string[];
+  cooldownModuleIds: string[];
+  updatedAt?: number;
+}
 
 export class AuthController {
   // Register new user
@@ -370,11 +378,17 @@ export class AuthController {
         : moduleDataRaw.stancePosition === 'side view'
           ? 'side view'
           : 'side view';
+    const rawSeg = moduleDataRaw.moduleSegment;
+    const segNorm =
+      typeof rawSeg === 'string' ? rawSeg.trim().toLowerCase().replace(/[\s_-]+/g, '') : '';
+    const moduleSegment: Module['moduleSegment'] =
+      segNorm === 'warmup' ? 'warmup' : segNorm === 'cooldown' ? 'cooldown' : undefined;
     return {
       ...moduleDataRaw,
       moduleId,
       thumbnailUrl,
       stancePosition,
+      moduleSegment,
       createdAt: moduleDataRaw.createdAt ? new Date(moduleDataRaw.createdAt) : new Date(),
       updatedAt: moduleDataRaw.updatedAt ? new Date(moduleDataRaw.updatedAt) : new Date(),
       submittedAt: moduleDataRaw.submittedAt ? new Date(moduleDataRaw.submittedAt) : undefined,
@@ -810,7 +824,7 @@ export class AuthController {
     }
   }
 
-  /** Record that the user completed a module. Call when they tap "Save Progress" on the complete step. Returns new completedCount (for "every 5" refresh). */
+  /** Record that the user completed a module. Returns new completedCount (for "every 5" refresh). */
   static async recordModuleCompletion(moduleId: string): Promise<number> {
     const currentUser = await this.getCurrentUser();
     if (!currentUser) throw new Error('User not authenticated');
@@ -1371,6 +1385,8 @@ export class AuthController {
       trainerName?: string;
       /** Stance / camera angle; null clears */
       stancePosition?: Module['stancePosition'];
+      /** Warm-up / cool-down bucket; null clears */
+      moduleSegment?: Module['moduleSegment'] | null;
     }
   ): Promise<void> {
     try {
@@ -1416,6 +1432,9 @@ export class AuthController {
       if (updates.trainerName !== undefined) patch.trainerName = updates.trainerName;
       if (updates.stancePosition !== undefined) {
         patch.stancePosition = updates.stancePosition ?? null;
+      }
+      if (updates.moduleSegment !== undefined) {
+        patch.moduleSegment = updates.moduleSegment ?? null;
       }
       if (Object.keys(patch).length === 0) return;
 
@@ -1815,8 +1834,9 @@ export class AuthController {
     moduleTitle: string;
     description: string;
     category: string;
-    trainerId: string;
-    trainerName: string;
+    /** Required for technique modules; optional for warm-up / cool-down (admin-owned). */
+    trainerId?: string;
+    trainerName?: string;
     difficultyLevel?: 'basic' | 'intermediate' | 'advanced';
     intensityLevel?: number;
     spaceRequirements?: string[];
@@ -1827,6 +1847,7 @@ export class AuthController {
     repRange?: string;
     trainingDurationSeconds?: number;
     stancePosition?: Module['stancePosition'];
+    moduleSegment?: Module['moduleSegment'];
   }): Promise<string> {
     try {
       const currentUser = await this.getCurrentUser();
@@ -1834,19 +1855,23 @@ export class AuthController {
       if (currentUser.role !== 'admin') throw new Error('Permission denied. Admin access required.');
 
       if (!moduleData.moduleTitle.trim()) throw new Error('Module title is required');
-      if (!moduleData.category.trim()) throw new Error('Category is required');
-      if (!moduleData.trainerId) throw new Error('Trainer is required');
+      const hasSegment = moduleData.moduleSegment === 'warmup' || moduleData.moduleSegment === 'cooldown';
+      if (!hasSegment && !moduleData.category.trim()) throw new Error('Category is required');
+      const trainerId = (moduleData.trainerId || '').trim();
+      if (!hasSegment && !trainerId) throw new Error('Trainer is required');
 
-      const moduleId = `module_${moduleData.trainerId}_${Date.now()}`;
       const now = Date.now();
+      const moduleId = trainerId
+        ? `module_${trainerId}_${now}`
+        : `module_${moduleData.moduleSegment}_${now}_${Math.random().toString(36).slice(2, 11)}`;
 
       const moduleForDB: Record<string, unknown> = {
         moduleId,
-        trainerId: moduleData.trainerId,
-        trainerName: moduleData.trainerName,
+        trainerId: trainerId || '',
+        trainerName: (moduleData.trainerName || '').trim(),
         moduleTitle: moduleData.moduleTitle.trim(),
         description: moduleData.description?.trim() || '',
-        category: moduleData.category,
+        category: hasSegment ? '' : moduleData.category.trim(),
         difficultyLevel: moduleData.difficultyLevel ?? 'basic',
         intensityLevel: moduleData.intensityLevel ?? 1,
         spaceRequirements: moduleData.spaceRequirements || [],
@@ -1869,16 +1894,19 @@ export class AuthController {
         introductionVideoUrl: null,
         techniqueVideoLink: null,
         videoDuration: null,
+        ...(hasSegment ? { moduleSegment: moduleData.moduleSegment } : {}),
       };
 
       await set(ref(db, `modules/${moduleId}`), moduleForDB);
-      await set(ref(db, `trainerModules/${moduleData.trainerId}/${moduleId}`), {
-        moduleId,
-        moduleTitle: moduleData.moduleTitle.trim(),
-        status: 'approved',
-        createdAt: now,
-        updatedAt: now,
-      });
+      if (trainerId) {
+        await set(ref(db, `trainerModules/${trainerId}/${moduleId}`), {
+          moduleId,
+          moduleTitle: moduleData.moduleTitle.trim(),
+          status: 'approved',
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
 
       return moduleId;
     } catch (error: any) {
@@ -2075,6 +2103,55 @@ export class AuthController {
     'Defensive Moves',
   ];
 
+  /** Append any default category missing from the stored list (case-insensitive). */
+  private static mergeMissingDefaultCategories(list: string[]): string[] {
+    const result = [...list];
+    const lower = new Set(result.map((c) => (typeof c === 'string' ? c : '').trim().toLowerCase()).filter(Boolean));
+    for (const d of this.DEFAULT_CATEGORIES) {
+      const k = d.trim().toLowerCase();
+      if (k && !lower.has(k)) {
+        result.push(d);
+        lower.add(k);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Normalize whatever shape is stored at `moduleCategories` in RTDB into display names.
+   * Handles arrays, string, numeric-key objects, and map objects keyed by category name.
+   */
+  private static parseModuleCategoriesSnapshot(data: unknown): string[] {
+    if (data == null) return [];
+    if (typeof data === 'string') {
+      const t = data.trim();
+      return t ? [t] : [];
+    }
+    if (Array.isArray(data)) {
+      return data
+        .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+        .map((c) => c.trim());
+    }
+    if (typeof data === 'object') {
+      const obj = data as Record<string, unknown>;
+      const values = Object.values(obj);
+      const fromValues = values
+        .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+        .map((c) => c.trim());
+      if (fromValues.length > 0) return fromValues;
+      const fromKeys = Object.keys(obj).filter(
+        (k) => typeof k === 'string' && k.trim().length > 0 && !/^\d+$/.test(k)
+      );
+      if (fromKeys.length > 0) return fromKeys.map((k) => k.trim());
+    }
+    return [];
+  }
+
+  /** Default category labels (same as DB seed) for UI fallback when load fails. */
+  static getFallbackModuleCategories(): string[] {
+    return [...this.DEFAULT_CATEGORIES];
+  }
+
   /** Fetch categories from DB. Seeds defaults if none exist yet. */
   static async getModuleCategories(): Promise<string[]> {
     try {
@@ -2091,8 +2168,8 @@ export class AuthController {
       }
 
       const data = snap.val();
-      // Handle both array and object shapes from Firebase
-      return Array.isArray(data) ? data : Object.values(data);
+      const asStrings = this.parseModuleCategoriesSnapshot(data);
+      return this.mergeMissingDefaultCategories(asStrings);
     } catch (error: any) {
       console.error('❌ Error fetching module categories:', error);
       // Fallback so the UI is never empty
@@ -2144,6 +2221,70 @@ export class AuthController {
     return updated;
   }
 
+  /** RTDB key for a category name; keep in sync with dashboard `normalizeCategory` + safe path chars. */
+  static categorySegmentProgramKey(categoryName: string): string {
+    return (categoryName ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[#$.[\]\/]/g, '_');
+  }
+
+  /** Warm-up / cool-down assignments per category (for learner dashboard). */
+  static async getAllCategorySegmentPrograms(): Promise<Record<string, CategorySegmentProgramRecord>> {
+    const currentUser = auth.currentUser ?? (await this.waitForAuth());
+    if (!currentUser) throw new Error('User not authenticated');
+
+    const snap = await get(ref(db, 'categorySegmentProgram'));
+    if (!snap.exists()) return {};
+
+    const val = snap.val() as Record<string, unknown>;
+    const out: Record<string, CategorySegmentProgramRecord> = {};
+    for (const key of Object.keys(val)) {
+      const row = val[key];
+      if (!row || typeof row !== 'object') continue;
+      const r = row as Record<string, unknown>;
+      out[key] = {
+        category: typeof r.category === 'string' ? r.category : undefined,
+        warmupModuleIds: this.normalizeArray(r.warmupModuleIds) || [],
+        cooldownModuleIds: this.normalizeArray(r.cooldownModuleIds) || [],
+        updatedAt: typeof r.updatedAt === 'number' ? r.updatedAt : undefined,
+      };
+    }
+    return out;
+  }
+
+  /** Admin: three warm-up and three cool-down module IDs per technique category. */
+  static async setCategorySegmentProgram(
+    categoryDisplayName: string,
+    warmupModuleIds: string[],
+    cooldownModuleIds: string[]
+  ): Promise<void> {
+    const currentUser = auth.currentUser ?? (await this.waitForAuth());
+    if (!currentUser) throw new Error('User not authenticated');
+
+    const userSnap = await get(ref(db, `users/${currentUser.uid}`));
+    if (!userSnap.exists() || userSnap.val()?.role !== 'admin') {
+      throw new Error('Permission denied. Admin access required.');
+    }
+
+    const trimmed = categoryDisplayName.trim();
+    if (!trimmed) throw new Error('Category is required');
+
+    const w = warmupModuleIds.map((id) => id.trim()).filter(Boolean);
+    const c = cooldownModuleIds.map((id) => id.trim()).filter(Boolean);
+    if (w.length !== 3 || c.length !== 3) {
+      throw new Error('Select exactly 3 warm-ups and 3 cool-downs');
+    }
+
+    const key = this.categorySegmentProgramKey(trimmed);
+    await set(ref(db, `categorySegmentProgram/${key}`), {
+      category: trimmed,
+      warmupModuleIds: w,
+      cooldownModuleIds: c,
+      updatedAt: Date.now(),
+    });
+  }
+
   // Get approved modules for user dashboard (any authenticated user)
   static async getApprovedModules(): Promise<Module[]> {
     try {
@@ -2152,7 +2293,9 @@ export class AuthController {
         throw new Error('User not authenticated');
       }
 
-      const modulesRef = ref(db, 'modules');
+      // Query approved rows only so security rules never require read access to pending/disabled modules
+      // (a full get(modules) would fail for learners when any non-readable module exists).
+      const modulesRef = query(ref(db, 'modules'), orderByChild('status'), equalTo('approved'));
       const modulesSnapshot = await get(modulesRef);
 
       if (!modulesSnapshot.exists()) {

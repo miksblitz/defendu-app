@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -13,7 +14,6 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
@@ -90,12 +90,30 @@ export default function ViewModulePage() {
   const params = useLocalSearchParams<{
     moduleId: string;
     categoryKey?: string;
+    programOrder?: string;
   }>();
   const { moduleId } = params;
   const categoryKeyFromRoute = routeParamToString(params.categoryKey);
-  const showedModuleIntroThisSession = useRef(false);
-  const [enteredViaSafety, setEnteredViaSafety] = useState(false);
+  const programOrderRaw = routeParamToString(params.programOrder);
 
+  const resolvedModuleId = useMemo(() => {
+    const raw = moduleId;
+    if (typeof raw === 'string' && raw.trim()) return raw.trim();
+    if (Array.isArray(raw) && typeof raw[0] === 'string' && raw[0].trim()) return raw[0].trim();
+    return '';
+  }, [moduleId]);
+
+  const programOrderIds = useMemo(() => {
+    if (!programOrderRaw) return [];
+    return programOrderRaw.split(',').map((id) => id.trim()).filter(Boolean);
+  }, [programOrderRaw]);
+
+  const nextModuleId = useMemo(() => {
+    if (!resolvedModuleId || programOrderIds.length === 0) return null;
+    const idx = programOrderIds.indexOf(resolvedModuleId);
+    if (idx < 0 || idx >= programOrderIds.length - 1) return null;
+    return programOrderIds[idx + 1];
+  }, [programOrderIds, resolvedModuleId]);
   const [module, setModule] = useState<Module | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<Step>('intro');
@@ -107,38 +125,26 @@ export default function ViewModulePage() {
   const [tryItTotalSeconds, setTryItTotalSeconds] = useState(60);
   const [tryItPaused, setTryItPaused] = useState(false);
   const tryItTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Back from Try it → Safety only when user reached practice via Confirm on the safety screen for this module. */
+  const tryItBackToSafetyRef = useRef(false);
   // Reviews (Amazon-style)
   const [reviews, setReviews] = useState<ModuleReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
-  const [userRating, setUserRating] = useState(0);
-  const [userComment, setUserComment] = useState('');
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [showAllReviewsModal, setShowAllReviewsModal] = useState(false);
 
 
   useEffect(() => {
-    if (moduleId) {
+    if (resolvedModuleId) {
       loadModule();
     }
-  }, [moduleId]);
+  }, [resolvedModuleId]);
 
   const loadReviews = async () => {
-    if (!moduleId) return;
+    if (!resolvedModuleId) return;
     try {
       setReviewsLoading(true);
-      const list = await AuthController.getModuleReviews(moduleId);
+      const list = await AuthController.getModuleReviews(resolvedModuleId);
       setReviews(list);
-      // One review per user: if current user already reviewed, prefill and mark as submitted
-      const currentUser = await AuthController.getCurrentUser();
-      if (currentUser) {
-        const myReview = list.find((r) => r.userId === currentUser.uid);
-        if (myReview) {
-          setReviewSubmitted(true);
-          setUserRating(myReview.rating);
-          setUserComment(myReview.comment || '');
-        }
-      }
     } catch (e) {
       console.error('Error loading reviews:', e);
     } finally {
@@ -147,30 +153,48 @@ export default function ViewModulePage() {
   };
 
   useEffect(() => {
-    if (module && moduleId) {
+    if (module && resolvedModuleId) {
       loadReviews();
     }
-  }, [module?.moduleId, moduleId]);
+  }, [module?.moduleId, resolvedModuleId]);
+
+  const categoryStorageKey = useMemo(
+    () =>
+      module ? normalizeCategoryKey(categoryKeyFromRoute || module.category || 'uncategorized') : '',
+    [module, categoryKeyFromRoute]
+  );
+
+  const beginTryItPractice = (mod?: Module | null, backToSafetyAfterTryIt = false) => {
+    const m = mod ?? module;
+    if (!m) return;
+    tryItBackToSafetyRef.current = backToSafetyAfterTryIt;
+    const total = m.trainingDurationSeconds ?? 60;
+    setTryItTotalSeconds(total);
+    setTryItRemainingSeconds(total);
+    setTryItPaused(false);
+    setStep('tryIt');
+  };
 
   const loadModule = async () => {
     try {
       setLoading(true);
-      if (!moduleId) {
+      if (!resolvedModuleId) {
         router.replace('/dashboard');
         return;
       }
-      const data = await AuthController.getModuleByIdForUser(moduleId);
+      const data = await AuthController.getModuleByIdForUser(resolvedModuleId);
       if (!data) {
         router.replace('/dashboard');
         return;
       }
       setModule(data);
-      showedModuleIntroThisSession.current = false;
       setIntroVideoError(false);
       setIntroVideoWatched(false);
-      const showSafety = shouldShowTrainingSafetyFirst();
-      setEnteredViaSafety(showSafety);
-      setStep(showSafety ? 'safety' : 'intro');
+      if (shouldShowTrainingSafetyFirst()) {
+        setStep('safety');
+      } else {
+        beginTryItPractice(data, false);
+      }
     } catch (error) {
       console.error('Error loading module:', error);
       router.replace('/dashboard');
@@ -179,22 +203,8 @@ export default function ViewModulePage() {
     }
   };
 
-  const categoryStorageKey = useMemo(
-    () =>
-      module ? normalizeCategoryKey(categoryKeyFromRoute || module.category || 'uncategorized') : '',
-    [module, categoryKeyFromRoute]
-  );
-
-  const beginTryItPractice = () => {
-    const total = module?.trainingDurationSeconds ?? 60;
-    setTryItTotalSeconds(total);
-    setTryItRemainingSeconds(total);
-    setTryItPaused(false);
-    setStep('tryIt');
-  };
-
   const handleStart = () => {
-    beginTryItPractice();
+    beginTryItPractice(undefined, false);
   };
 
   const finishModuleIntroToPractice = async () => {
@@ -205,35 +215,13 @@ export default function ViewModulePage() {
     } catch {
       /* ignore */
     }
-    beginTryItPractice();
+    beginTryItPractice(undefined, false);
   };
 
-  const handleSafetyConfirm = async () => {
+  const handleSafetyConfirm = () => {
     if (!module) return;
     markTrainingSafetyAcknowledged();
-    const key = categoryStorageKey
-      ? `${CATEGORY_INTRO_STORAGE_PREFIX}${categoryStorageKey}`
-      : '';
-    try {
-      const seen = key ? await AsyncStorage.getItem(key) : null;
-      if (!seen && moduleHasIntroductionContent(module)) {
-        showedModuleIntroThisSession.current = true;
-        setStep('video');
-        return;
-      }
-      showedModuleIntroThisSession.current = false;
-      if (!seen && key) {
-        await AsyncStorage.setItem(key, '1');
-      }
-      beginTryItPractice();
-    } catch {
-      showedModuleIntroThisSession.current = moduleHasIntroductionContent(module);
-      if (moduleHasIntroductionContent(module)) {
-        setStep('video');
-      } else {
-        beginTryItPractice();
-      }
-    }
+    beginTryItPractice(undefined, true);
   };
 
   // Timer tick for Try it yourself (depends only on step and pause so we don't recreate interval every second)
@@ -265,18 +253,17 @@ export default function ViewModulePage() {
     };
   }, [step, tryItPaused]);
 
-  const handleReviewModule = () => setStep('intro');
-  const handlePracticeAgain = () => beginTryItPractice();
+  const handlePracticeAgain = () => beginTryItPractice(undefined, false);
   const handleMessages = () => {
     clearUnread();
     setShowMenu(false);
     router.push('/messages');
   };
 
-  const handleSaveProgress = async () => {
-    if (moduleId) {
+  const handleNextModule = async () => {
+    if (resolvedModuleId) {
       try {
-        const newCount = await AuthController.recordModuleCompletion(moduleId);
+        const newCount = await AuthController.recordModuleCompletion(resolvedModuleId);
         if (newCount > 0 && newCount % 5 === 0) {
           Alert.alert(
             'Recommendations updated!',
@@ -288,28 +275,23 @@ export default function ViewModulePage() {
         console.error('Error recording module completion:', e);
       }
     }
-    router.replace('/dashboard');
+    if (nextModuleId) {
+      router.replace({
+        pathname: '/view-module',
+        params: {
+          moduleId: nextModuleId,
+          ...(programOrderRaw ? { programOrder: programOrderRaw } : {}),
+        },
+      } as any);
+    } else {
+      router.replace('/dashboard');
+    }
   };
 
   const averageRating = reviews.length
     ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length
     : 0;
   const reviewCount = reviews.length;
-
-  const handleSubmitReview = async () => {
-    if (!moduleId || userRating < 1) return;
-    try {
-      setReviewSubmitting(true);
-      await AuthController.submitModuleReview(moduleId, userRating, userComment || undefined);
-      setReviewSubmitted(true);
-      setUserComment('');
-      await loadReviews();
-    } catch (e) {
-      console.error('Error submitting review:', e);
-    } finally {
-      setReviewSubmitting(false);
-    }
-  };
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -355,14 +337,11 @@ export default function ViewModulePage() {
             style={styles.backButton}
             onPress={() => {
               if (step === 'intro') router.replace('/dashboard');
-              else if (step === 'safety') {
-                if (enteredViaSafety) router.replace('/dashboard');
-                else setStep('intro');
-              } else if (step === 'video') setStep(enteredViaSafety ? 'safety' : 'intro');
+              else if (step === 'safety') router.replace('/dashboard');
+              else if (step === 'video') setStep('safety');
               else if (step === 'tryIt') {
-                if (showedModuleIntroThisSession.current) setStep('video');
-                else if (enteredViaSafety) setStep('safety');
-                else setStep('intro');
+                if (tryItBackToSafetyRef.current) setStep('safety');
+                else router.replace('/dashboard');
               }
               else if (step === 'complete') router.replace('/dashboard');
             }}
@@ -416,7 +395,6 @@ export default function ViewModulePage() {
                     </TouchableOpacity>
                   )}
                 </View>
-                <Text style={styles.cardDescription}>{module.description}</Text>
                 <View style={styles.mediaSection}>
                   <Text style={styles.mediaSectionTitle}>Technique Video</Text>
                   {getTechniqueVideoUrl(module) ? (
@@ -474,10 +452,7 @@ export default function ViewModulePage() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.continueButton}
-                  onPress={() => {
-                    if (enteredViaSafety) router.replace('/dashboard');
-                    else setStep('intro');
-                  }}
+                  onPress={() => router.replace('/dashboard')}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.continueButtonText}>Back</Text>
@@ -552,59 +527,69 @@ export default function ViewModulePage() {
                     </TouchableOpacity>
                   </>
                 )}
-                {enteredViaSafety ? (
-                  <TouchableOpacity style={styles.continueButton} onPress={() => setStep('safety')} activeOpacity={0.8}>
-                    <Text style={styles.continueButtonText}>Back</Text>
-                  </TouchableOpacity>
-                ) : null}
+                <TouchableOpacity style={styles.continueButton} onPress={() => setStep('safety')} activeOpacity={0.8}>
+                  <Text style={styles.continueButtonText}>Back</Text>
+                </TouchableOpacity>
               </View>
             )}
 
             {step === 'tryIt' && (
               <View style={styles.card}>
-                <Text style={styles.sectionLabel}>Try it yourself</Text>
-                {module.referenceGuideUrl ? (
-                  <View style={styles.tryItGuideBlock}>
-                    <Text style={styles.tryItGuideLabel}>Form guide</Text>
-                    <Image
-                      source={{ uri: module.referenceGuideUrl }}
-                      style={styles.tryItReferenceGuide}
-                      resizeMode="contain"
-                    />
+                <View style={styles.tryItTopSection}>
+                  <View style={styles.tryItHeroColumn}>
+                    <View style={styles.tryItHero}>
+                      <View style={styles.tryItHeroAccentBar} />
+                      <View style={styles.tryItHeroKickerRow}>
+                        <Ionicons name="radio-button-on" size={12} color="#07bbc0" style={styles.tryItHeroLiveIcon} />
+                        <Text style={styles.tryItHeroKicker}>LIVE PRACTICE</Text>
+                      </View>
+                      <Text style={styles.tryItHeroTitle} numberOfLines={4}>
+                        {module.moduleTitle?.trim() || 'Training module'}
+                      </Text>
+                      <Text style={styles.tryItHeroTagline}>Your mat. Your tempo. Make every second count.</Text>
+                    </View>
                   </View>
+                  <View style={styles.tryItTimerCorner}>
+                    <Svg width={108} height={108} style={styles.tryItTimerSvg}>
+                      <Circle
+                        stroke="#0a3645"
+                        fill="none"
+                        cx={54}
+                        cy={54}
+                        r={46}
+                        strokeWidth={6}
+                      />
+                      <Circle
+                        stroke="#07bbc0"
+                        fill="none"
+                        cx={54}
+                        cy={54}
+                        r={46}
+                        strokeWidth={6}
+                        strokeDasharray={`${2 * Math.PI * 46} ${2 * Math.PI * 46}`}
+                        strokeDashoffset={(2 * Math.PI * 46) * (1 - tryItRemainingSeconds / tryItTotalSeconds)}
+                        strokeLinecap="round"
+                        rotation="-90"
+                        origin="54, 54"
+                      />
+                    </Svg>
+                    <View style={styles.tryItTimerCenterText}>
+                      <Text style={styles.tryItTimerTimeText}>{formatTime(tryItRemainingSeconds)}</Text>
+                      <Text style={styles.tryItTimerLabel}>left</Text>
+                    </View>
+                  </View>
+                </View>
+                {module.referenceGuideUrl ? (
+                  <ExpoImage
+                    source={{ uri: module.referenceGuideUrl }}
+                    style={styles.tryItGifInCard}
+                    contentFit="contain"
+                    cachePolicy="memory-disk"
+                  />
                 ) : null}
                 <Text style={styles.tryItSubtext}>
                   Practice for {formatTime(tryItTotalSeconds)}. Timer counts down; you can pause and resume.
                 </Text>
-                <View style={styles.timerCircleWrap}>
-                  <Svg width={220} height={220} style={styles.timerSvg}>
-                    <Circle
-                      stroke="#0a3645"
-                      fill="none"
-                      cx={110}
-                      cy={110}
-                      r={100}
-                      strokeWidth={10}
-                    />
-                    <Circle
-                      stroke="#07bbc0"
-                      fill="none"
-                      cx={110}
-                      cy={110}
-                      r={100}
-                      strokeWidth={10}
-                      strokeDasharray={`${2 * Math.PI * 100} ${2 * Math.PI * 100}`}
-                      strokeDashoffset={(2 * Math.PI * 100) * (1 - tryItRemainingSeconds / tryItTotalSeconds)}
-                      strokeLinecap="round"
-                      rotation="-90"
-                      origin="110, 110"
-                    />
-                  </Svg>
-                  <View style={styles.timerTextContainer}>
-                    <Text style={styles.timerTimeText}>{formatTime(tryItRemainingSeconds)}</Text>
-                    <Text style={styles.timerLabel}>time left</Text>
-                  </View>
-                </View>
                 {tryItRemainingSeconds > 0 ? (
                   <>
                     <TouchableOpacity
@@ -671,78 +656,11 @@ export default function ViewModulePage() {
                   </View>
                 </View>
 
-                {/* Rate this module - Amazon style (one review per user) */}
-                <View style={styles.rateSection}>
-                  <Text style={styles.rateSectionTitle}>Rate this module</Text>
-                  <View style={styles.starsRow}>
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <TouchableOpacity
-                        key={i}
-                        onPress={() => !reviewSubmitted && setUserRating(i)}
-                        style={styles.starTouchable}
-                        activeOpacity={reviewSubmitted ? 1 : 0.7}
-                        disabled={reviewSubmitted}
-                      >
-                        <Ionicons
-                          name={userRating >= i ? 'star' : 'star-outline'}
-                          size={32}
-                          color="#f0c14b"
-                        />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  <Text style={styles.rateHint}>
-                    {reviewSubmitted ? 'You have already reviewed this module.' : 'Tap to rate 1–5 stars'}
-                  </Text>
-                  <Text style={styles.commentLabel}>Comment (optional)</Text>
-                  <TextInput
-                    style={styles.commentInput}
-                    placeholder="Share your experience with this module..."
-                    placeholderTextColor="#6b8693"
-                    value={userComment}
-                    onChangeText={setUserComment}
-                    multiline
-                    numberOfLines={3}
-                    editable={!reviewSubmitting && !reviewSubmitted}
-                  />
-                  <TouchableOpacity
-                    style={[styles.primaryButton, (userRating < 1 && !reviewSubmitted) && styles.buttonDisabled, reviewSubmitted && styles.buttonDisabled]}
-                    onPress={reviewSubmitted ? undefined : handleSubmitReview}
-                    disabled={(!reviewSubmitted && (userRating < 1 || reviewSubmitting)) || reviewSubmitted}
-                    activeOpacity={reviewSubmitted ? 1 : 0.8}
-                  >
-                    <Text style={styles.primaryButtonText}>
-                      {reviewSubmitted
-                        ? 'You have already rated this module'
-                        : reviewSubmitting
-                          ? 'Submitting...'
-                          : 'Submit review'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Show all reviews */}
-                {(reviewsLoading || reviews.length > 0) && (
-                  <TouchableOpacity
-                    style={styles.showAllReviewsButtonBlock}
-                    onPress={() => setShowAllReviewsModal(true)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.showAllReviewsButtonText}>
-                      {reviewsLoading ? 'Loading...' : `Show all reviews (${reviewCount})`}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={18} color="#07bbc0" />
-                  </TouchableOpacity>
-                )}
-
-                <TouchableOpacity style={styles.outlineButton} onPress={handleReviewModule} activeOpacity={0.8}>
-                  <Text style={styles.outlineButtonText}>Review Module</Text>
-                </TouchableOpacity>
                 <TouchableOpacity style={styles.outlineButton} onPress={handlePracticeAgain} activeOpacity={0.8}>
-                  <Text style={styles.outlineButtonText}>Practice Again</Text>
+                  <Text style={styles.outlineButtonText}>Again</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryButton} onPress={handleSaveProgress} activeOpacity={0.8}>
-                  <Text style={styles.primaryButtonText}>Save Progress</Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={handleNextModule} activeOpacity={0.8}>
+                  <Text style={styles.primaryButtonText}>{nextModuleId ? 'Next Module' : 'Done'}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -1087,25 +1005,58 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a3645',
     marginBottom: 12,
   },
-  tryItGuideBlock: {
+  tryItGifInCard: {
     width: '100%',
-    marginBottom: 8,
+    height: 320,
+    alignSelf: 'center',
+    marginBottom: 16,
   },
-  tryItGuideLabel: {
-    color: '#07bbc0',
-    fontSize: 13,
+  tryItTopSection: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0a3645',
+  },
+  tryItHeroColumn: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 4,
+  },
+  tryItTimerCorner: {
+    width: 108,
+    height: 108,
+    position: 'relative',
+    flexShrink: 0,
+    marginTop: 2,
+  },
+  tryItTimerSvg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  tryItTimerCenterText: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tryItTimerTimeText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '700',
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
   },
-  tryItReferenceGuide: {
-    width: '100%',
-    minHeight: 260,
-    maxHeight: 520,
-    borderRadius: 16,
-    backgroundColor: '#0a3645',
-    marginBottom: 8,
+  tryItTimerLabel: {
+    color: '#6b8693',
+    fontSize: 10,
+    marginTop: 2,
+    fontWeight: '600',
   },
   startButton: {
     backgroundColor: '#07bbc0',
@@ -1139,6 +1090,49 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
+  },
+  tryItHero: {
+    width: '100%',
+  },
+  tryItHeroAccentBar: {
+    width: 48,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#07bbc0',
+    marginBottom: 14,
+  },
+  tryItHeroKickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  tryItHeroLiveIcon: {
+    marginRight: 8,
+    opacity: 0.95,
+  },
+  tryItHeroKicker: {
+    color: '#07bbc0',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 2.4,
+  },
+  tryItHeroTitle: {
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '800',
+    lineHeight: 32,
+    letterSpacing: -0.3,
+    marginBottom: 10,
+    textShadowColor: 'rgba(7, 187, 192, 0.35)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+  },
+  tryItHeroTagline: {
+    color: '#8aa3b0',
+    fontSize: 14,
+    fontStyle: 'italic',
+    lineHeight: 21,
+    fontWeight: '500',
   },
   videoPlayer: {
     width: '100%',
@@ -1203,33 +1197,8 @@ const styles = StyleSheet.create({
   tryItSubtext: {
     color: '#6b8693',
     fontSize: 14,
-    marginBottom: 24,
+    marginBottom: 20,
     textAlign: 'center',
-  },
-  timerCircleWrap: {
-    alignSelf: 'center',
-    position: 'relative',
-    marginBottom: 24,
-  },
-  timerSvg: { alignSelf: 'center' },
-  timerTextContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  timerTimeText: {
-    color: '#FFFFFF',
-    fontSize: 42,
-    fontWeight: '700',
-  },
-  timerLabel: {
-    color: '#6b8693',
-    fontSize: 14,
-    marginTop: 4,
   },
   timerControlButton: {
     flexDirection: 'row',

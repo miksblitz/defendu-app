@@ -41,6 +41,8 @@ function categoryFolderForExtract(category: string): string {
     'elbow strikes': 'elbow_strikes',
     'knee strikes': 'knee_strikes',
     'defensive moves': 'defensive_moves',
+    warmup: 'warmup',
+    cooldown: 'cooldown',
   };
   return map[key] ?? (key.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'other');
 }
@@ -68,16 +70,25 @@ function getPlayableVideoUrl(url: string | undefined): string {
   return u;
 }
 
+function isSegmentModule(m: Module | null | undefined): boolean {
+  return m?.moduleSegment === 'warmup' || m?.moduleSegment === 'cooldown';
+}
+
 export default function ModuleDetailPage() {
   const router = useRouter();
-  const { moduleId: moduleIdParam, mode, category: categoryParam } = useLocalSearchParams<{
+  const { moduleId: moduleIdParam, mode, category: categoryParam, segment: segmentParamRaw } = useLocalSearchParams<{
     moduleId: string | string[];
     mode?: string;
     category?: string;
+    segment?: string | string[];
   }>();
   /** Expo web/router may pass search params as string[] — API expects a single string. */
   const moduleId = Array.isArray(moduleIdParam) ? moduleIdParam[0] : moduleIdParam;
   const isCreateMode = mode === 'create';
+  const segmentParam = Array.isArray(segmentParamRaw) ? segmentParamRaw[0] : segmentParamRaw;
+  const createSegment: Module['moduleSegment'] | undefined =
+    segmentParam === 'warmup' || segmentParam === 'cooldown' ? segmentParam : undefined;
+  const isSegmentCreateMode = isCreateMode && !!createSegment;
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
   const [module, setModule] = useState<Module | null>(null);
@@ -116,6 +127,7 @@ export default function ModuleDetailPage() {
   const [editReferenceGuideUrl, setEditReferenceGuideUrl] = useState('');
   const techniqueVideoInputRef = useRef<HTMLInputElement | null>(null);
   const thumbnailWebInputRef = useRef<HTMLInputElement | null>(null);
+  const referenceGuideWebInputRef = useRef<HTMLInputElement | null>(null);
   const [editIntensity, setEditIntensity] = useState<number>(1);
   const [editSpaceRequirements, setEditSpaceRequirements] = useState<string[]>([]);
   const [editPhysicalDemandTags, setEditPhysicalDemandTags] = useState<string[]>([]);
@@ -144,11 +156,12 @@ export default function ModuleDetailPage() {
   ];
 
   useEffect(() => {
-    if (isCreateMode) {
-      // Load categories for create mode category picker
+    if (isCreateMode && !createSegment) {
       AuthController.getModuleCategories()
         .then(setCategories)
         .catch((err) => console.error('Failed to load categories:', err));
+    } else if (isCreateMode && createSegment) {
+      setCategories([]);
     } else if (moduleId) {
       loadModule();
       // Also load categories for edit mode category picker
@@ -156,11 +169,12 @@ export default function ModuleDetailPage() {
         .then(setCategories)
         .catch((err) => console.error('Failed to load categories:', err));
     }
-    // Fetch approved trainers for the trainer picker
-    AuthController.getApprovedTrainers()
-      .then(setApprovedTrainers)
-      .catch((err) => console.error('Failed to load trainers:', err));
-  }, [moduleId, isCreateMode]);
+    if (!isCreateMode || !createSegment) {
+      AuthController.getApprovedTrainers()
+        .then(setApprovedTrainers)
+        .catch((err) => console.error('Failed to load trainers:', err));
+    }
+  }, [moduleId, isCreateMode, createSegment]);
 
   useEffect(() => {
     if (module) {
@@ -288,8 +302,31 @@ export default function ModuleDetailPage() {
     }
   };
 
+  const handleWebReferenceGuidePick = async (event: any) => {
+    const file = event.target.files?.[0];
+    if (referenceGuideWebInputRef.current) referenceGuideWebInputRef.current.value = '';
+    if (!file) return;
+    try {
+      setProcessing(true);
+      const uri = URL.createObjectURL(file);
+      const url = await AuthController.uploadFileToCloudinary(uri, 'image', file.name || 'module_reference_guide');
+      URL.revokeObjectURL(uri);
+      setEditReferenceGuideUrl(url);
+      showToast('Reference guide updated');
+    } catch (error: any) {
+      console.error('Error uploading reference guide:', error);
+      showToast(error.message || 'Failed to update reference guide');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handlePickReferenceGuide = async () => {
     try {
+      if (Platform.OS === 'web') {
+        referenceGuideWebInputRef.current?.click();
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -387,10 +424,11 @@ export default function ModuleDetailPage() {
       showToast('Title cannot be empty');
       return;
     }
-    if (!editTrainerId) {
+    if (!isSegmentModule(module) && !editTrainerId) {
       showToast('Please select a trainer');
       return;
     }
+    const segmentModuleSave = isSegmentModule(module);
     try {
       setProcessing(true);
       const vid = editTechniqueVideoUrl.trim();
@@ -408,13 +446,13 @@ export default function ModuleDetailPage() {
         difficultyLevel: editDifficulty,
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
         referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
-        intensityLevel: editIntensity,
-        spaceRequirements: editSpaceRequirements,
-        physicalDemandTags: editPhysicalDemandTags,
-        techniqueVideoUrl: vid || null,
-        techniqueVideoUrl2: !vid && !savedLink ? null : undefined,
+        intensityLevel: segmentModuleSave ? 1 : editIntensity,
+        spaceRequirements: segmentModuleSave ? ['Stationary'] : editSpaceRequirements,
+        physicalDemandTags: segmentModuleSave ? [] : editPhysicalDemandTags,
+        techniqueVideoUrl: segmentModuleSave ? null : vid || null,
+        techniqueVideoUrl2: segmentModuleSave ? null : !vid && !savedLink ? null : undefined,
         ...(trainerNeedsUpdate ? { trainerId: editTrainerId, trainerName: trimmedTrainerName } : {}),
-        stancePosition: editStancePosition === 'front view' ? 'front view' : 'side view',
+        stancePosition: segmentModuleSave ? 'side view' : editStancePosition === 'front view' ? 'front view' : 'side view',
       });
       const updated: Module = {
         ...module,
@@ -423,14 +461,14 @@ export default function ModuleDetailPage() {
         introduction: editIntroduction.trim() || module.introduction,
         category: editCategory.trim() || module.category,
         difficultyLevel: editDifficulty,
-        stancePosition: editStancePosition === 'front view' ? 'front view' : 'side view',
+        stancePosition: segmentModuleSave ? 'side view' : editStancePosition === 'front view' ? 'front view' : 'side view',
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
         referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
-        intensityLevel: editIntensity,
-        spaceRequirements: editSpaceRequirements,
-        physicalDemandTags: editPhysicalDemandTags,
-        techniqueVideoUrl: vid || undefined,
-        techniqueVideoUrl2: !vid && !savedLink ? undefined : module.techniqueVideoUrl2,
+        intensityLevel: segmentModuleSave ? 1 : editIntensity,
+        spaceRequirements: segmentModuleSave ? ['Stationary'] : editSpaceRequirements,
+        physicalDemandTags: segmentModuleSave ? [] : editPhysicalDemandTags,
+        techniqueVideoUrl: segmentModuleSave ? undefined : vid || undefined,
+        techniqueVideoUrl2: segmentModuleSave ? undefined : !vid && !savedLink ? undefined : module.techniqueVideoUrl2,
         ...(trainerNeedsUpdate ? { trainerId: editTrainerId, trainerName: trimmedTrainerName } : {}),
         updatedAt: new Date(),
       };
@@ -448,26 +486,34 @@ export default function ModuleDetailPage() {
   const handleCreateModule = async () => {
     const trimmedTitle = editTitle.trim();
     if (!trimmedTitle) { showToast('Title is required'); return; }
-    if (!createCategory) { showToast('Category is required'); return; }
-    if (!editTrainerId) { showToast('Trainer is required'); return; }
+    if (!createSegment && !createCategory) { showToast('Category is required'); return; }
+    if (!createSegment && !editTrainerId) { showToast('Trainer is required'); return; }
+    const seg = createSegment;
     try {
       setProcessing(true);
       const newModuleId = await AuthController.adminCreateModule({
         moduleTitle: trimmedTitle,
-        description: createDescription.trim(),
-        category: createCategory,
-        trainerId: editTrainerId,
-        trainerName: editTrainerName,
+        description: seg ? '' : createDescription.trim(),
+        category: seg ? '' : createCategory,
+        trainerId: seg ? undefined : editTrainerId,
+        trainerName: seg ? undefined : editTrainerName,
         difficultyLevel: editDifficulty || 'basic',
-        intensityLevel: editIntensity,
-        spaceRequirements: editSpaceRequirements,
-        physicalDemandTags: editPhysicalDemandTags,
+        intensityLevel: seg ? 1 : editIntensity,
+        spaceRequirements: seg ? ['Stationary'] : editSpaceRequirements,
+        physicalDemandTags: seg ? [] : editPhysicalDemandTags,
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
-        techniqueVideoUrl: editTechniqueVideoUrl.trim() || undefined,
+        techniqueVideoUrl: seg ? undefined : editTechniqueVideoUrl.trim() || undefined,
         referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
-        stancePosition: editStancePosition === 'front view' ? 'front view' : 'side view',
+        stancePosition: seg ? 'side view' : editStancePosition === 'front view' ? 'front view' : 'side view',
+        moduleSegment: seg,
       });
-      showToast('Module created successfully!');
+      showToast(
+        seg === 'warmup'
+          ? 'Warm-up created successfully.'
+          : seg === 'cooldown'
+            ? 'Cool-down created successfully.'
+            : 'Module created successfully.'
+      );
       router.replace({
         pathname: '/(admin)/module-detail',
         params: { moduleId: newModuleId },
@@ -597,7 +643,7 @@ export default function ModuleDetailPage() {
           ? editTitle.trim() || module.moduleTitle
           : module.moduleTitle,
         module.trainerName ?? '',
-        module.category
+        module.category?.trim() || module.moduleSegment || ''
       )
     : 'pose_data.csv';
 
@@ -702,11 +748,23 @@ export default function ModuleDetailPage() {
           <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
             <View style={styles.statusContainer}>
               <View style={[styles.statusBadge, styles.statusBadgeApproved]}>
-                <Text style={styles.statusText}>New Module</Text>
+                <Text style={styles.statusText}>
+                  {createSegment === 'warmup'
+                    ? 'New Warm-up'
+                    : createSegment === 'cooldown'
+                      ? 'New Cool-down'
+                      : 'New Module'}
+                </Text>
               </View>
             </View>
 
-            <Text style={[styles.moduleTitle, { marginBottom: 16 }]}>Create Module</Text>
+            <Text style={[styles.moduleTitle, { marginBottom: 16 }]}>
+              {createSegment === 'warmup'
+                ? 'Create Warmup'
+                : createSegment === 'cooldown'
+                  ? 'Create Cooldown'
+                  : 'Create Module'}
+            </Text>
 
             <View style={styles.editSection}>
               <Text style={styles.editLabel}>Title *</Text>
@@ -719,64 +777,83 @@ export default function ModuleDetailPage() {
                 autoFocus
               />
 
-              <Text style={styles.editLabel}>Description</Text>
-              <TextInput
-                style={[styles.editInput, { minHeight: 80, textAlignVertical: 'top' }]}
-                value={createDescription}
-                onChangeText={setCreateDescription}
-                placeholder="Module description"
-                placeholderTextColor="#6b8693"
-                multiline
-                numberOfLines={3}
-              />
-
-              <Text style={styles.editLabel}>Category *</Text>
-              <TouchableOpacity
-                style={styles.trainerPickerButton}
-                onPress={() => setShowCategoryPicker(true)}
-              >
-                <Text style={styles.trainerPickerText}>
-                  {createCategory || 'Select category'}
+              {!isSegmentCreateMode ? (
+                <>
+                  <Text style={styles.editLabel}>Description</Text>
+                  <TextInput
+                    style={[styles.editInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                    value={createDescription}
+                    onChangeText={setCreateDescription}
+                    placeholder="Module description"
+                    placeholderTextColor="#6b8693"
+                    multiline
+                    numberOfLines={3}
+                  />
+                </>
+              ) : (
+                <Text style={[styles.editHint, { marginBottom: 12 }]}>
+                  Warm-up / cool-down entry: use a clear title; description is optional and hidden here.
                 </Text>
-                <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
-              </TouchableOpacity>
+              )}
 
-              <Modal
-                visible={showCategoryPicker}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowCategoryPicker(false)}
-              >
-                <TouchableOpacity style={styles.trainerPickerOverlay} activeOpacity={1} onPress={() => setShowCategoryPicker(false)}>
-                  <View style={styles.trainerPickerModal}>
-                    <Text style={styles.trainerPickerTitle}>Select Category</Text>
-                    <ScrollView style={styles.trainerPickerList}>
-                      {categories.length === 0 ? (
-                        <Text style={styles.trainerPickerEmpty}>No categories found</Text>
-                      ) : (
-                        categories.map((cat) => {
-                          const isSelected = cat === createCategory;
-                          return (
-                            <TouchableOpacity
-                              key={cat}
-                              style={[styles.trainerPickerItem, isSelected && styles.trainerPickerItemActive]}
-                              onPress={() => { setCreateCategory(cat); setShowCategoryPicker(false); }}
-                            >
-                              <View style={{ flex: 1 }}>
-                                <Text style={[styles.trainerPickerItemText, isSelected && styles.trainerPickerItemTextActive]}>{cat}</Text>
-                              </View>
-                              {isSelected && <Ionicons name="checkmark-circle" size={20} color="#38a6de" />}
-                            </TouchableOpacity>
-                          );
-                        })
-                      )}
-                    </ScrollView>
-                    <TouchableOpacity style={styles.trainerPickerCloseButton} onPress={() => setShowCategoryPicker(false)}>
-                      <Text style={styles.trainerPickerCloseText}>Close</Text>
+              {!isSegmentCreateMode ? (
+                <>
+                  <Text style={styles.editLabel}>Category *</Text>
+                  <TouchableOpacity
+                    style={styles.trainerPickerButton}
+                    onPress={() => setShowCategoryPicker(true)}
+                  >
+                    <Text style={styles.trainerPickerText}>
+                      {createCategory || 'Select category'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
+                  </TouchableOpacity>
+
+                  <Modal
+                    visible={showCategoryPicker}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowCategoryPicker(false)}
+                  >
+                    <TouchableOpacity style={styles.trainerPickerOverlay} activeOpacity={1} onPress={() => setShowCategoryPicker(false)}>
+                      <View style={styles.trainerPickerModal}>
+                        <Text style={styles.trainerPickerTitle}>Select Category</Text>
+                        <ScrollView style={styles.trainerPickerList}>
+                          {categories.length === 0 ? (
+                            <Text style={styles.trainerPickerEmpty}>No categories found</Text>
+                          ) : (
+                            categories.map((cat) => {
+                              const isSelected = cat === createCategory;
+                              return (
+                                <TouchableOpacity
+                                  key={cat}
+                                  style={[styles.trainerPickerItem, isSelected && styles.trainerPickerItemActive]}
+                                  onPress={() => { setCreateCategory(cat); setShowCategoryPicker(false); }}
+                                >
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={[styles.trainerPickerItemText, isSelected && styles.trainerPickerItemTextActive]}>{cat}</Text>
+                                  </View>
+                                  {isSelected && <Ionicons name="checkmark-circle" size={20} color="#38a6de" />}
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </ScrollView>
+                        <TouchableOpacity style={styles.trainerPickerCloseButton} onPress={() => setShowCategoryPicker(false)}>
+                          <Text style={styles.trainerPickerCloseText}>Close</Text>
+                        </TouchableOpacity>
+                      </View>
                     </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              </Modal>
+                  </Modal>
+                </>
+              ) : (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={styles.editLabel}>Type</Text>
+                  <Text style={styles.trainerPickerText}>
+                    {createSegment === 'warmup' ? 'Warm-up' : 'Cool-down'} (managed separately from technique categories)
+                  </Text>
+                </View>
+              )}
 
               <Text style={styles.editLabel}>Difficulty</Text>
               <View style={styles.difficultyRow}>
@@ -793,6 +870,8 @@ export default function ModuleDetailPage() {
                 ))}
               </View>
 
+              {!isSegmentCreateMode ? (
+              <>
               <Text style={styles.editLabel}>Stance position</Text>
               <View style={styles.difficultyRow}>
                 <TouchableOpacity
@@ -812,56 +891,62 @@ export default function ModuleDetailPage() {
                   </Text>
                 </TouchableOpacity>
               </View>
+              </>
+              ) : null}
 
-              <Text style={styles.editLabel}>Trainer *</Text>
-              <TouchableOpacity
-                style={styles.trainerPickerButton}
-                onPress={() => setShowTrainerPicker(true)}
-              >
-                <Text style={styles.trainerPickerText}>
-                  {editTrainerName || 'Select trainer'}
-                </Text>
-                <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
-              </TouchableOpacity>
+              {!isSegmentCreateMode ? (
+                <>
+                  <Text style={styles.editLabel}>Trainer *</Text>
+                  <TouchableOpacity
+                    style={styles.trainerPickerButton}
+                    onPress={() => setShowTrainerPicker(true)}
+                  >
+                    <Text style={styles.trainerPickerText}>
+                      {editTrainerName || 'Select trainer'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
+                  </TouchableOpacity>
 
-              <Modal
-                visible={showTrainerPicker}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowTrainerPicker(false)}
-              >
-                <TouchableOpacity style={styles.trainerPickerOverlay} activeOpacity={1} onPress={() => setShowTrainerPicker(false)}>
-                  <View style={styles.trainerPickerModal}>
-                    <Text style={styles.trainerPickerTitle}>Select Trainer</Text>
-                    <ScrollView style={styles.trainerPickerList}>
-                      {approvedTrainers.length === 0 ? (
-                        <Text style={styles.trainerPickerEmpty}>No approved trainers found</Text>
-                      ) : (
-                        approvedTrainers.map((trainer) => {
-                          const name = trainer.username || `${trainer.firstName} ${trainer.lastName}`.trim();
-                          const isSelected = trainer.uid === editTrainerId;
-                          return (
-                            <TouchableOpacity
-                              key={trainer.uid}
-                              style={[styles.trainerPickerItem, isSelected && styles.trainerPickerItemActive]}
-                              onPress={() => { setEditTrainerId(trainer.uid); setEditTrainerName(name); setShowTrainerPicker(false); }}
-                            >
-                              <View style={{ flex: 1 }}>
-                                <Text style={[styles.trainerPickerItemText, isSelected && styles.trainerPickerItemTextActive]}>{name}</Text>
-                                <Text style={styles.trainerPickerItemEmail}>{trainer.email}</Text>
-                              </View>
-                              {isSelected && <Ionicons name="checkmark-circle" size={20} color="#38a6de" />}
-                            </TouchableOpacity>
-                          );
-                        })
-                      )}
-                    </ScrollView>
-                    <TouchableOpacity style={styles.trainerPickerCloseButton} onPress={() => setShowTrainerPicker(false)}>
-                      <Text style={styles.trainerPickerCloseText}>Close</Text>
+                  <Modal
+                    visible={showTrainerPicker}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowTrainerPicker(false)}
+                  >
+                    <TouchableOpacity style={styles.trainerPickerOverlay} activeOpacity={1} onPress={() => setShowTrainerPicker(false)}>
+                      <View style={styles.trainerPickerModal}>
+                        <Text style={styles.trainerPickerTitle}>Select Trainer</Text>
+                        <ScrollView style={styles.trainerPickerList}>
+                          {approvedTrainers.length === 0 ? (
+                            <Text style={styles.trainerPickerEmpty}>No approved trainers found</Text>
+                          ) : (
+                            approvedTrainers.map((trainer) => {
+                              const name = trainer.username || `${trainer.firstName} ${trainer.lastName}`.trim();
+                              const isSelected = trainer.uid === editTrainerId;
+                              return (
+                                <TouchableOpacity
+                                  key={trainer.uid}
+                                  style={[styles.trainerPickerItem, isSelected && styles.trainerPickerItemActive]}
+                                  onPress={() => { setEditTrainerId(trainer.uid); setEditTrainerName(name); setShowTrainerPicker(false); }}
+                                >
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={[styles.trainerPickerItemText, isSelected && styles.trainerPickerItemTextActive]}>{name}</Text>
+                                    <Text style={styles.trainerPickerItemEmail}>{trainer.email}</Text>
+                                  </View>
+                                  {isSelected && <Ionicons name="checkmark-circle" size={20} color="#38a6de" />}
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </ScrollView>
+                        <TouchableOpacity style={styles.trainerPickerCloseButton} onPress={() => setShowTrainerPicker(false)}>
+                          <Text style={styles.trainerPickerCloseText}>Close</Text>
+                        </TouchableOpacity>
+                      </View>
                     </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              </Modal>
+                  </Modal>
+                </>
+              ) : null}
 
               <Text style={styles.editLabel}>Thumbnail (image or GIF)</Text>
               {editThumbnailUrl ? (
@@ -879,6 +964,29 @@ export default function ModuleDetailPage() {
                 </TouchableOpacity>
               </View>
 
+              <Text style={styles.editLabel}>Reference guide (GIF or image)</Text>
+              <Text style={styles.editHint}>Upload a demo GIF or image for the practice screen (recommended for warmups and cooldowns).</Text>
+              {editReferenceGuideUrl ? (
+                <Image source={{ uri: editReferenceGuideUrl }} style={styles.editReferenceGuidePreview} resizeMode="contain" />
+              ) : null}
+              {Platform.OS === 'web' ? (
+                <input
+                  ref={referenceGuideWebInputRef}
+                  type="file"
+                  accept="image/*,.gif"
+                  style={{ display: 'none' }}
+                  onChange={handleWebReferenceGuidePick}
+                />
+              ) : null}
+              <TouchableOpacity style={styles.referenceGuideButton} onPress={handlePickReferenceGuide} disabled={processing}>
+                <Ionicons name="image-outline" size={18} color="#38a6de" />
+                <Text style={styles.thumbnailButtonText}>
+                  {editReferenceGuideUrl ? 'Replace reference guide' : 'Choose image or GIF'}
+                </Text>
+              </TouchableOpacity>
+
+              {!isSegmentCreateMode ? (
+              <>
               <Text style={styles.editLabel}>Technique video</Text>
               {editTechniqueVideoUrl ? (
                 <Text style={styles.editTechniqueVideoUrl} numberOfLines={2}>{editTechniqueVideoUrl}</Text>
@@ -930,6 +1038,8 @@ export default function ModuleDetailPage() {
                   </TouchableOpacity>
                 ))}
               </View>
+              </>
+              ) : null}
 
               <TouchableOpacity
                 style={[styles.saveEditsButton, processing && styles.saveEditsButtonDisabled]}
@@ -939,7 +1049,13 @@ export default function ModuleDetailPage() {
                 {processing ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.saveEditsButtonText}>Create Module</Text>
+                  <Text style={styles.saveEditsButtonText}>
+                    {createSegment === 'warmup'
+                      ? 'Create Warmup'
+                      : createSegment === 'cooldown'
+                        ? 'Create Cooldown'
+                        : 'Create Module'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -980,6 +1096,7 @@ export default function ModuleDetailPage() {
   const isRejected = module.status === 'rejected';
   const isDraft = module.status === 'draft';
   const canOpenModuleEditor = isApproved || isPending || isDraft;
+  const isSegmentDetailModule = isSegmentModule(module);
 
   const displayTechniqueVideoUrl =
     isApproved && isEditing ? editTechniqueVideoUrl.trim() : (module.techniqueVideoUrl || '');
@@ -1037,41 +1154,92 @@ export default function ModuleDetailPage() {
 
         {/* Main Content */}
         <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
-          {/* Module Status Badge */}
-          <View style={styles.statusContainer}>
-            <View
-              style={[
-                styles.statusBadge,
-                isPending && styles.statusBadgePending,
-                isApproved && styles.statusBadgeApproved,
-                isRejected && styles.statusBadgeRejected,
-              ]}
-            >
-              <Text style={styles.statusText}>
-                {module.status === 'pending review' ? 'Pending Review' : 
-                 module.status === 'approved' ? 'Approved' : 
-                 module.status === 'rejected' ? 'Rejected' :
-                 module.status === 'disabled' ? 'Disabled' : 'Draft'}
-              </Text>
-            </View>
-          </View>
+          {!isEditing ? (
+            <>
+              <View style={styles.statusContainer}>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    isPending && styles.statusBadgePending,
+                    isApproved && styles.statusBadgeApproved,
+                    isRejected && styles.statusBadgeRejected,
+                  ]}
+                >
+                  <Text style={styles.statusText}>
+                    {module.status === 'pending review' ? 'Pending Review' :
+                     module.status === 'approved' ? 'Approved' :
+                     module.status === 'rejected' ? 'Rejected' :
+                     module.status === 'disabled' ? 'Disabled' : 'Draft'}
+                  </Text>
+                </View>
+              </View>
 
-          {/* Module Title */}
-          <View style={styles.titleRow}>
-            <Text style={styles.moduleTitle}>{module.moduleTitle}</Text>
-            {canOpenModuleEditor && (
-              <TouchableOpacity
-                style={styles.editToggleButton}
-                onPress={() => setIsEditing((prev) => !prev)}
-              >
-                <Ionicons name="create-outline" size={18} color="#38a6de" />
-                <Text style={styles.editToggleText}>{isEditing ? 'Cancel' : 'Edit'}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+              <View style={styles.titleRow}>
+                <Text style={styles.moduleTitle}>{module.moduleTitle}</Text>
+                {canOpenModuleEditor && (
+                  <TouchableOpacity
+                    style={styles.editToggleButton}
+                    onPress={() => setIsEditing(true)}
+                  >
+                    <Ionicons name="create-outline" size={18} color="#38a6de" />
+                    <Text style={styles.editToggleText}>Edit</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </>
+          ) : null}
 
           {canOpenModuleEditor && isEditing && (
-            <View style={styles.editSection}>
+            <View style={styles.editModeShell}>
+              <View style={styles.editHeroCard}>
+                <View style={styles.editHeroTop}>
+                  <View style={styles.editHeroTextBlock}>
+                    <Text style={styles.editHeroEyebrow}>EDITING MODULE</Text>
+                    <Text style={styles.editHeroHeadline} numberOfLines={2}>
+                      {module.moduleTitle}
+                    </Text>
+                    {!isSegmentDetailModule ? (
+                      <Text style={styles.editHeroId} selectable>
+                        {getReferenceCode(module.moduleId)} · {module.moduleId}
+                      </Text>
+                    ) : (
+                      <Text style={styles.editHeroId}>
+                        {module.moduleSegment === 'warmup' ? 'Warm-up' : 'Cool-down'} · {module.moduleId}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.editHeroCancel}
+                    onPress={() => setIsEditing(false)}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="close" size={20} color="#cfe6f0" />
+                    <Text style={styles.editHeroCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.editHeroMeta}>
+                  <View
+                    style={[
+                      styles.editHeroStatusPill,
+                      isPending && styles.statusBadgePending,
+                      isApproved && styles.statusBadgeApproved,
+                      isRejected && styles.statusBadgeRejected,
+                      module.status === 'disabled' && styles.editHeroStatusDisabled,
+                      module.status === 'draft' && styles.editHeroStatusDraft,
+                    ]}
+                  >
+                    <Text style={styles.editHeroStatusText}>
+                      {module.status === 'pending review' ? 'Pending review' :
+                       module.status === 'approved' ? 'Approved' :
+                       module.status === 'rejected' ? 'Rejected' :
+                       module.status === 'disabled' ? 'Disabled' : 'Draft'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.editSectionInner}>
+              <Text style={[styles.editSubsectionLabel, styles.editSubsectionLabelFirst]}>Details</Text>
               <Text style={styles.editLabel}>Title</Text>
               <TextInput
                 style={styles.editInput}
@@ -1081,75 +1249,90 @@ export default function ModuleDetailPage() {
                 placeholderTextColor="#6b8693"
               />
 
-              <Text style={styles.editLabel}>Description</Text>
-              <TextInput
-                style={[styles.editInput, { minHeight: 80, textAlignVertical: 'top' }]}
-                value={editDescription}
-                onChangeText={setEditDescription}
-                placeholder="Module description"
-                placeholderTextColor="#6b8693"
-                multiline
-                numberOfLines={3}
-              />
+              {!isSegmentDetailModule ? (
+                <>
+                  <Text style={styles.editLabel}>Description</Text>
+                  <TextInput
+                    style={[styles.editInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                    value={editDescription}
+                    onChangeText={setEditDescription}
+                    placeholder="Module description"
+                    placeholderTextColor="#6b8693"
+                    multiline
+                    numberOfLines={3}
+                  />
 
-              <Text style={styles.editLabel}>Introduction (text)</Text>
-              <TextInput
-                style={[styles.editInput, { minHeight: 80, textAlignVertical: 'top' }]}
-                value={editIntroduction}
-                onChangeText={setEditIntroduction}
-                placeholder="Introduction text"
-                placeholderTextColor="#6b8693"
-                multiline
-                numberOfLines={3}
-              />
+                  <Text style={styles.editLabel}>Introduction (text)</Text>
+                  <TextInput
+                    style={[styles.editInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                    value={editIntroduction}
+                    onChangeText={setEditIntroduction}
+                    placeholder="Introduction text"
+                    placeholderTextColor="#6b8693"
+                    multiline
+                    numberOfLines={3}
+                  />
+                </>
+              ) : null}
 
-              <Text style={styles.editLabel}>Category</Text>
-              <TouchableOpacity
-                style={styles.trainerPickerButton}
-                onPress={() => setShowEditCategoryPicker(true)}
-              >
-                <Text style={styles.trainerPickerText}>
-                  {editCategory || 'Select category'}
-                </Text>
-                <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
-              </TouchableOpacity>
+              {!isSegmentDetailModule ? (
+                <>
+                  <Text style={styles.editLabel}>Category</Text>
+                  <TouchableOpacity
+                    style={styles.trainerPickerButton}
+                    onPress={() => setShowEditCategoryPicker(true)}
+                  >
+                    <Text style={styles.trainerPickerText}>
+                      {editCategory || 'Select category'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
+                  </TouchableOpacity>
 
-              <Modal
-                visible={showEditCategoryPicker}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowEditCategoryPicker(false)}
-              >
-                <TouchableOpacity style={styles.trainerPickerOverlay} activeOpacity={1} onPress={() => setShowEditCategoryPicker(false)}>
-                  <View style={styles.trainerPickerModal}>
-                    <Text style={styles.trainerPickerTitle}>Select Category</Text>
-                    <ScrollView style={styles.trainerPickerList}>
-                      {categories.length === 0 ? (
-                        <Text style={styles.trainerPickerEmpty}>No categories found</Text>
-                      ) : (
-                        categories.map((cat) => {
-                          const isSelected = cat === editCategory;
-                          return (
-                            <TouchableOpacity
-                              key={cat}
-                              style={[styles.trainerPickerItem, isSelected && styles.trainerPickerItemActive]}
-                              onPress={() => { setEditCategory(cat); setShowEditCategoryPicker(false); }}
-                            >
-                              <View style={{ flex: 1 }}>
-                                <Text style={[styles.trainerPickerItemText, isSelected && styles.trainerPickerItemTextActive]}>{cat}</Text>
-                              </View>
-                              {isSelected && <Ionicons name="checkmark-circle" size={20} color="#38a6de" />}
-                            </TouchableOpacity>
-                          );
-                        })
-                      )}
-                    </ScrollView>
-                    <TouchableOpacity style={styles.trainerPickerCloseButton} onPress={() => setShowEditCategoryPicker(false)}>
-                      <Text style={styles.trainerPickerCloseText}>Close</Text>
+                  <Modal
+                    visible={showEditCategoryPicker}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowEditCategoryPicker(false)}
+                  >
+                    <TouchableOpacity style={styles.trainerPickerOverlay} activeOpacity={1} onPress={() => setShowEditCategoryPicker(false)}>
+                      <View style={styles.trainerPickerModal}>
+                        <Text style={styles.trainerPickerTitle}>Select Category</Text>
+                        <ScrollView style={styles.trainerPickerList}>
+                          {categories.length === 0 ? (
+                            <Text style={styles.trainerPickerEmpty}>No categories found</Text>
+                          ) : (
+                            categories.map((cat) => {
+                              const isSelected = cat === editCategory;
+                              return (
+                                <TouchableOpacity
+                                  key={cat}
+                                  style={[styles.trainerPickerItem, isSelected && styles.trainerPickerItemActive]}
+                                  onPress={() => { setEditCategory(cat); setShowEditCategoryPicker(false); }}
+                                >
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={[styles.trainerPickerItemText, isSelected && styles.trainerPickerItemTextActive]}>{cat}</Text>
+                                  </View>
+                                  {isSelected && <Ionicons name="checkmark-circle" size={20} color="#38a6de" />}
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </ScrollView>
+                        <TouchableOpacity style={styles.trainerPickerCloseButton} onPress={() => setShowEditCategoryPicker(false)}>
+                          <Text style={styles.trainerPickerCloseText}>Close</Text>
+                        </TouchableOpacity>
+                      </View>
                     </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              </Modal>
+                  </Modal>
+                </>
+              ) : (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={styles.editLabel}>Type</Text>
+                  <Text style={styles.trainerPickerText}>
+                    {module.moduleSegment === 'warmup' ? 'Warm-up' : 'Cool-down'}
+                  </Text>
+                </View>
+              )}
 
               <Text style={styles.editLabel}>Difficulty</Text>
               <View style={styles.difficultyRow}>
@@ -1174,6 +1357,8 @@ export default function ModuleDetailPage() {
                 ))}
               </View>
 
+              {!isSegmentDetailModule ? (
+              <>
               <Text style={styles.editLabel}>Stance position</Text>
               <View style={styles.difficultyRow}>
                 <TouchableOpacity
@@ -1193,82 +1378,89 @@ export default function ModuleDetailPage() {
                   </Text>
                 </TouchableOpacity>
               </View>
+              </>
+              ) : null}
 
-              <Text style={styles.editLabel}>Trainer</Text>
-              <TouchableOpacity
-                style={styles.trainerPickerButton}
-                onPress={() => setShowTrainerPicker(true)}
-              >
-                <Text style={styles.trainerPickerText}>
-                  {editTrainerName || 'Select trainer'}
-                </Text>
-                <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
-              </TouchableOpacity>
+              {!isSegmentDetailModule ? (
+                <>
+                  <Text style={styles.editLabel}>Trainer</Text>
+                  <TouchableOpacity
+                    style={styles.trainerPickerButton}
+                    onPress={() => setShowTrainerPicker(true)}
+                  >
+                    <Text style={styles.trainerPickerText}>
+                      {editTrainerName || 'Select trainer'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#9bb8c7" />
+                  </TouchableOpacity>
 
-              <Modal
-                visible={showTrainerPicker}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowTrainerPicker(false)}
-              >
-                <TouchableOpacity
-                  style={styles.trainerPickerOverlay}
-                  activeOpacity={1}
-                  onPress={() => setShowTrainerPicker(false)}
-                >
-                  <View style={styles.trainerPickerModal}>
-                    <Text style={styles.trainerPickerTitle}>Select Trainer</Text>
-                    <ScrollView style={styles.trainerPickerList}>
-                      {approvedTrainers.length === 0 ? (
-                        <Text style={styles.trainerPickerEmpty}>No approved trainers found</Text>
-                      ) : (
-                        approvedTrainers.map((trainer) => {
-                          const name = trainer.username || `${trainer.firstName} ${trainer.lastName}`.trim();
-                          const isSelected = trainer.uid === editTrainerId;
-                          return (
-                            <TouchableOpacity
-                              key={trainer.uid}
-                              style={[
-                                styles.trainerPickerItem,
-                                isSelected && styles.trainerPickerItemActive,
-                              ]}
-                              onPress={() => {
-                                setEditTrainerId(trainer.uid);
-                                setEditTrainerName(name);
-                                setShowTrainerPicker(false);
-                              }}
-                            >
-                              <View style={{ flex: 1 }}>
-                                <Text
-                                  style={[
-                                    styles.trainerPickerItemText,
-                                    isSelected && styles.trainerPickerItemTextActive,
-                                  ]}
-                                >
-                                  {name}
-                                </Text>
-                                <Text style={styles.trainerPickerItemEmail}>
-                                  {trainer.email}
-                                </Text>
-                              </View>
-                              {isSelected && (
-                                <Ionicons name="checkmark-circle" size={20} color="#38a6de" />
-                              )}
-                            </TouchableOpacity>
-                          );
-                        })
-                      )}
-                    </ScrollView>
+                  <Modal
+                    visible={showTrainerPicker}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowTrainerPicker(false)}
+                  >
                     <TouchableOpacity
-                      style={styles.trainerPickerCloseButton}
+                      style={styles.trainerPickerOverlay}
+                      activeOpacity={1}
                       onPress={() => setShowTrainerPicker(false)}
                     >
-                      <Text style={styles.trainerPickerCloseText}>Close</Text>
+                      <View style={styles.trainerPickerModal}>
+                        <Text style={styles.trainerPickerTitle}>Select Trainer</Text>
+                        <ScrollView style={styles.trainerPickerList}>
+                          {approvedTrainers.length === 0 ? (
+                            <Text style={styles.trainerPickerEmpty}>No approved trainers found</Text>
+                          ) : (
+                            approvedTrainers.map((trainer) => {
+                              const name = trainer.username || `${trainer.firstName} ${trainer.lastName}`.trim();
+                              const isSelected = trainer.uid === editTrainerId;
+                              return (
+                                <TouchableOpacity
+                                  key={trainer.uid}
+                                  style={[
+                                    styles.trainerPickerItem,
+                                    isSelected && styles.trainerPickerItemActive,
+                                  ]}
+                                  onPress={() => {
+                                    setEditTrainerId(trainer.uid);
+                                    setEditTrainerName(name);
+                                    setShowTrainerPicker(false);
+                                  }}
+                                >
+                                  <View style={{ flex: 1 }}>
+                                    <Text
+                                      style={[
+                                        styles.trainerPickerItemText,
+                                        isSelected && styles.trainerPickerItemTextActive,
+                                      ]}
+                                    >
+                                      {name}
+                                    </Text>
+                                    <Text style={styles.trainerPickerItemEmail}>
+                                      {trainer.email}
+                                    </Text>
+                                  </View>
+                                  {isSelected && (
+                                    <Ionicons name="checkmark-circle" size={20} color="#38a6de" />
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </ScrollView>
+                        <TouchableOpacity
+                          style={styles.trainerPickerCloseButton}
+                          onPress={() => setShowTrainerPicker(false)}
+                        >
+                          <Text style={styles.trainerPickerCloseText}>Close</Text>
+                        </TouchableOpacity>
+                      </View>
                     </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              </Modal>
+                  </Modal>
+                </>
+              ) : null}
 
+              <Text style={styles.editSubsectionLabel}>Media & appearance</Text>
               <Text style={styles.editLabel}>Thumbnail (image or GIF)</Text>
               <Text style={styles.editHint}>Static images and animated GIFs are uploaded as images to Cloudinary.</Text>
               {editThumbnailUrl ? (
@@ -1317,6 +1509,15 @@ export default function ModuleDetailPage() {
                   resizeMode="contain"
                 />
               ) : null}
+              {Platform.OS === 'web' ? (
+                <input
+                  ref={referenceGuideWebInputRef}
+                  type="file"
+                  accept="image/*,.gif"
+                  style={{ display: 'none' }}
+                  onChange={handleWebReferenceGuidePick}
+                />
+              ) : null}
               <TouchableOpacity
                 style={styles.referenceGuideButton}
                 onPress={handlePickReferenceGuide}
@@ -1328,6 +1529,9 @@ export default function ModuleDetailPage() {
                 </Text>
               </TouchableOpacity>
 
+              {!isSegmentDetailModule ? (
+              <>
+              <Text style={styles.editSubsectionLabel}>{'Technique & AI training'}</Text>
               <Text style={styles.editLabel}>Technique video</Text>
               <Text style={styles.editHint}>
                 Replace the uploaded technique video file. Pose-estimation command and developer email use the URL after you save (while editing, the ticket preview uses your unsaved upload when set).
@@ -1436,9 +1640,22 @@ export default function ModuleDetailPage() {
                   )
                 )}
               </View>
+              </>
+              ) : (
+                <Text style={[styles.editHint, { marginTop: 8 }]}>
+                  Warm-up / cool-down: difficulty, thumbnail, and reference GIF or image are editable above. Technique video and pose tools are hidden for this type.
+                </Text>
+              )}
+
+              </View>
 
               <TouchableOpacity
-                style={[styles.saveEditsButton, processing && styles.saveEditsButtonDisabled]}
+                style={[
+                  styles.saveEditsButton,
+                  styles.saveEditsButtonProminent,
+                  styles.saveEditsButtonInShell,
+                  processing && styles.saveEditsButtonDisabled,
+                ]}
                 onPress={handleSaveEdits}
                 disabled={processing}
               >
@@ -1451,19 +1668,31 @@ export default function ModuleDetailPage() {
             </View>
           )}
 
+          {!isEditing ? (
+          <>
           {/* Basic Information Section */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Basic Information</Text>
             
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Reference Code:</Text>
-              <Text style={styles.infoValue}>{getReferenceCode(module.moduleId)}</Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Module ID:</Text>
-              <Text style={styles.infoValue}>{module.moduleId}</Text>
-            </View>
+            {!isSegmentDetailModule ? (
+              <>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Reference Code:</Text>
+                  <Text style={styles.infoValue}>{getReferenceCode(module.moduleId)}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Module ID:</Text>
+                  <Text style={styles.infoValue}>{module.moduleId}</Text>
+                </View>
+              </>
+            ) : (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Listing:</Text>
+                <Text style={styles.infoValue}>
+                  Warm-up or cool-down — shown by title only (no reference code).
+                </Text>
+              </View>
+            )}
 
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Category:</Text>
@@ -1572,7 +1801,7 @@ export default function ModuleDetailPage() {
             {module.videoDuration && (
               <Text style={styles.durationText}>Duration: {formatDuration(module.videoDuration)}</Text>
             )}
-            {techniqueVideoForExtract ? (
+            {techniqueVideoForExtract && !isSegmentDetailModule ? (
               <TouchableOpacity
                 style={styles.extractDataButton}
                 onPress={() => setShowExtractModal(true)}
@@ -1690,8 +1919,8 @@ export default function ModuleDetailPage() {
             </View>
           )}
 
-          {/* Action Buttons (only show for pending modules, hidden while editing) */}
-          {isPending && !isEditing && (
+          {/* Action Buttons (only show for pending modules) */}
+          {isPending && (
             <View style={styles.actionButtonsContainer}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.rejectButton]}
@@ -1727,6 +1956,10 @@ export default function ModuleDetailPage() {
 
           {/* Spacing at bottom */}
           <View style={styles.bottomSpacing} />
+          </>
+          ) : (
+            <View style={styles.editModeBottomPad} />
+          )}
         </ScrollView>
       </View>
 
@@ -2114,6 +2347,115 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(56, 166, 222, 0.3)',
   },
+  editModeShell: {
+    marginBottom: 8,
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.22)',
+    backgroundColor: 'rgba(7, 22, 36, 0.95)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  editHeroCard: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    backgroundColor: 'rgba(56, 166, 222, 0.07)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(56, 166, 222, 0.15)',
+  },
+  editHeroTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  editHeroTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  editHeroEyebrow: {
+    color: '#38a6de',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.6,
+    marginBottom: 8,
+  },
+  editHeroHeadline: {
+    color: '#f0f8fc',
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 28,
+  },
+  editHeroId: {
+    color: '#7a9aad',
+    fontSize: 12,
+    marginTop: 10,
+    lineHeight: 17,
+  },
+  editHeroCancel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  editHeroCancelText: {
+    color: '#d5e8f2',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  editHeroMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+  },
+  editHeroStatusPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+  },
+  editHeroStatusText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  editHeroStatusDisabled: {
+    backgroundColor: '#546e7a',
+  },
+  editHeroStatusDraft: {
+    backgroundColor: '#37474f',
+  },
+  editSectionInner: {
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 6,
+  },
+  editSubsectionLabel: {
+    color: '#8daab8',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginTop: 20,
+    marginBottom: 4,
+  },
+  editSubsectionLabelFirst: {
+    marginTop: 6,
+  },
+  editModeBottomPad: {
+    height: 40,
+  },
   editLabel: {
     color: '#FFFFFF',
     fontSize: 14,
@@ -2122,14 +2464,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   editInput: {
-    backgroundColor: 'rgba(5, 18, 32, 0.9)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    backgroundColor: 'rgba(5, 18, 32, 0.95)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
     borderWidth: 1,
-    borderColor: '#1c3850',
+    borderColor: 'rgba(56, 166, 222, 0.18)',
   },
   difficultyRow: {
     flexDirection: 'row',
@@ -2247,6 +2589,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#38a6de',
+  },
+  saveEditsButtonInShell: {
+    marginTop: 8,
+    marginHorizontal: 18,
+    marginBottom: 18,
+    paddingVertical: 15,
+    borderRadius: 12,
+  },
+  saveEditsButtonProminent: {
+    shadowColor: '#38a6de',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
   saveEditsButtonDisabled: {
     opacity: 0.7,

@@ -512,6 +512,22 @@ export default function TrainerRegistrationScreen() {
 
   // Set up drag and drop event listeners for web
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const user = await AuthController.getCurrentUser();
+        if (cancelled || !user?.email) return;
+        setEmailAddress((prev) => (prev.trim() ? prev : user.email || ''));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (Platform.OS === 'web' && uploadAreaRef.current) {
       const element = uploadAreaRef.current as any;
       

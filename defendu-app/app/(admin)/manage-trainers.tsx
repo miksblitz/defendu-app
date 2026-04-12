@@ -572,36 +572,38 @@ export default function ManageTrainersPage() {
                     </>
                   )}
                   
-                  {selectedApplication.dateOfBirth && (
-                    <>
-                      <Text style={styles.detailLabel}>DATE OF BIRTH:</Text>
-                      <Text style={styles.detailValue}>{selectedApplication.dateOfBirth}</Text>
-                    </>
-                  )}
-                  
+                  <Text style={styles.detailLabel}>DATE OF BIRTH:</Text>
+                  <Text style={styles.detailValue}>
+                    {selectedApplication.dateOfBirth?.trim()
+                      ? selectedApplication.dateOfBirth
+                      : '—'}
+                  </Text>
+
                   {selectedApplication.phone && (
                     <>
                       <Text style={styles.detailLabel}>PHONE:</Text>
                       <Text style={styles.detailValue}>{selectedApplication.phone}</Text>
                     </>
                   )}
-                  
-                  <Text style={styles.detailLabel}>EMAIL:</Text>
-                  <Text style={styles.detailValue}>{selectedApplication.email}</Text>
-                  
+
+                  <Text style={styles.detailLabel}>EMAIL ADDRESS:</Text>
+                  <Text style={styles.detailValue}>
+                    {selectedApplication.email?.trim() ? selectedApplication.email : '—'}
+                  </Text>
+
                   {selectedApplication.academyName && (
                     <>
                       <Text style={styles.detailLabel}>ACADEMY NAME:</Text>
                       <Text style={styles.detailValue}>{selectedApplication.academyName}</Text>
                     </>
                   )}
-                  
-                  {selectedApplication.address && (
-                    <>
-                      <Text style={styles.detailLabel}>ADDRESS:</Text>
-                      <Text style={styles.detailValue}>{selectedApplication.address}</Text>
-                    </>
-                  )}
+
+                  <Text style={styles.detailLabel}>PHYSICAL ADDRESS:</Text>
+                  <Text style={styles.detailValue}>
+                    {(selectedApplication as any).physicalAddress?.trim?.() ||
+                      (selectedApplication as any).address?.trim?.() ||
+                      '—'}
+                  </Text>
                 </View>
               </View>
 
@@ -609,19 +611,40 @@ export default function ManageTrainersPage() {
               <View style={styles.detailSection}>
                 <Text style={styles.detailSectionTitle}>Credentials & Certifications</Text>
                 <View style={styles.detailInfoContainer}>
+                  {selectedApplication.defenseStyles && selectedApplication.defenseStyles.length > 0 ? (
+                    <>
+                      <Text style={styles.detailLabel}>DEFENSE STYLES:</Text>
+                      <Text style={styles.detailValue}>{selectedApplication.defenseStyles.join(', ')}</Text>
+                    </>
+                  ) : null}
+
                   {selectedApplication.primaryStyle && (
                     <>
                       <Text style={styles.detailLabel}>PRIMARY STYLE:</Text>
                       <Text style={styles.detailValue}>{selectedApplication.primaryStyle}</Text>
                     </>
                   )}
-                  
-                  {selectedApplication.yearsOfExperience !== undefined && (
+
+                  {selectedApplication.yearsOfExperience !== undefined && selectedApplication.yearsOfExperience !== '' && (
                     <>
                       <Text style={styles.detailLabel}>YEARS OF EXPERIENCE:</Text>
                       <Text style={styles.detailValue}>{selectedApplication.yearsOfExperience} years</Text>
                     </>
                   )}
+
+                  {selectedApplication.yearsOfTeaching !== undefined && selectedApplication.yearsOfTeaching !== '' && (
+                    <>
+                      <Text style={styles.detailLabel}>YEARS OF TEACHING:</Text>
+                      <Text style={styles.detailValue}>{selectedApplication.yearsOfTeaching} years</Text>
+                    </>
+                  )}
+
+                  {selectedApplication.currentRank ? (
+                    <>
+                      <Text style={styles.detailLabel}>CURRENT RANK / BELT:</Text>
+                      <Text style={styles.detailValue}>{selectedApplication.currentRank}</Text>
+                    </>
+                  ) : null}
                   
                   {selectedApplication.certificationBody && (
                     <>

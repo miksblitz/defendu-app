@@ -20,7 +20,7 @@ import { getModuleColumns, getSidebarWidth, Breakpoints } from '../../constants/
 import { useLogout } from '../../hooks/useLogout';
 import { Module } from '../_models/Module';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
-import { AuthController } from '../controllers/AuthController';
+import { AuthController, CategorySegmentProgramRecord } from '../controllers/AuthController';
 
 const circleSize = 40;
 const strokeWidth = 4;
@@ -104,6 +104,8 @@ function sortModulesProgramOrder(items: Module[]): Module[] {
  * still land in sensible buckets (matches common Defendu mobile structure).
  */
 function classifyModuleProgramPhase(m: Module): WebProgramPhase {
+  if (m.moduleSegment === 'warmup') return 'warmup';
+  if (m.moduleSegment === 'cooldown') return 'cooldown';
   const title = (m.moduleTitle || '').toLowerCase();
   const desc = (m.description || '').toLowerCase();
   const cat = (m.category || '').toLowerCase();
@@ -171,8 +173,16 @@ const WEB_PROGRAM_SECTION_META: {
   },
 ];
 
+type WebProgramSection = {
+  phase: WebProgramPhase;
+  title: string;
+  subtitle: string;
+  badge: string;
+  items: Module[];
+};
+
 /** Ordered program sections for a category (shared by web track + “first module” detection). */
-function buildProgramSectionsFromModules(modulesInCategory: Module[]) {
+function buildProgramSectionsFromModules(modulesInCategory: Module[]): WebProgramSection[] {
   const buckets: Record<WebProgramPhase, Module[]> = {
     warmup: [],
     basic: [],
@@ -191,6 +201,70 @@ function buildProgramSectionsFromModules(modulesInCategory: Module[]) {
     ...meta,
     items: buckets[meta.phase],
   })).filter((s) => s.items.length > 0);
+}
+
+function resolveAdminPickIdsToModules(
+  ids: string[] | undefined,
+  byId: Map<string, Module>,
+  segment: 'warmup' | 'cooldown'
+): Module[] {
+  if (!ids?.length) return [];
+  const out: Module[] = [];
+  for (const id of ids) {
+    const trimmed = typeof id === 'string' ? id.trim() : '';
+    if (!trimmed) continue;
+    const mod = byId.get(trimmed);
+    if (mod && mod.moduleSegment === segment) out.push(mod);
+  }
+  return out;
+}
+
+/**
+ * Warm-up / cool-down rows use admin-assigned library modules per category (`categorySegmentProgram` in Firebase).
+ * Falls back to title-based classification on technique modules when nothing is assigned yet.
+ */
+function buildProgramSectionsWithAdminAssignments(
+  modulesInCategory: Module[],
+  allApprovedModules: Module[],
+  assignment: CategorySegmentProgramRecord | null | undefined
+): WebProgramSection[] {
+  const technique = modulesInCategory.filter((m) => !m.moduleSegment);
+  const byId = new Map(allApprovedModules.map((m) => [m.moduleId, m]));
+
+  const warmupFromAdmin = resolveAdminPickIdsToModules(
+    assignment?.warmupModuleIds,
+    byId,
+    'warmup'
+  );
+  const cooldownFromAdmin = resolveAdminPickIdsToModules(
+    assignment?.cooldownModuleIds,
+    byId,
+    'cooldown'
+  );
+
+  const fromClassify = buildProgramSectionsFromModules(technique);
+  const byPhase: Partial<Record<WebProgramPhase, WebProgramSection>> = {};
+  for (const s of fromClassify) {
+    byPhase[s.phase] = s;
+  }
+
+  const warmupItems =
+    warmupFromAdmin.length > 0 ? warmupFromAdmin : (byPhase.warmup?.items ?? []);
+  const cooldownItems =
+    cooldownFromAdmin.length > 0 ? cooldownFromAdmin : (byPhase.cooldown?.items ?? []);
+
+  const out: WebProgramSection[] = [];
+  for (const meta of WEB_PROGRAM_SECTION_META) {
+    if (meta.phase === 'warmup') {
+      if (warmupItems.length > 0) out.push({ ...meta, items: warmupItems });
+    } else if (meta.phase === 'cooldown') {
+      if (cooldownItems.length > 0) out.push({ ...meta, items: cooldownItems });
+    } else {
+      const s = byPhase[meta.phase];
+      if (s && s.items.length > 0) out.push(s);
+    }
+  }
+  return out;
 }
 
 export default function DashboardScreen() {
@@ -216,12 +290,14 @@ export default function DashboardScreen() {
     recommendedModuleIds: string[];
   } | null>(null);
   const [recommendedModules, setRecommendedModules] = useState<Module[]>([]);
-  const [completedModuleIds, setCompletedModuleIds] = useState<string[]>([]);
   const [completionTimestamps, setCompletionTimestamps] = useState<Record<string, number>>({});
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [moduleCategories, setModuleCategories] = useState<string[]>([...DEFAULT_MODULE_CATEGORIES]);
   const [dailyModuleGoal, setDailyModuleGoal] = useState(DEFAULT_DAILY_MODULE_GOAL);
   const [weeklyModuleGoal, setWeeklyModuleGoal] = useState(DEFAULT_WEEKLY_MODULE_GOAL);
+  const [categorySegmentPrograms, setCategorySegmentPrograms] = useState<
+    Record<string, CategorySegmentProgramRecord>
+  >({});
   const router = useRouter();
   const handleLogout = useLogout();
   const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
@@ -250,6 +326,19 @@ export default function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshModuleTargets();
+      let cancelled = false;
+      (async () => {
+        try {
+          const progress = await AuthController.getUserProgress();
+          if (cancelled) return;
+          setCompletionTimestamps(progress.completionTimestamps ?? {});
+        } catch {
+          /* ignore */
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
     }, [refreshModuleTargets])
   );
 
@@ -287,15 +376,16 @@ export default function DashboardScreen() {
         setModules(approved);
         setModulesLoading(false);
 
-        const [recs, progress, cats] = await Promise.all([
+        const [recs, progress, cats, segmentMap] = await Promise.all([
           AuthController.getRecommendations(),
           AuthController.getUserProgress(),
           AuthController.getModuleCategories(),
+          AuthController.getAllCategorySegmentPrograms().catch(() => ({} as Record<string, CategorySegmentProgramRecord>)),
         ]);
         setRecommendations(recs);
-        setCompletedModuleIds(progress.completedModuleIds);
         setCompletionTimestamps(progress.completionTimestamps ?? {});
         setModuleCategories(cats);
+        setCategorySegmentPrograms(segmentMap);
         if (recs?.recommendedModuleIds?.length) {
           const recommended = await AuthController.getModulesByIds(recs.recommendedModuleIds);
           const notCompleted = recommended.filter((m) => !progress.completedModuleIds.includes(m.moduleId));
@@ -357,21 +447,6 @@ export default function DashboardScreen() {
     router.push('/messages');
   };
 
-  const selectDashboardModule = (module: Module) => {
-    setSelectedModule(module.moduleId);
-  };
-
-  const openRecommendedModule = (module: Module) => {
-    setSelectedModule(module.moduleId);
-    router.push({
-      pathname: '/view-module',
-      params: {
-        moduleId: module.moduleId,
-        categoryKey: normalizeCategory(module.category),
-      },
-    } as any);
-  };
-
   // Overall weekly progress: total modules this week vs weekly target from skill profile
   const totalModulesThisWeek = dayCounts.reduce((a, b) => a + b, 0);
   const weeklyProgress =
@@ -403,24 +478,64 @@ export default function DashboardScreen() {
 
   const programSectionList = useMemo(() => {
     if (!selectedCategory || !modulesInCategory.length) return [];
-    return buildProgramSectionsFromModules(modulesInCategory);
-  }, [selectedCategory, modulesInCategory]);
+    const key = AuthController.categorySegmentProgramKey(selectedCategory);
+    const assignment = categorySegmentPrograms[key];
+    return buildProgramSectionsWithAdminAssignments(modulesInCategory, modules, assignment);
+  }, [selectedCategory, modulesInCategory, modules, categorySegmentPrograms]);
 
   const webProgramSections = useMemo(() => {
     if (!showWebProgramTrack || !programSectionList.length) return null;
     return programSectionList;
   }, [showWebProgramTrack, programSectionList]);
 
-  const startSelectedTraining = () => {
-    if (!selectedModule || !selectedCategory) return;
-    router.push({
-      pathname: '/view-module',
-      params: {
-        moduleId: selectedModule,
-        categoryKey: normalizeCategory(selectedCategory),
-      },
-    } as any);
-  };
+  /** Flat program order (warm-up → training blocks → cooldown) for “Next module” in training flow. */
+  const programOrderParamFromSections = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const sec of programSectionList) {
+      for (const m of sec.items) {
+        if (seen.has(m.moduleId)) continue;
+        seen.add(m.moduleId);
+        ids.push(m.moduleId);
+      }
+    }
+    return ids.join(',');
+  }, [programSectionList]);
+
+  const recommendedProgramOrderParam = useMemo(
+    () => recommendedModules.map((m) => m.moduleId).join(','),
+    [recommendedModules],
+  );
+
+  const selectDashboardModule = useCallback(
+    (module: Module) => {
+      setSelectedModule(module.moduleId);
+      router.push({
+        pathname: '/view-module',
+        params: {
+          moduleId: module.moduleId,
+          categoryKey: normalizeCategory(module.category || selectedCategory || ''),
+          programOrder: programOrderParamFromSections,
+        },
+      } as any);
+    },
+    [router, selectedCategory, programOrderParamFromSections],
+  );
+
+  const openRecommendedModule = useCallback(
+    (module: Module) => {
+      setSelectedModule(module.moduleId);
+      router.push({
+        pathname: '/view-module',
+        params: {
+          moduleId: module.moduleId,
+          categoryKey: normalizeCategory(module.category),
+          programOrder: recommendedProgramOrderParam,
+        },
+      } as any);
+    },
+    [router, recommendedProgramOrderParam],
+  );
 
   const CircularProgress = ({ progress }: { progress: number }) => {
     const strokeDashoffset = circumference * (1 - progress);
@@ -604,9 +719,6 @@ export default function DashboardScreen() {
                                 <Text style={styles.moduleTitle} numberOfLines={2}>
                                   {module.moduleTitle}
                                 </Text>
-                                <Text style={styles.moduleDescription} numberOfLines={2}>
-                                  {module.description}
-                                </Text>
                                 {durationMin ? (
                                   <View style={styles.moduleDurationBadge}>
                                     <Text style={styles.moduleDuration}>{durationMin}</Text>
@@ -685,9 +797,9 @@ export default function DashboardScreen() {
                 {modulesLoading
                   ? 'Loading all modules…'
                   : showWebProgramTrack
-                    ? `Step-by-step path for ${selectedCategory}. Tap a module to select it, then Start training.`
+                    ? `Step-by-step path for ${selectedCategory}. Warm-up and cool-down follow the program your admin set for this category. Tap a module to open it.`
                     : selectedCategory
-                      ? 'Tap a module to highlight it, then Start training to open it.'
+                      ? 'Tap a module to open it and begin.'
                       : 'Loading your program…'}
               </Text>
             </View>
@@ -821,22 +933,15 @@ export default function DashboardScreen() {
                           const imageSource = module.thumbnailUrl
                             ? { uri: module.thumbnailUrl }
                             : require('../../assets/images/managemodulepic.png');
-                          const done = completedModuleIds.includes(module.moduleId);
-                          const useGiThumb =
-                            section.phase === 'warmup' ||
-                            section.phase === 'cooldown';
-                          const subline =
-                            useGiThumb
-                              ? 'Open this step to begin'
-                              : module.description || 'Technique training';
-
+                          const useGiPlaceholder =
+                            (section.phase === 'warmup' || section.phase === 'cooldown') &&
+                            !module.thumbnailUrl;
                           return (
                             <TouchableOpacity
                               key={module.moduleId}
                               style={[
                                 styles.webModuleRow,
                                 selectedModule === module.moduleId && styles.webModuleRowSelected,
-                                done && styles.webModuleRowDone,
                               ]}
                               onPress={() => selectDashboardModule(module)}
                               activeOpacity={0.88}
@@ -850,23 +955,14 @@ export default function DashboardScreen() {
                                 <Text style={styles.webModuleRowTitle} numberOfLines={2}>
                                   {module.moduleTitle}
                                 </Text>
-                                <Text style={styles.webModuleRowSub} numberOfLines={2}>
-                                  {subline}
-                                </Text>
                                 <View style={styles.webModuleRowMeta}>
                                   {durationMin ? (
                                     <Text style={styles.webModuleRowMetaText}>{durationMin}</Text>
                                   ) : null}
-                                  {done ? (
-                                    <View style={styles.webModuleDonePill}>
-                                      <Ionicons name="checkmark-circle" size={14} color="#041527" />
-                                      <Text style={styles.webModuleDonePillText}>Done</Text>
-                                    </View>
-                                  ) : null}
                                 </View>
                               </View>
                               <View style={styles.webModuleRowThumbWrap}>
-                                {useGiThumb ? (
+                                {useGiPlaceholder ? (
                                   <View style={styles.webModuleThumbGi}>
                                     <Ionicons name="body-outline" size={36} color="#07bbc0" />
                                   </View>
@@ -884,21 +980,61 @@ export default function DashboardScreen() {
                       </View>
                     </View>
                   ))}
-
-                  <TouchableOpacity
-                    style={[styles.webProgramCta, !selectedModule && styles.webProgramCtaDisabled]}
-                    onPress={startSelectedTraining}
-                    disabled={!selectedModule}
-                    activeOpacity={0.9}
-                  >
-                    <Text style={styles.webProgramCtaText}>
-                      {selectedModule ? 'Start training' : 'Select a module to start'}
-                    </Text>
-                    <Ionicons name="arrow-forward" size={20} color="#041527" />
-                  </TouchableOpacity>
                 </View>
               ) : (
-                modulesInCategoryByLevel.map(({ label, items }) => (
+                <>
+                {isMobile && programSectionList.some((s) => s.phase === 'warmup' || s.phase === 'cooldown') ? (
+                  <View style={styles.mobileLinkedProgramWrap}>
+                    {programSectionList
+                      .filter((s) => s.phase === 'warmup' || s.phase === 'cooldown')
+                      .map((section) => (
+                        <View key={section.phase} style={styles.mobileLinkedBlock}>
+                          <View style={styles.mobileLinkedBlockHead}>
+                            <Text style={styles.mobileLinkedBlockTitle}>{section.title}</Text>
+                            <Text style={styles.mobileLinkedBlockSub}>{section.subtitle}</Text>
+                          </View>
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.mobileLinkedScrollContent}
+                          >
+                            {section.items.map((module) => {
+                              const imageSource = module.thumbnailUrl
+                                ? { uri: module.thumbnailUrl }
+                                : require('../../assets/images/managemodulepic.png');
+                              return (
+                                <TouchableOpacity
+                                  key={module.moduleId}
+                                  style={[
+                                    styles.mobileLinkedCard,
+                                    selectedModule === module.moduleId && styles.mobileLinkedCardSelected,
+                                  ]}
+                                  onPress={() => selectDashboardModule(module)}
+                                  activeOpacity={0.88}
+                                >
+                                  <ImageBackground
+                                    source={imageSource}
+                                    style={styles.mobileLinkedCardBg}
+                                    imageStyle={styles.mobileLinkedCardBgImage}
+                                  >
+                                    <View style={styles.mobileLinkedCardOverlay}>
+                                      <Text style={styles.mobileLinkedCardBadge}>
+                                        {section.badge}
+                                      </Text>
+                                      <Text style={styles.mobileLinkedCardTitle} numberOfLines={2}>
+                                        {module.moduleTitle}
+                                      </Text>
+                                    </View>
+                                  </ImageBackground>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </ScrollView>
+                        </View>
+                      ))}
+                  </View>
+                ) : null}
+                {modulesInCategoryByLevel.map(({ label, items }) => (
                   <View key={label} style={{ marginBottom: 18, width: '100%' }}>
                     <Text style={styles.difficultySectionTitle}>{label}</Text>
                     <View style={styles.modulesGrid}>
@@ -947,9 +1083,6 @@ export default function DashboardScreen() {
                                     <Text style={styles.moduleTitle} numberOfLines={2}>
                                       {module.moduleTitle}
                                     </Text>
-                                    <Text style={styles.moduleDescription} numberOfLines={2}>
-                                      {module.description}
-                                    </Text>
                                     {durationMin ? (
                                       <View style={styles.moduleDurationBadge}>
                                         <Text style={styles.moduleDuration}>{durationMin}</Text>
@@ -964,22 +1097,10 @@ export default function DashboardScreen() {
                       })}
                     </View>
                   </View>
-                ))
+                ))}
+                </>
               )}
             </View>
-            {isMobile && selectedCategory && modulesInCategory.length > 0 && !modulesLoading ? (
-              <TouchableOpacity
-                style={[styles.mobileStartTraining, !selectedModule && styles.mobileStartTrainingDisabled]}
-                onPress={startSelectedTraining}
-                disabled={!selectedModule}
-                activeOpacity={0.9}
-              >
-                <Text style={styles.mobileStartTrainingText}>
-                  {selectedModule ? 'Start training' : 'Select a module first'}
-                </Text>
-                <Ionicons name="arrow-forward" size={20} color="#041527" />
-              </TouchableOpacity>
-            ) : null}
           </ScrollView>
         </View>
       </View>
@@ -1350,6 +1471,83 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
+  },
+  mobileLinkedProgramWrap: {
+    width: '100%',
+    marginBottom: 20,
+    gap: 18,
+  },
+  mobileLinkedBlock: {
+    width: '100%',
+  },
+  mobileLinkedBlockHead: {
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  mobileLinkedBlockTitle: {
+    color: '#07bbc0',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  mobileLinkedBlockSub: {
+    color: '#8fa3b0',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  mobileLinkedScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 12,
+    paddingRight: 8,
+    paddingVertical: 2,
+  },
+  mobileLinkedCard: {
+    width: 168,
+    minHeight: 118,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  mobileLinkedCardSelected: {
+    borderColor: '#07bbc0',
+  },
+  mobileLinkedCardBg: {
+    width: '100%',
+    minHeight: 118,
+    justifyContent: 'flex-end',
+  },
+  mobileLinkedCardBgImage: {
+    borderRadius: 12,
+  },
+  mobileLinkedCardOverlay: {
+    padding: 10,
+    backgroundColor: 'rgba(4,21,39,0.82)',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+  },
+  mobileLinkedCardBadge: {
+    alignSelf: 'flex-start',
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#041527',
+    backgroundColor: '#07bbc0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  mobileLinkedCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 17,
   },
   difficultySectionTitle: {
     color: '#07bbc0',
@@ -1790,9 +1988,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     backgroundColor: 'rgba(7,187,192,0.08)',
   },
-  webModuleRowDone: {
-    borderColor: 'rgba(46, 204, 113, 0.35)',
-  },
   webModuleRowMain: {
     flex: 1,
     paddingRight: 12,
@@ -1835,20 +2030,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: 'rgba(7,187,192,0.95)',
-  },
-  webModuleDonePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(7,187,192,0.9)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  webModuleDonePillText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#041527',
   },
   webModuleRowThumbWrap: {
     flexShrink: 0,
