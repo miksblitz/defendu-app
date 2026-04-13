@@ -1641,6 +1641,9 @@ export class AuthController {
 
       // Prepare update data (exclude fields that shouldn't be updated)
       const updateData: any = {};
+      if (updates.fullLegalName !== undefined) {
+        updateData.fullLegalName = updates.fullLegalName.trim() || null;
+      }
       
       if (updates.professionalAlias !== undefined) {
         updateData.professionalAlias = updates.professionalAlias.trim() || null;

@@ -3,8 +3,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
+    Animated,
     Image,
+    Linking,
     Modal,
+    Platform,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -20,9 +23,11 @@ import { TrainerApplication } from '../_models/TrainerApplication';
 import { User } from '../_models/User';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController } from '../controllers/AuthController';
+import { TrainerRatingController, TrainerRatingSummary } from '../controllers/TrainerRatingController';
 
 interface TrainerWithData extends User {
   applicationData?: TrainerApplication | null;
+  ratingSummary?: TrainerRatingSummary;
 }
 
 export default function TrainerPage() {
@@ -36,13 +41,25 @@ export default function TrainerPage() {
   const [loading, setLoading] = useState(true);
   const [selectedTrainer, setSelectedTrainer] = useState<TrainerWithData | null>(null);
   const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
+  const [imagePreviewUri, setImagePreviewUri] = useState<string | null>(null);
+  const [imagePreviewTitle, setImagePreviewTitle] = useState('');
+  const [showFloatingSearch, setShowFloatingSearch] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isCurrentUserTrainer, setIsCurrentUserTrainer] = useState(false);
+  const scrollY = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadTrainers();
     checkCurrentUserTrainerStatus();
   }, []);
+
+  useEffect(() => {
+    const id = scrollY.addListener(({ value }) => {
+      setShowFloatingSearch(value > 240);
+    });
+    return () => scrollY.removeListener(id);
+  }, [scrollY]);
 
   // Show success toast when arriving after submitting a module
   useEffect(() => {
@@ -76,24 +93,38 @@ export default function TrainerPage() {
       const approvedTrainers = await AuthController.getApprovedTrainers();
       console.log('✅ Loaded approved trainers:', approvedTrainers.length);
 
-      // Fetch TrainerApplication data for each trainer
-      const trainersWithData: TrainerWithData[] = [];
-      for (const trainer of approvedTrainers) {
-        try {
-          const applicationData = await AuthController.getTrainerApplicationData(trainer.uid);
-          trainersWithData.push({
-            ...trainer,
-            applicationData: applicationData || null,
-          });
-        } catch (error) {
-          console.error(`❌ Error loading application data for trainer ${trainer.uid}:`, error);
-          // Still add the trainer even if application data fails to load
-          trainersWithData.push({
-            ...trainer,
-            applicationData: null,
-          });
-        }
-      }
+      const uids = approvedTrainers.map((t) => t.uid);
+      const ratingsMap = await TrainerRatingController.getTrainerRatingSummariesForTrainers(uids);
+
+      const trainersWithData: TrainerWithData[] = await Promise.all(
+        approvedTrainers.map(async (trainer) => {
+          try {
+            const applicationData = await AuthController.getTrainerApplicationData(trainer.uid);
+            return {
+              ...trainer,
+              applicationData: applicationData || null,
+              ratingSummary:
+                ratingsMap[trainer.uid] ?? { averageRating: 0, totalReviews: 0, sumRatings: 0 },
+            };
+          } catch (error) {
+            console.error('Error loading application data for trainer', trainer.uid, error);
+            return {
+              ...trainer,
+              applicationData: null,
+              ratingSummary:
+                ratingsMap[trainer.uid] ?? { averageRating: 0, totalReviews: 0, sumRatings: 0 },
+            };
+          }
+        })
+      );
+
+      trainersWithData.sort((a, b) => {
+        const avgDiff = (b.ratingSummary?.averageRating || 0) - (a.ratingSummary?.averageRating || 0);
+        if (Math.abs(avgDiff) > 0.0000001) return avgDiff;
+        const reviewDiff = (b.ratingSummary?.totalReviews || 0) - (a.ratingSummary?.totalReviews || 0);
+        if (reviewDiff !== 0) return reviewDiff;
+        return (b.createdAt?.getTime?.() || 0) - (a.createdAt?.getTime?.() || 0);
+      });
 
       console.log('✅ Processed trainers with data:', trainersWithData.length);
       setTrainers(trainersWithData);
@@ -112,17 +143,6 @@ export default function TrainerPage() {
 
   // Get stats
   const totalTrainers = trainers.length;
-  const specialties = useMemo(() => {
-    const allSpecialties = new Set<string>();
-    trainers.forEach(trainer => {
-      if (trainer.applicationData?.defenseStyles) {
-        trainer.applicationData.defenseStyles.forEach(style => allSpecialties.add(style));
-      } else if (trainer.preferredTechnique) {
-        trainer.preferredTechnique.forEach(tech => allSpecialties.add(tech));
-      }
-    });
-    return allSpecialties.size;
-  }, [trainers]);
 
   // Filter trainers based on search
   const filteredTrainers = useMemo(() => {
@@ -160,6 +180,13 @@ export default function TrainerPage() {
     }
   };
 
+  const openTrainerImagePreview = (uri: string | null | undefined, title: string) => {
+    if (!uri) return;
+    setImagePreviewUri(uri);
+    setImagePreviewTitle(title);
+    setImagePreviewVisible(true);
+  };
+
   const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
 
   const handleMessages = () => {
@@ -168,12 +195,33 @@ export default function TrainerPage() {
     router.push('/messages');
   };
 
-  const formatDate = (date: Date): string => {
-    return date.toLocaleDateString('en-US', { 
-      month: 'long', 
-      day: 'numeric', 
-      year: 'numeric' 
-    });
+  const normalizeExternalUrl = (value: string): string => {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const openExternalUrl = async (rawUrl: string) => {
+    const url = normalizeExternalUrl(rawUrl);
+    if (!url) return;
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && window.open) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (error) {
+      console.error('Failed to open external URL:', error);
+      showToast('Could not open this link');
+    }
+  };
+
+  const openAddressInMaps = async (address: string) => {
+    const query = encodeURIComponent(address.trim());
+    if (!query) return;
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
+    await openExternalUrl(mapsUrl);
   };
 
   return (
@@ -231,111 +279,114 @@ export default function TrainerPage() {
 
         {/* Main Content */}
         <View style={styles.mainContent}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <Image
-                source={require('../../assets/images/defendudashboardlogo.png')}
-                style={styles.logoImage}
-              />
-              <Text style={styles.pageTitle}>TRAINERS</Text>
-            </View>
-            <View style={styles.headerButtons}>
-              {isCurrentUserTrainer && (
-                <TouchableOpacity 
-                  style={styles.publishModuleButton}
-                  onPress={() => router.push('/publish-module' as any)}
+          <Animated.ScrollView
+            contentContainerStyle={styles.mainScrollContent}
+            showsVerticalScrollIndicator={false}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: false }
+            )}
+            scrollEventThrottle={16}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.headerLeft}>
+                <Image
+                  source={require('../../assets/images/defendudashboardlogo.png')}
+                  style={styles.logoImage}
+                />
+                <Text style={styles.pageTitle}>TRAINERS</Text>
+              </View>
+              <View style={styles.headerButtons}>
+                {isCurrentUserTrainer && (
+                  <TouchableOpacity
+                    style={styles.publishModuleButton}
+                    onPress={() => router.push('/publish-module' as any)}
+                  >
+                    <Ionicons
+                      name="cloud-upload-outline"
+                      size={18}
+                      color="#FFFFFF"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.publishModuleButtonText}>
+                      Publish Module
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.registerButton}
+                  onPress={handleRegisterTrainer}
                 >
-                  <Ionicons 
-                    name="cloud-upload-outline" 
-                    size={18} 
-                    color="#FFFFFF" 
-                    style={{ marginRight: 6 }} 
+                  <Ionicons
+                    name={isCurrentUserTrainer ? "create-outline" : "person-add-outline"}
+                    size={18}
+                    color="#FFFFFF"
+                    style={{ marginRight: 6 }}
                   />
-                  <Text style={styles.publishModuleButtonText}>
-                    Publish Module
+                  <Text style={styles.registerButtonText}>
+                    {isCurrentUserTrainer ? 'Edit Trainer Profile' : 'Register as a certified Trainer'}
                   </Text>
                 </TouchableOpacity>
-              )}
-              <TouchableOpacity 
-                style={styles.registerButton}
-                onPress={handleRegisterTrainer}
-              >
-                <Ionicons 
-                  name={isCurrentUserTrainer ? "create-outline" : "person-add-outline"} 
-                  size={18} 
-                  color="#FFFFFF" 
-                  style={{ marginRight: 6 }} 
+              </View>
+            </View>
+
+            {/* Connection Hub Intro */}
+            <View style={styles.connectionHubCard}>
+              <Text style={styles.connectionHubTitle}>Connect. Learn. Grow safer together.</Text>
+              <Text style={styles.connectionHubText}>
+                This platform is built to connect individuals with trusted self-defense trainers in one place.
+                Discover coaches, view complete trainer profiles, and start meaningful training conversations.
+              </Text>
+            </View>
+
+            {/* Compact controls so trainers stay the focus */}
+            <View style={styles.topControlsRow}>
+              <View style={styles.searchContainer}>
+                <Ionicons name="search-outline" size={18} color="#6b8693" style={styles.searchIcon} />
+                <TextInput
+                  style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                  placeholder="Search trainers..."
+                  placeholderTextColor="#6b8693"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
                 />
-                <Text style={styles.registerButtonText}>
-                  {isCurrentUserTrainer ? 'Edit Trainer Profile' : 'Register as a certified Trainer'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+                {searchQuery.length > 0 ? (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color="#6b8693" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
 
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <Ionicons name="search-outline" size={20} color="#6b8693" style={styles.searchIcon} />
-            <TextInput
-              style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-              placeholder="Search trainers, specialties, or academies..."
-              placeholderTextColor="#6b8693"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 ? (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={20} color="#6b8693" />
-              </TouchableOpacity>
-            ) : null}
-          </View>
+              <View style={styles.statsBar}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>{totalTrainers}</Text>
+                  <Text style={styles.statLabel}>Total</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>{filteredTrainers.length}</Text>
+                  <Text style={styles.statLabel}>Shown</Text>
+                </View>
+              </View>
+            </View>
 
-          {/* Stats Bar */}
-          <View style={styles.statsBar}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{totalTrainers}</Text>
-              <Text style={styles.statLabel}>Total Trainers</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{specialties}</Text>
-              <Text style={styles.statLabel}>Specialties</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{filteredTrainers.length}</Text>
-              <Text style={styles.statLabel}>Showing</Text>
-            </View>
-          </View>
-
-          {/* Results Count */}
-          <Text style={styles.resultsText}>
-            {filteredTrainers.length} {filteredTrainers.length === 1 ? 'Trainer' : 'Trainers'} Available
-          </Text>
-
-          {/* Trainer List */}
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#07bbc0" />
-              <Text style={styles.loadingText}>Loading trainers...</Text>
-            </View>
-          ) : (
-            <ScrollView 
-              style={styles.trainerList}
-              contentContainerStyle={styles.trainerListContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {filteredTrainers.length > 0 ? (
-                filteredTrainers.map((trainer) => {
+            {/* Trainer List */}
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#07bbc0" />
+                <Text style={styles.loadingText}>Loading trainers...</Text>
+              </View>
+            ) : filteredTrainers.length > 0 ? (
+              filteredTrainers.map((trainer) => {
                   const appData = trainer.applicationData;
-                  const allStyles = appData?.defenseStyles || trainer.preferredTechnique || [];
-                  const displayedStyles = allStyles.slice(0, 3); // Get up to 3 martial arts
                   const username = appData?.professionalAlias || trainer.username || '';
                   const academyName = appData?.academyName || '';
                   const location = appData?.physicalAddress || 'Location not provided';
                   const phone = appData?.phone || 'Phone not provided';
                   const email = trainer.email || 'Email not provided';
+                  const avgRating = trainer.ratingSummary?.averageRating || 0;
+                  const totalReviews = trainer.ratingSummary?.totalReviews || 0;
 
                   return (
                     <View 
@@ -369,15 +420,13 @@ export default function TrainerPage() {
                             @{username.replace('@', '')}
                           </Text>
                         )}
-                        {displayedStyles.length > 0 ? (
-                          <View style={styles.martialArtsContainer}>
-                            {displayedStyles.map((style, index) => (
-                              <View key={index} style={styles.martialArtTag}>
-                                <Text style={styles.martialArtText}>{style}</Text>
-                              </View>
-                            ))}
-                          </View>
-                        ) : null}
+                        <View style={styles.ratingPill}>
+                          <Ionicons name="star" size={13} color="#f0c14b" />
+                          <Text style={styles.ratingPillText}>
+                            {totalReviews > 0 ? avgRating.toFixed(1) : '0.0'}
+                          </Text>
+                          <Text style={styles.ratingPillCount}>({totalReviews})</Text>
+                        </View>
                         
                         <View style={styles.trainerDetails}>
                           {academyName && (
@@ -412,17 +461,55 @@ export default function TrainerPage() {
                     </View>
                   );
                 })
-              ) : (
-                <View style={styles.emptyState}>
-                  <Ionicons name="search-outline" size={48} color="#6b8693" />
-                  <Text style={styles.emptyStateText}>No trainers found</Text>
-                  <Text style={styles.emptyStateSubtext}>
-                    {searchQuery ? 'Try adjusting your search criteria' : 'No approved trainers available yet'}
-                  </Text>
-                </View>
-              )}
-            </ScrollView>
-          )}
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="search-outline" size={48} color="#6b8693" />
+                <Text style={styles.emptyStateText}>No trainers found</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  {searchQuery ? 'Try adjusting your search criteria' : 'No approved trainers available yet'}
+                </Text>
+              </View>
+            )}
+          </Animated.ScrollView>
+
+          <Animated.View
+            pointerEvents={showFloatingSearch ? 'auto' : 'none'}
+            style={[
+              styles.floatingSearchWrap,
+              {
+                opacity: scrollY.interpolate({
+                  inputRange: [190, 250],
+                  outputRange: [0, 1],
+                  extrapolate: 'clamp',
+                }),
+                transform: [
+                  {
+                    translateY: scrollY.interpolate({
+                      inputRange: [190, 250],
+                      outputRange: [-12, 0],
+                      extrapolate: 'clamp',
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={[styles.searchContainer, styles.floatingSearchContainer]}>
+              <Ionicons name="search-outline" size={18} color="#6b8693" style={styles.searchIcon} />
+              <TextInput
+                style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                placeholder="Search trainers..."
+                placeholderTextColor="#6b8693"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery.length > 0 ? (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <Ionicons name="close-circle" size={18} color="#6b8693" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </Animated.View>
         </View>
       </View>
 
@@ -447,16 +534,40 @@ export default function TrainerPage() {
               </View>
 
               <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+                <View style={styles.modalHero}>
+                  {selectedTrainer.coverPhoto ? (
+                    <TouchableOpacity
+                      onPress={() => openTrainerImagePreview(selectedTrainer.coverPhoto, 'Cover photo')}
+                      activeOpacity={0.9}
+                      style={styles.modalHeroImageWrap}
+                    >
+                      <Image source={{ uri: selectedTrainer.coverPhoto }} style={styles.modalHeroImage} />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.modalHeroPlaceholder}>
+                      <Ionicons name="images-outline" size={26} color="#87a4b3" />
+                      <Text style={styles.modalHeroPlaceholderText}>No cover photo yet</Text>
+                    </View>
+                  )}
+                  <View style={styles.modalHeroShade} />
+                </View>
+
                 {selectedTrainer.applicationData ? (
                   <>
                     {/* Profile Summary */}
                     <View style={styles.credentialSection}>
                       <View style={styles.credentialHeader}>
                         {selectedTrainer.profilePicture ? (
-                          <Image
-                            source={{ uri: selectedTrainer.profilePicture }}
+                          <TouchableOpacity
+                            onPress={() => openTrainerImagePreview(selectedTrainer.profilePicture, 'Profile photo')}
+                            activeOpacity={0.9}
                             style={styles.credentialAvatar}
-                          />
+                          >
+                            <Image
+                              source={{ uri: selectedTrainer.profilePicture }}
+                              style={styles.credentialAvatarImage}
+                            />
+                          </TouchableOpacity>
                         ) : (
                           <View style={styles.credentialAvatar}>
                             <Ionicons name="person" size={40} color="#FFFFFF" />
@@ -518,7 +629,15 @@ export default function TrainerPage() {
                       {selectedTrainer.applicationData.physicalAddress && (
                         <View style={styles.credentialInfoRow}>
                           <Text style={styles.credentialLabel}>Address:</Text>
-                          <Text style={styles.credentialValue}>{selectedTrainer.applicationData.physicalAddress}</Text>
+                          <TouchableOpacity
+                            onPress={() => openAddressInMaps(selectedTrainer.applicationData?.physicalAddress || '')}
+                            activeOpacity={0.8}
+                            style={styles.credentialLinkWrap}
+                          >
+                            <Text style={styles.credentialValueLink}>
+                              {selectedTrainer.applicationData.physicalAddress}
+                            </Text>
+                          </TouchableOpacity>
                         </View>
                       )}
                     </View>
@@ -563,19 +682,43 @@ export default function TrainerPage() {
                         {selectedTrainer.applicationData.facebookLink && (
                           <View style={styles.credentialInfoRow}>
                             <Text style={styles.credentialLabel}>Facebook:</Text>
-                            <Text style={styles.credentialValue}>{selectedTrainer.applicationData.facebookLink}</Text>
+                            <TouchableOpacity
+                              onPress={() => openExternalUrl(selectedTrainer.applicationData?.facebookLink || '')}
+                              activeOpacity={0.8}
+                              style={styles.credentialLinkWrap}
+                            >
+                              <Text style={styles.credentialValueLink}>
+                                {selectedTrainer.applicationData.facebookLink}
+                              </Text>
+                            </TouchableOpacity>
                           </View>
                         )}
                         {selectedTrainer.applicationData.instagramLink && (
                           <View style={styles.credentialInfoRow}>
                             <Text style={styles.credentialLabel}>Instagram:</Text>
-                            <Text style={styles.credentialValue}>{selectedTrainer.applicationData.instagramLink}</Text>
+                            <TouchableOpacity
+                              onPress={() => openExternalUrl(selectedTrainer.applicationData?.instagramLink || '')}
+                              activeOpacity={0.8}
+                              style={styles.credentialLinkWrap}
+                            >
+                              <Text style={styles.credentialValueLink}>
+                                {selectedTrainer.applicationData.instagramLink}
+                              </Text>
+                            </TouchableOpacity>
                           </View>
                         )}
                         {selectedTrainer.applicationData.otherLink && (
                           <View style={styles.credentialInfoRow}>
                             <Text style={styles.credentialLabel}>Other:</Text>
-                            <Text style={styles.credentialValue}>{selectedTrainer.applicationData.otherLink}</Text>
+                            <TouchableOpacity
+                              onPress={() => openExternalUrl(selectedTrainer.applicationData?.otherLink || '')}
+                              activeOpacity={0.8}
+                              style={styles.credentialLinkWrap}
+                            >
+                              <Text style={styles.credentialValueLink}>
+                                {selectedTrainer.applicationData.otherLink}
+                              </Text>
+                            </TouchableOpacity>
                           </View>
                         )}
                       </View>
@@ -623,6 +766,25 @@ export default function TrainerPage() {
           </View>
         </Modal>
       )}
+
+      <Modal
+        visible={imagePreviewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImagePreviewVisible(false)}
+      >
+        <View style={styles.imagePreviewOverlay}>
+          <View style={styles.imagePreviewHeader}>
+            <Text style={styles.imagePreviewTitle}>{imagePreviewTitle}</Text>
+            <TouchableOpacity style={styles.imagePreviewClose} onPress={() => setImagePreviewVisible(false)}>
+              <Ionicons name="close" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          {imagePreviewUri ? (
+            <Image source={{ uri: imagePreviewUri }} style={styles.imagePreviewImage} resizeMode="contain" />
+          ) : null}
+        </View>
+      </Modal>
 
       {/* Pop-up Menu */}
       {showMenu && (
@@ -754,6 +916,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 30,
     paddingTop: 25,
+    position: 'relative',
+  },
+  mainScrollContent: {
+    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
@@ -780,6 +946,32 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#07bbc0',
     letterSpacing: 2,
+  },
+  connectionHubCard: {
+    backgroundColor: '#011f36',
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.25)',
+  },
+  connectionHubTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  connectionHubText: {
+    color: '#9db3be',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  topControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
   },
   registerButton: {
     backgroundColor: '#07bbc0',
@@ -814,11 +1006,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#011f36',
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     borderWidth: 1,
-    borderColor: '#0a3645',
+    borderColor: '#1fd5de',
+    flex: 1,
   },
   searchIcon: {
     marginRight: 10,
@@ -827,41 +1019,39 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '700',
     padding: 0,
   },
   statsBar: {
     flexDirection: 'row',
     backgroundColor: '#011f36',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     justifyContent: 'space-around',
     alignItems: 'center',
+    minWidth: 170,
   },
   statItem: {
     alignItems: 'center',
-    flex: 1,
+    paddingHorizontal: 8,
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 16,
     fontWeight: '700',
     color: '#07bbc0',
-    marginBottom: 4,
+    lineHeight: 18,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#6b8693',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   statDivider: {
     width: 1,
-    height: 40,
+    height: 24,
     backgroundColor: '#0a3645',
-  },
-  resultsText: {
-    fontSize: 14,
-    color: '#6b8693',
-    marginBottom: 16,
-    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
@@ -874,11 +1064,21 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
   },
-  trainerList: {
-    flex: 1,
+  floatingSearchWrap: {
+    position: 'absolute',
+    top: 14,
+    left: 30,
+    right: 30,
+    zIndex: 20,
   },
-  trainerListContent: {
-    paddingBottom: 40,
+  floatingSearchContainer: {
+    borderColor: 'rgba(7, 187, 192, 0.5)',
+    backgroundColor: 'rgba(1, 31, 54, 0.97)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 7,
   },
   trainerCard: {
     backgroundColor: '#011f36',
@@ -926,24 +1126,27 @@ const styles = StyleSheet.create({
     color: '#6b8693',
     marginBottom: 8,
   },
-  martialArtsContainer: {
+  ratingPill: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 12,
-  },
-  martialArtTag: {
-    backgroundColor: 'rgba(7, 187, 192, 0.15)',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(7, 187, 192, 0.12)',
     borderWidth: 1,
-    borderColor: '#07bbc0',
-    borderRadius: 12,
-    paddingHorizontal: 10,
+    borderColor: 'rgba(7, 187, 192, 0.24)',
     paddingVertical: 4,
-    marginRight: 6,
-    marginBottom: 6,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    marginBottom: 8,
   },
-  martialArtText: {
-    color: '#07bbc0',
+  ratingPillText: {
+    color: '#e9f8fd',
     fontSize: 12,
+    fontWeight: '800',
+  },
+  ratingPillCount: {
+    color: '#90b1c0',
+    fontSize: 11,
     fontWeight: '600',
   },
   trainerDetails: {
@@ -1029,10 +1232,50 @@ const styles = StyleSheet.create({
     cursor: 'pointer',
   },
   modalContent: {
-    padding: 20,
+    padding: 18,
+  },
+  modalHero: {
+    height: 180,
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 18,
+    backgroundColor: '#0a3040',
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.2)',
+    position: 'relative',
+  },
+  modalHeroImageWrap: {
+    width: '100%',
+    height: '100%',
+  },
+  modalHeroImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  modalHeroPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0c2a3a',
+  },
+  modalHeroPlaceholderText: {
+    marginTop: 8,
+    color: '#87a4b3',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalHeroShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.2)',
   },
   credentialSection: {
     marginBottom: 24,
+    backgroundColor: 'rgba(7, 187, 192, 0.04)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.14)',
+    padding: 14,
   },
   credentialHeader: {
     flexDirection: 'row',
@@ -1051,6 +1294,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
     overflow: 'hidden',
+  },
+  credentialAvatarImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   credentialHeaderInfo: {
     flex: 1,
@@ -1105,6 +1353,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     flex: 1,
+  },
+  credentialLinkWrap: {
+    flex: 1,
+  },
+  credentialValueLink: {
+    color: '#38d4ff',
+    fontSize: 14,
+    flex: 1,
+    textDecorationLine: 'underline',
+    fontWeight: '600',
   },
   fileItem: {
     flexDirection: 'row',
@@ -1172,5 +1430,40 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '500',
+  },
+  imagePreviewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 8, 16, 0.96)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    paddingBottom: 20,
+  },
+  imagePreviewHeader: {
+    width: '100%',
+    maxWidth: 1080,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  imagePreviewTitle: {
+    color: '#dff2f7',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  imagePreviewClose: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imagePreviewImage: {
+    width: '100%',
+    maxWidth: 1080,
+    flex: 1,
   },
 });

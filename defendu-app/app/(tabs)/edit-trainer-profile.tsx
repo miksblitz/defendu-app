@@ -131,6 +131,10 @@ export default function EditTrainerProfilePage() {
       }
 
       // Validate required fields
+      if (!fullName.trim()) {
+        showToast('Full name is required');
+        return;
+      }
       if (!phone.trim()) {
         showToast('Phone number is required');
         return;
@@ -153,6 +157,7 @@ export default function EditTrainerProfilePage() {
 
       // Update trainer application
       const updates: Partial<TrainerApplication> = {
+        fullLegalName: fullName.trim(),
         professionalAlias: displayName.trim() || undefined,
         phone: phone.trim(),
         email: email.trim(),
@@ -270,13 +275,19 @@ export default function EditTrainerProfilePage() {
             <View style={styles.profileFormSection}>
               <Text style={styles.formTitle}>Edit Trainer Profile</Text>
 
-              {/* Full Name - Readonly */}
+              {/* Full Name */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Full Name</Text>
-                <View style={[styles.inputWrapper, styles.readOnlyWrapper]}>
+                <View style={styles.inputWrapper}>
                   <Ionicons name="person-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
-                  <Text style={styles.readOnlyText}>{fullName}</Text>
-                  <Ionicons name="lock-closed-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                    value={fullName}
+                    placeholder="Full legal name"
+                    placeholderTextColor="#6b8693"
+                    onChangeText={setFullName}
+                    autoCapitalize="words"
+                  />
                 </View>
               </View>
 
@@ -667,9 +678,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingTop: 12,
   },
-  readOnlyWrapper: {
-    opacity: 0.7,
-  },
   input: {
     flex: 1,
     color: '#FFFFFF',
@@ -682,13 +690,6 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     paddingTop: 8,
     minHeight: 80,
-  },
-  readOnlyText: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 16,
-    textAlignVertical: 'center',
-    includeFontPadding: false,
   },
   inputGroupWithDropdown: {
     position: 'relative',

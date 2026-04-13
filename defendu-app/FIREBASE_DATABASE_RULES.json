@@ -86,6 +86,31 @@
         ".read": "auth.uid !== null"
       }
     },
+    "categoryReviews": {
+      ".read": "auth.uid !== null",
+      "$categoryKey": {
+        "$uid": {
+          ".read": "auth.uid !== null",
+          ".write": "$uid === auth.uid"
+        }
+      }
+    },
+    "trainerRatings": {
+      ".read": "auth.uid !== null",
+      "$trainerUid": {
+        "reviews": {
+          "$reviewId": {
+            ".read": "auth.uid !== null",
+            ".write": "auth.uid !== null && newData.child('userUid').val() === auth.uid"
+          }
+        },
+        "stats": {
+          ".read": "auth.uid !== null",
+          ".write": "auth.uid !== null"
+        },
+        ".read": "auth.uid !== null"
+      }
+    },
     "userSettings": {
       "$uid": {
         ".read": "$uid === auth.uid",

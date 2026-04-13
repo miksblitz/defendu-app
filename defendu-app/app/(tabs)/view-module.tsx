@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    BackHandler,
     Image,
     Linking,
     Modal,
@@ -37,6 +38,12 @@ function routeParamToString(value: string | string[] | undefined): string {
 
 function normalizeCategoryKey(cat: string | undefined): string {
   return (cat ?? '').trim().toLowerCase();
+}
+
+/** Admin segment modules: no “rate category” when user backs out / goes home mid-flow. */
+function isWarmupOrCooldownModule(m: Module | null | undefined): boolean {
+  const seg = m?.moduleSegment;
+  return seg === 'warmup' || seg === 'cooldown';
 }
 
 function moduleHasIntroductionContent(m: Module | null): boolean {
@@ -127,6 +134,8 @@ export default function ViewModulePage() {
   const tryItTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Back from Try it → Safety only when user reached practice via Confirm on the safety screen for this module. */
   const tryItBackToSafetyRef = useRef(false);
+  /** Latest navigate-to-dashboard (optional category review prompt on exit). */
+  const exitToDashboardRef = useRef<(opts: { review: boolean }) => void>(() => {});
   // Reviews (Amazon-style)
   const [reviews, setReviews] = useState<ModuleReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -164,6 +173,59 @@ export default function ViewModulePage() {
     [module, categoryKeyFromRoute]
   );
 
+  useEffect(() => {
+    exitToDashboardRef.current = (opts: { review: boolean }) => {
+      const key = categoryStorageKey || normalizeCategoryKey(module?.category || '');
+      const categoryLabel = (module?.category || categoryKeyFromRoute || '').trim();
+      const wantCategoryReview =
+        opts.review && key && !isWarmupOrCooldownModule(module);
+      if (wantCategoryReview) {
+        router.replace({
+          pathname: '/dashboard',
+          params: {
+            reviewPrompt: '1',
+            reviewCategoryKey: key,
+            reviewCategory: categoryLabel,
+            reviewTs: String(Date.now()),
+          },
+        } as any);
+      } else {
+        router.replace('/dashboard' as any);
+      }
+    };
+  }, [categoryStorageKey, module, categoryKeyFromRoute, router]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (step === 'intro') {
+        exitToDashboardRef.current({ review: true });
+        return true;
+      }
+      if (step === 'safety') {
+        exitToDashboardRef.current({ review: true });
+        return true;
+      }
+      if (step === 'video') {
+        setStep('safety');
+        return true;
+      }
+      if (step === 'tryIt') {
+        if (tryItBackToSafetyRef.current) {
+          setStep('safety');
+          return true;
+        }
+        exitToDashboardRef.current({ review: true });
+        return true;
+      }
+      if (step === 'complete') {
+        exitToDashboardRef.current({ review: true });
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [step]);
+
   const beginTryItPractice = (mod?: Module | null, backToSafetyAfterTryIt = false) => {
     const m = mod ?? module;
     if (!m) return;
@@ -179,12 +241,12 @@ export default function ViewModulePage() {
     try {
       setLoading(true);
       if (!resolvedModuleId) {
-        router.replace('/dashboard');
+        router.replace('/dashboard' as any);
         return;
       }
       const data = await AuthController.getModuleByIdForUser(resolvedModuleId);
       if (!data) {
-        router.replace('/dashboard');
+        router.replace('/dashboard' as any);
         return;
       }
       setModule(data);
@@ -197,7 +259,7 @@ export default function ViewModulePage() {
       }
     } catch (error) {
       console.error('Error loading module:', error);
-      router.replace('/dashboard');
+      router.replace('/dashboard' as any);
     } finally {
       setLoading(false);
     }
@@ -254,6 +316,7 @@ export default function ViewModulePage() {
   }, [step, tryItPaused]);
 
   const handlePracticeAgain = () => beginTryItPractice(undefined, false);
+  const goDashboardWithReviewPrompt = () => exitToDashboardRef.current({ review: true });
   const handleMessages = () => {
     clearUnread();
     setShowMenu(false);
@@ -275,16 +338,29 @@ export default function ViewModulePage() {
         console.error('Error recording module completion:', e);
       }
     }
+    const key = categoryStorageKey || normalizeCategoryKey(module?.category || '');
+    const categoryLabel = (module?.category || categoryKeyFromRoute || '').trim();
     if (nextModuleId) {
       router.replace({
         pathname: '/view-module',
         params: {
           moduleId: nextModuleId,
+          ...(key ? { categoryKey: key } : {}),
           ...(programOrderRaw ? { programOrder: programOrderRaw } : {}),
         },
       } as any);
+    } else if (key) {
+      router.replace({
+        pathname: '/dashboard',
+        params: {
+          reviewPrompt: '1',
+          reviewCategoryKey: key,
+          reviewCategory: categoryLabel,
+          reviewTs: String(Date.now()),
+        },
+      } as any);
     } else {
-      router.replace('/dashboard');
+      router.replace('/dashboard' as any);
     }
   };
 
@@ -325,7 +401,7 @@ export default function ViewModulePage() {
             <TouchableOpacity style={styles.sidebarButton} onPress={() => router.push('/trainer')}>
               <Image source={require('../../assets/images/trainericon.png')} style={styles.iconImage} resizeMode="contain" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => router.replace('/dashboard')}>
+            <TouchableOpacity style={styles.sidebarButton} onPress={goDashboardWithReviewPrompt}>
               <Image source={require('../../assets/images/homeicon.png')} style={styles.iconImage} resizeMode="contain" />
             </TouchableOpacity>
           </View>
@@ -336,14 +412,14 @@ export default function ViewModulePage() {
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
-              if (step === 'intro') router.replace('/dashboard');
-              else if (step === 'safety') router.replace('/dashboard');
+              if (step === 'intro') goDashboardWithReviewPrompt();
+              else if (step === 'safety') goDashboardWithReviewPrompt();
               else if (step === 'video') setStep('safety');
               else if (step === 'tryIt') {
                 if (tryItBackToSafetyRef.current) setStep('safety');
-                else router.replace('/dashboard');
+                else goDashboardWithReviewPrompt();
               }
-              else if (step === 'complete') router.replace('/dashboard');
+              else if (step === 'complete') goDashboardWithReviewPrompt();
             }}
           >
             <Image source={require('../../assets/images/backbuttonicon.png')} style={styles.backButtonIcon} resizeMode="contain" />
@@ -452,7 +528,7 @@ export default function ViewModulePage() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.continueButton}
-                  onPress={() => router.replace('/dashboard')}
+                  onPress={goDashboardWithReviewPrompt}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.continueButtonText}>Back</Text>

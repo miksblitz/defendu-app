@@ -7,7 +7,6 @@ import {
     ActivityIndicator,
     Alert,
     Image,
-    Linking,
     Modal,
     Platform,
     SafeAreaView,
@@ -19,16 +18,10 @@ import {
     useWindowDimensions,
     View,
 } from 'react-native';
-import OfflineModeModal from '../../components/OfflineModeModal';
 import { getSidebarWidth, Breakpoints } from '../../constants/layout';
 import { useLogout } from '../../hooks/useLogout';
-import { OfflineStorage } from '../_utils/offlineStorage';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController } from '../controllers/AuthController';
-
-const PRIVACY_URL = 'https://defendu.com/privacy';
-const TERMS_URL = 'https://defendu.com/terms';
-const CONTACT_EMAIL = 'support@defendu.com';
 
 /** Display avatar is 150×150; cap source uploads to keep picks fast and avoid memory issues. */
 const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -50,8 +43,6 @@ export default function ProfilePage() {
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
-  const [showOfflineModal, setShowOfflineModal] = useState(false);
-  const [offlineEnabled, setOfflineEnabled] = useState(false);
 
   // Height & weight editing
   const [height, setHeight] = useState<string>('');
@@ -79,6 +70,9 @@ export default function ProfilePage() {
   const [uploadingCover, setUploadingCover] = useState(false);
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
   const [showCoverPickerModal, setShowCoverPickerModal] = useState(false);
+  const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
+  const [imagePreviewUri, setImagePreviewUri] = useState<string | null>(null);
+  const [imagePreviewTitle, setImagePreviewTitle] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const coverFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -129,9 +123,6 @@ export default function ProfilePage() {
       setHeightInput(h != null ? String(h) : '');
       setWeightInput(w != null ? String(w) : '');
 
-      // Check offline mode status
-      const isEnabled = await OfflineStorage.isOfflineEnabled();
-      setOfflineEnabled(isEnabled);
     } catch (error) {
       console.error('Error loading user data:', error);
       router.replace('/(auth)/login');
@@ -280,22 +271,6 @@ export default function ProfilePage() {
         },
       ]
     );
-  };
-
-  const openLink = (url: string) => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.open) {
-      window.open(url, '_blank', 'noopener');
-    } else {
-      Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open link.'));
-    }
-  };
-
-  const openContact = () => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.open(`mailto:${CONTACT_EMAIL}`, '_self');
-    } else {
-      Linking.openURL(`mailto:${CONTACT_EMAIL}`).catch(() => Alert.alert('Error', 'Could not open email.'));
-    }
   };
 
   const handleImagePickerPress = () => {
@@ -632,6 +607,13 @@ export default function ProfilePage() {
     }
   };
 
+  const openImagePreview = (uri: string, title: string) => {
+    if (!uri) return;
+    setImagePreviewUri(uri);
+    setImagePreviewTitle(title);
+    setImagePreviewVisible(true);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -726,42 +708,65 @@ export default function ProfilePage() {
               />
             </>
           )}
-          <TouchableOpacity
-            style={styles.coverCornerButton}
-            onPress={handleCoverPickerPress}
-            disabled={uploadingCover || uploadingPicture}
-            accessibilityLabel="Add or change cover photo"
-          >
-            {uploadingCover ? (
-              <ActivityIndicator color="#07bbc0" size="small" />
-            ) : (
-              <>
-                <Ionicons name="image-outline" size={18} color="#07bbc0" />
-                <Text style={styles.coverCornerButtonText}>Add cover photo</Text>
-              </>
-            )}
-          </TouchableOpacity>
           <ScrollView style={[styles.mainContent, isMobile && { paddingHorizontal: 16 }]} contentContainerStyle={{ paddingBottom: 40, paddingTop: 25 }}>
           {/* Profile header: cover behind avatar, name below */}
           <View style={styles.profileDisplaySection}>
             <View style={styles.profileHero}>
               <View style={styles.coverStrip}>
                 {coverPhoto ? (
-                  <Image
-                    source={{ uri: coverPhoto }}
-                    style={styles.coverImage}
-                    resizeMode="cover"
-                  />
-                ) : null}
+                  <TouchableOpacity
+                    onPress={() => openImagePreview(coverPhoto, 'Cover photo')}
+                    activeOpacity={0.92}
+                    accessibilityLabel="View cover photo"
+                    style={styles.coverImagePressable}
+                  >
+                    <Image
+                      source={{ uri: coverPhoto }}
+                      style={styles.coverImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.coverPlaceholder}>
+                    <Ionicons name="image-outline" size={28} color="rgba(210, 232, 243, 0.6)" />
+                    <Text style={styles.coverPlaceholderTitle}>Add a cover photo</Text>
+                    <Text style={styles.coverPlaceholderHint}>A clean banner makes your profile look pro.</Text>
+                  </View>
+                )}
+                <View style={styles.coverShade} />
+                <View style={styles.coverBottomGlow} />
+                <TouchableOpacity
+                  style={styles.coverActionPill}
+                  onPress={handleCoverPickerPress}
+                  disabled={uploadingCover || uploadingPicture}
+                  accessibilityLabel="Add or change cover photo"
+                  activeOpacity={0.86}
+                >
+                  {uploadingCover ? (
+                    <ActivityIndicator color="#041527" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="camera-outline" size={16} color="#041527" />
+                      <Text style={styles.coverActionPillText}>{coverPhoto ? 'Change cover' : 'Add cover'}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
               <View style={styles.avatarOverlap}>
                 <View style={styles.avatarContainer}>
                   <View style={styles.avatarLarge}>
                     {profilePicture ? (
-                      <Image
-                        source={{ uri: profilePicture }}
-                        style={styles.avatarImage}
-                      />
+                      <TouchableOpacity
+                        onPress={() => openImagePreview(profilePicture, 'Profile photo')}
+                        activeOpacity={0.9}
+                        accessibilityLabel="View profile photo"
+                        style={styles.avatarImagePressable}
+                      >
+                        <Image
+                          source={{ uri: profilePicture }}
+                          style={styles.avatarImage}
+                        />
+                      </TouchableOpacity>
                     ) : (
                       <Image
                         source={require('../../assets/images/profilepictureplaceholdericon.png')}
@@ -838,48 +843,46 @@ export default function ProfilePage() {
               <Text style={styles.menuOptionText}>Settings</Text>
               <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuOption} onPress={() => router.push('/location')}>
-              <Ionicons name="location-outline" size={20} color="#07bbc0" />
-              <Text style={styles.menuOptionText}>Location</Text>
-              <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
-            </TouchableOpacity>
-            <View style={styles.menuSeparator} />
-            <TouchableOpacity style={styles.menuOption}>
-              <Ionicons name="help-circle-outline" size={20} color="#07bbc0" />
-              <Text style={styles.menuOptionText}>Help & Support</Text>
-              <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.menuOption}
-              onPress={() => setShowOfflineModal(true)}
-            >
-              <Ionicons name="cloud-download-outline" size={20} color="#07bbc0" />
-              <Text style={styles.menuOptionText}>Offline Mode</Text>
-              {offlineEnabled && (
-                <View style={styles.enabledBadge}>
-                  <Text style={styles.enabledBadgeText}>ON</Text>
-                </View>
-              )}
-              <Ionicons name="chevron-forward-outline" size={20} color="#07bbc0" />
-            </TouchableOpacity>
           </View>
 
-          {/* Links Section */}
-          <View style={styles.linksSection}>
-            <TouchableOpacity style={styles.linkRow} onPress={() => openLink(PRIVACY_URL)}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#07bbc0" />
-              <Text style={styles.linkText}>Privacy Policy</Text>
-              <Ionicons name="chevron-forward-outline" size={20} color="#6b8693" />
+          {/* Support & Privacy Hub */}
+          <View style={styles.supportHubSection}>
+            <Text style={styles.supportHubTitle}>Support Hub</Text>
+            <Text style={styles.supportHubSubtitle}>
+              Get help fast, understand your privacy, and reach us in one tap.
+            </Text>
+
+            <TouchableOpacity style={styles.supportCard} onPress={() => router.push('/help-support')}>
+              <View style={[styles.supportIconWrap, styles.supportIconHelp]}>
+                <Ionicons name="help-buoy-outline" size={20} color="#0a1a2a" />
+              </View>
+              <View style={styles.supportTextCol}>
+                <Text style={styles.supportCardTitle}>Help & Support</Text>
+                <Text style={styles.supportCardDesc}>Get instant guidance, FAQs, and support steps.</Text>
+              </View>
+              <Ionicons name="arrow-forward-circle-outline" size={22} color="#a5c6d4" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.linkRow} onPress={() => openLink(TERMS_URL)}>
-              <Ionicons name="document-text-outline" size={20} color="#07bbc0" />
-              <Text style={styles.linkText}>Terms of Service</Text>
-              <Ionicons name="chevron-forward-outline" size={20} color="#6b8693" />
+
+            <TouchableOpacity style={styles.supportCard} onPress={() => router.push('/privacy-policy')}>
+              <View style={[styles.supportIconWrap, styles.supportIconPrivacy]}>
+                <Ionicons name="shield-checkmark-outline" size={20} color="#0a1a2a" />
+              </View>
+              <View style={styles.supportTextCol}>
+                <Text style={styles.supportCardTitle}>Privacy Policy</Text>
+                <Text style={styles.supportCardDesc}>Learn how your data is stored and protected.</Text>
+              </View>
+              <Ionicons name="arrow-forward-circle-outline" size={22} color="#a5c6d4" />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.linkRow, styles.linkRowLast]} onPress={openContact}>
-              <Ionicons name="mail-outline" size={20} color="#07bbc0" />
-              <Text style={styles.linkText}>Contact us</Text>
-              <Ionicons name="chevron-forward-outline" size={20} color="#6b8693" />
+
+            <TouchableOpacity style={styles.supportCard} onPress={() => router.push('/contact-us')}>
+              <View style={[styles.supportIconWrap, styles.supportIconContact]}>
+                <Ionicons name="mail-open-outline" size={20} color="#0a1a2a" />
+              </View>
+              <View style={styles.supportTextCol}>
+                <Text style={styles.supportCardTitle}>Contact Us</Text>
+                <Text style={styles.supportCardDesc}>Talk to the DEFENDU team with in-app contact options.</Text>
+              </View>
+              <Ionicons name="arrow-forward-circle-outline" size={22} color="#a5c6d4" />
             </TouchableOpacity>
           </View>
 
@@ -1048,18 +1051,30 @@ export default function ProfilePage() {
         </Modal>
       )}
 
-      {/* Offline Mode Modal */}
-      <OfflineModeModal
-        visible={showOfflineModal}
-        onClose={() => {
-          setShowOfflineModal(false);
-          // Refresh offline status when modal closes
-          loadUserData();
-        }}
-        onEnable={() => {
-          setOfflineEnabled(true);
-        }}
-      />
+      {/* Full image preview (profile/cover) */}
+      <Modal
+        visible={imagePreviewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImagePreviewVisible(false)}
+      >
+        <View style={styles.imagePreviewOverlay}>
+          <View style={styles.imagePreviewHeader}>
+            <Text style={styles.imagePreviewTitle}>{imagePreviewTitle}</Text>
+            <TouchableOpacity
+              style={styles.imagePreviewClose}
+              onPress={() => setImagePreviewVisible(false)}
+              accessibilityLabel="Close image preview"
+            >
+              <Ionicons name="close" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          {imagePreviewUri ? (
+            <Image source={{ uri: imagePreviewUri }} style={styles.imagePreviewImage} resizeMode="contain" />
+          ) : null}
+          <Text style={styles.imagePreviewHint}>Tap X to close</Text>
+        </View>
+      </Modal>
 
       {/* Edit Profile Modal */}
       <Modal
@@ -1236,28 +1251,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 30,
   },
-  coverCornerButton: {
-    position: 'absolute',
-    top: 10,
-    right: 12,
-    zIndex: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(4, 21, 39, 0.94)',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(7, 187, 192, 0.4)',
-    maxWidth: '58%',
-  },
-  coverCornerButtonText: {
-    color: '#07bbc0',
-    fontSize: 12,
-    fontWeight: '700',
-    marginLeft: 6,
-    flexShrink: 1,
-  },
   profileDisplaySection: {
     marginBottom: 40,
     alignItems: 'center',
@@ -1265,24 +1258,93 @@ const styles = StyleSheet.create({
   },
   profileHero: {
     width: '100%',
-    marginHorizontal: -30,
     alignItems: 'center',
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.18)',
+    backgroundColor: '#071b2b',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.34,
+    shadowRadius: 18,
+    elevation: 8,
   },
   coverStrip: {
     width: '100%',
-    height: 152,
+    height: 190,
     backgroundColor: '#0a1e30',
     overflow: 'hidden',
+    position: 'relative',
   },
   coverImage: {
     width: '100%',
     height: '100%',
   },
+  coverImagePressable: {
+    width: '100%',
+    height: '100%',
+  },
+  coverPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0d2436',
+  },
+  coverPlaceholderTitle: {
+    marginTop: 8,
+    color: '#d2e8f3',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  coverPlaceholderHint: {
+    marginTop: 4,
+    color: 'rgba(157, 179, 190, 0.9)',
+    fontSize: 12,
+  },
+  coverShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(4, 21, 39, 0.28)',
+  },
+  coverBottomGlow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 66,
+    backgroundColor: 'rgba(4, 21, 39, 0.62)',
+  },
+  coverActionPill: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#07bbc0',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+    shadowColor: '#07bbc0',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  coverActionPillText: {
+    color: '#041527',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
   avatarOverlap: {
-    marginTop: -76,
+    marginTop: -70,
     alignItems: 'center',
     zIndex: 2,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   avatarContainer: {
     alignSelf: 'center',
@@ -1343,6 +1405,10 @@ const styles = StyleSheet.create({
     height: 140,
     borderRadius: 70,
     resizeMode: 'cover',
+  },
+  avatarImagePressable: {
+    width: '100%',
+    height: '100%',
   },
   userName: {
     fontSize: 24,
@@ -1442,33 +1508,70 @@ const styles = StyleSheet.create({
     opacity: 0.4,
     shadowOpacity: 0,
   },
-  linksSection: {
-    marginTop: 12,
+  supportHubSection: {
+    marginTop: 14,
     marginHorizontal: 8,
-    backgroundColor: 'rgba(7, 187, 192, 0.04)',
-    borderRadius: 16,
     marginBottom: 12,
-    overflow: 'hidden',
+    backgroundColor: 'rgba(7, 187, 192, 0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(7,187,192,0.08)',
+    borderColor: 'rgba(7,187,192,0.16)',
+    borderRadius: 16,
+    padding: 14,
   },
-  linkRow: {
+  supportHubTitle: {
+    color: '#e9f7ff',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  supportHubSubtitle: {
+    marginTop: 4,
+    marginBottom: 12,
+    color: '#90adbc',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  supportCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(107, 134, 147, 0.1)',
+    backgroundColor: 'rgba(2, 20, 34, 0.85)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.2)',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 10,
   },
-  linkRowLast: {
-    borderBottomWidth: 0,
+  supportIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
-  linkText: {
+  supportIconHelp: {
+    backgroundColor: '#27d0d5',
+  },
+  supportIconPrivacy: {
+    backgroundColor: '#5ce6b4',
+  },
+  supportIconContact: {
+    backgroundColor: '#79bfff',
+  },
+  supportTextCol: {
     flex: 1,
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-    marginLeft: 14,
+    minWidth: 0,
+  },
+  supportCardTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  supportCardDesc: {
+    marginTop: 2,
+    color: '#9db3be',
+    fontSize: 12,
+    lineHeight: 17,
   },
   resetButton: {
     flexDirection: 'row',
@@ -1599,12 +1702,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 14,
   },
-  menuSeparator: {
-    height: 1,
-    backgroundColor: 'rgba(107, 134, 147, 0.15)',
-    marginVertical: 4,
-    marginHorizontal: 4,
-  },
   menuOverlay: {
     position: 'absolute',
     top: 0,
@@ -1647,18 +1744,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '500',
-  },
-  enabledBadge: {
-    backgroundColor: '#07bbc0',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    marginRight: 8,
-  },
-  enabledBadgeText: {
-    color: '#041527',
-    fontSize: 10,
-    fontWeight: '700',
   },
   imagePickerModalOverlay: {
     flex: 1,
@@ -1714,6 +1799,46 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     width: '100%',
+  },
+  imagePreviewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 6, 12, 0.96)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 52,
+    paddingBottom: 28,
+  },
+  imagePreviewHeader: {
+    width: '100%',
+    maxWidth: 1080,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  imagePreviewTitle: {
+    color: '#dff2f7',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  imagePreviewClose: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imagePreviewImage: {
+    width: '100%',
+    maxWidth: 1080,
+    flex: 1,
+  },
+  imagePreviewHint: {
+    color: 'rgba(210, 232, 243, 0.75)',
+    fontSize: 12,
+    marginTop: 8,
   },
   // Mobile responsive styles
   mobileHeader: {
