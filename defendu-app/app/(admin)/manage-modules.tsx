@@ -111,6 +111,7 @@ export default function ManageModulesPage() {
   const [assignSearchQuery, setAssignSearchQuery] = useState('');
   const [assignCategoryFilter, setAssignCategoryFilter] = useState<string>('All');
   const [moduleTableSegment, setModuleTableSegment] = useState<ModuleTableSegment>('technique');
+  const [approvedTrainerNames, setApprovedTrainerNames] = useState<string[]>([]);
   const [showAssignSegmentModal, setShowAssignSegmentModal] = useState(false);
   const [assignSegmentCategory, setAssignSegmentCategory] = useState('');
   const [assignSegmentWarmupIds, setAssignSegmentWarmupIds] = useState<string[]>([]);
@@ -147,12 +148,14 @@ export default function ManageModulesPage() {
   useEffect(() => {
     loadModules();
     loadCategories();
+    loadApprovedTrainerNames();
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       loadModules();
       loadCategories();
+      loadApprovedTrainerNames();
     }, [])
   );
 
@@ -199,6 +202,19 @@ export default function ManageModulesPage() {
     } catch (error: any) {
       console.error('Error loading categories:', error);
       setCategories(AuthController.getFallbackModuleCategories());
+    }
+  };
+
+  const loadApprovedTrainerNames = async () => {
+    try {
+      const approved = await AuthController.getApprovedTrainers();
+      const names = approved
+        .map((trainer) => `${trainer.firstName || ''} ${trainer.lastName || ''}`.trim())
+        .filter((name) => !!name);
+      setApprovedTrainerNames(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b)));
+    } catch (error) {
+      console.error('Error loading approved trainer names:', error);
+      setApprovedTrainerNames([]);
     }
   };
 
@@ -253,6 +269,7 @@ export default function ManageModulesPage() {
       const trainer = module.trainerName?.trim() || module.trainerId;
       if (trainer) trainers.add(trainer);
     });
+    approvedTrainerNames.forEach((name) => trainers.add(name));
 
     return [
       { label: 'All Trainers', value: 'all' },
@@ -260,7 +277,7 @@ export default function ManageModulesPage() {
         .sort((a, b) => a.localeCompare(b))
         .map((name) => ({ label: name, value: name })),
     ];
-  }, [modules]);
+  }, [modules, approvedTrainerNames]);
 
   const modulesWithoutSegment = useMemo(
     () => modules.filter((m) => !m.moduleSegment),

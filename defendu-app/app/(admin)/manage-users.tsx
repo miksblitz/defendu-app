@@ -24,7 +24,7 @@ import { useLogout } from '../../hooks/useLogout';
 import { User } from '../_models/User';
 import { AuthController } from '../controllers/AuthController';
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 10;
 
 export default function ManageUsersPage() {
   const { width } = useWindowDimensions();
@@ -342,23 +342,25 @@ export default function ManageUsersPage() {
             />
           </Animated.View>
 
-          <AdminTable
-            columns={columns}
-            data={paginatedUsers}
-            loading={loading}
-            compact={isCompact}
-            keyExtractor={(user) => user.uid}
-            sortState={sortState}
-            onSortChange={handleSortChange}
-            emptyTitle={searchQuery ? 'No users match your search' : 'No users available'}
-            emptyDescription="Try clearing filters or check if users are properly loaded from the database."
-            pagination={{
-              currentPage,
-              totalPages,
-              onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
-              onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
-            }}
-          />
+          <View style={styles.tableWrap}>
+            <AdminTable
+              columns={columns}
+              data={paginatedUsers}
+              loading={loading}
+              compact={isCompact}
+              keyExtractor={(user) => user.uid}
+              sortState={sortState}
+              onSortChange={handleSortChange}
+              emptyTitle={searchQuery ? 'No users match your search' : 'No users available'}
+              emptyDescription="Try clearing filters or check if users are properly loaded from the database."
+              pagination={{
+                currentPage,
+                totalPages,
+                onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
+                onNext: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
+              }}
+            />
+          </View>
         </ScrollView>
       </View>
 
@@ -459,7 +461,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingLeft: 100,
-    paddingRight: 20,
+    paddingRight: 8,
     paddingTop: 20,
     paddingBottom: 12,
   },
@@ -495,21 +497,30 @@ const styles = StyleSheet.create({
   },
   mainContent: {
     flex: 1,
-    paddingLeft: 100,
-    paddingRight: 20,
+    paddingLeft: 8,
+    paddingRight: 8,
     paddingTop: 16,
     paddingBottom: 18,
     gap: 12,
   },
   mainContentCompact: {
-    paddingLeft: 86,
-    paddingRight: 12,
+    paddingLeft: 6,
+    paddingRight: 6,
     gap: 10,
   },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginBottom: 10,
+    width: '100%',
+    maxWidth: 960,
+    alignSelf: 'center',
+  },
+  tableWrap: {
+    width: '100%',
+    maxWidth: 960,
+    alignSelf: 'center',
   },
   nameText: {
     color: '#f0f8fc',

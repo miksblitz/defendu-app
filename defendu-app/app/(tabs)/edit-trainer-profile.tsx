@@ -9,7 +9,10 @@ import {
   SafeAreaView,
   Image,
   ActivityIndicator,
+  Modal,
+  Platform,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
@@ -32,6 +35,28 @@ const beltBasedMartialArts = [
   'Hapkido',
 ];
 
+const allDefenseStyles = [
+  'Aikido',
+  'Boxing',
+  'Brazilian Jiu-Jitsu (BJJ)',
+  'Hapkido',
+  'Jeet Kune Do',
+  'Judo',
+  'Karate',
+  'Kickboxing',
+  'Krav Maga',
+  'Kung Fu',
+  'Kyokushin Karate',
+  'Mixed Martial Arts (MMA)',
+  'Muay Thai',
+  'Shotokan Karate',
+  'Taekwondo',
+  'Tang Soo Do',
+  'Wado-Ryu Karate',
+  'Wing Chun',
+  'Wrestling',
+];
+
 // Belt systems
 const beltSystems: { [key: string]: string[] } = {
   'Brazilian Jiu-Jitsu (BJJ)': ['White', 'Blue', 'Purple', 'Brown', 'Black'],
@@ -46,6 +71,23 @@ const beltSystems: { [key: string]: string[] } = {
 };
 
 export default function EditTrainerProfilePage() {
+  const formatDateToIso = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const parseIsoDate = (value: string): Date | null => {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+
+    const [, yearText, monthText, dayText] = match;
+    const parsed = new Date(Number(yearText), Number(monthText) - 1, Number(dayText));
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+  };
+
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -55,16 +97,23 @@ export default function EditTrainerProfilePage() {
 
   // Form state
   const [fullName, setFullName] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [academyName, setAcademyName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [beltColor, setBeltColor] = useState('');
   const [physicalAddress, setPhysicalAddress] = useState('');
-  const [aboutMe, setAboutMe] = useState('');
+  const [yearsOfExperience, setYearsOfExperience] = useState('');
+  const [yearsOfTeaching, setYearsOfTeaching] = useState('');
   const [defenseStyles, setDefenseStyles] = useState<string[]>([]);
   const [showBeltDropdown, setShowBeltDropdown] = useState(false);
+  const [showStyleDropdown, setShowStyleDropdown] = useState(false);
+  const [showExperienceDropdown, setShowExperienceDropdown] = useState(false);
+  const [showTeachingDropdown, setShowTeachingDropdown] = useState(false);
   const [beltSearch, setBeltSearch] = useState('');
+  const [styleSearch, setStyleSearch] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [dobPickerDate, setDobPickerDate] = useState(new Date(1990, 0, 1));
 
   // Load trainer application data on mount
   useEffect(() => {
@@ -79,15 +128,37 @@ export default function EditTrainerProfilePage() {
 
         const applicationData = await AuthController.getTrainerApplicationData(currentUser.uid);
         if (applicationData) {
-          setFullName(applicationData.fullLegalName || '');
-          setDisplayName(applicationData.professionalAlias || '');
-          setPhone(applicationData.phone || '');
-          setEmail(applicationData.email || '');
-          setAcademyName(applicationData.academyName || '');
-          setBeltColor(applicationData.currentRank || '');
-          setPhysicalAddress(applicationData.physicalAddress || '');
-          setAboutMe(applicationData.aboutMe || '');
-          setDefenseStyles(applicationData.defenseStyles || []);
+          const fallbackFullName =
+            `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() ||
+            currentUser.username ||
+            '';
+
+          const loaded = {
+            fullName: applicationData.fullLegalName || fallbackFullName,
+            phone: applicationData.phone || '',
+            email: applicationData.email || currentUser.email || '',
+            academyName: applicationData.academyName || '',
+            dateOfBirth: applicationData.dateOfBirth || '',
+            beltColor: applicationData.currentRank || '',
+            physicalAddress: applicationData.physicalAddress || '',
+            yearsOfExperience: applicationData.yearsOfExperience || '',
+            yearsOfTeaching: applicationData.yearsOfTeaching || '',
+            defenseStyles: applicationData.defenseStyles || [],
+          };
+          setFullName(loaded.fullName);
+          setPhone(loaded.phone);
+          setEmail(loaded.email);
+          setAcademyName(loaded.academyName);
+          setDateOfBirth(loaded.dateOfBirth);
+          const parsedDob = parseIsoDate(loaded.dateOfBirth);
+          if (parsedDob) {
+            setDobPickerDate(parsedDob);
+          }
+          setBeltColor(loaded.beltColor);
+          setPhysicalAddress(loaded.physicalAddress);
+          setYearsOfExperience(loaded.yearsOfExperience);
+          setYearsOfTeaching(loaded.yearsOfTeaching);
+          setDefenseStyles(loaded.defenseStyles);
         } else {
           showToast('Trainer application not found');
           router.back();
@@ -120,6 +191,55 @@ export default function EditTrainerProfilePage() {
     );
   }, [defenseStyles, beltSearch]);
 
+  const filteredDefenseStyles = useMemo(() => {
+    return allDefenseStyles.filter((style) =>
+      style.toLowerCase().includes(styleSearch.toLowerCase())
+    );
+  }, [styleSearch]);
+
+  const yearOptions = useMemo(() => {
+    return Array.from({ length: 51 }, (_, i) => String(i));
+  }, []);
+
+  const hasBeltStyle = useMemo(() => {
+    return defenseStyles.some((style) =>
+      beltBasedMartialArts.some(
+        (beltArt) =>
+          style.toLowerCase() === beltArt.toLowerCase() ||
+          style.toLowerCase().includes(beltArt.toLowerCase())
+      )
+    );
+  }, [defenseStyles]);
+
+  const toggleDefenseStyle = (style: string) => {
+    setDefenseStyles((prev) =>
+      prev.includes(style) ? prev.filter((item) => item !== style) : [...prev, style]
+    );
+  };
+
+  const openDatePicker = () => {
+    const parsedDob = parseIsoDate(dateOfBirth);
+    if (parsedDob) {
+      setDobPickerDate(parsedDob);
+    }
+    setShowDatePicker(true);
+  };
+
+  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+
+    if (event.type === 'dismissed') {
+      return;
+    }
+
+    if (selectedDate) {
+      setDobPickerDate(selectedDate);
+      setDateOfBirth(formatDateToIso(selectedDate));
+    }
+  };
+
   const handleSave = async () => {
     try {
       setLoading(true);
@@ -147,6 +267,26 @@ export default function EditTrainerProfilePage() {
         showToast('Physical address is required');
         return;
       }
+      if (!dateOfBirth.trim()) {
+        showToast('Date of birth is required');
+        return;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth.trim())) {
+        showToast('Date of birth must be in YYYY-MM-DD format');
+        return;
+      }
+      if (!yearsOfExperience.trim()) {
+        showToast('Years of experience is required');
+        return;
+      }
+      if (!yearsOfTeaching.trim()) {
+        showToast('Years of teaching is required');
+        return;
+      }
+      if (!defenseStyles.length) {
+        showToast('Select at least one defense style');
+        return;
+      }
 
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -158,13 +298,15 @@ export default function EditTrainerProfilePage() {
       // Update trainer application
       const updates: Partial<TrainerApplication> = {
         fullLegalName: fullName.trim(),
-        professionalAlias: displayName.trim() || undefined,
         phone: phone.trim(),
         email: email.trim(),
         academyName: academyName.trim() || undefined,
+        dateOfBirth: dateOfBirth.trim(),
+        defenseStyles,
+        yearsOfExperience: yearsOfExperience.trim(),
+        yearsOfTeaching: yearsOfTeaching.trim(),
         currentRank: beltColor.trim() || undefined,
         physicalAddress: physicalAddress.trim(),
-        aboutMe: aboutMe.trim() || undefined,
       };
 
       await AuthController.updateTrainerApplication(currentUser.uid, updates);
@@ -273,219 +415,429 @@ export default function EditTrainerProfilePage() {
             </TouchableOpacity>
             {/* Profile Form Section */}
             <View style={styles.profileFormSection}>
-              <Text style={styles.formTitle}>Edit Trainer Profile</Text>
-
-              {/* Full Name */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Full Name</Text>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="person-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                    value={fullName}
-                    placeholder="Full legal name"
-                    placeholderTextColor="#6b8693"
-                    onChangeText={setFullName}
-                    autoCapitalize="words"
-                  />
+              <View style={styles.heroCard}>
+                <View style={styles.heroTextWrap}>
+                  <Text style={styles.formTitle}>Edit Trainer Profile</Text>
                 </View>
               </View>
 
-              {/* Display Name */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Display Name</Text>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="at-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                    value={displayName}
-                    placeholder="Display Name"
-                    placeholderTextColor="#6b8693"
-                    onChangeText={setDisplayName}
-                    autoCapitalize="none"
-                  />
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Personal Information</Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Full Name</Text>
+                  <View style={[styles.inputWrapper, styles.inputReadOnly]}>
+                    <Ionicons name="person-outline" size={20} color="#6b8693" style={{ marginLeft: 6, marginRight: 8 }} />
+                    <Text style={styles.readOnlyText}>{fullName || 'N/A'}</Text>
+                  </View>
+                </View>
+
+                {/* Email */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Email</Text>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="mail-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                    <TextInput
+                      style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      value={email}
+                      placeholder="Email Address"
+                      placeholderTextColor="#6b8693"
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
+
+                {/* Academy Name */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Academy Name</Text>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="school-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                    <TextInput
+                      style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      value={academyName}
+                      placeholder="Academy Name"
+                      placeholderTextColor="#6b8693"
+                      onChangeText={setAcademyName}
+                      autoCapitalize="words"
+                    />
+                  </View>
+                </View>
+
+                {/* Phone */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Phone</Text>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="call-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                    <TextInput
+                      style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      value={phone}
+                      placeholder="Phone Number"
+                      placeholderTextColor="#6b8693"
+                      onChangeText={setPhone}
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                </View>
+
+                {/* Date of Birth */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Date of Birth</Text>
+                  {Platform.OS === 'web' ? (
+                    <View style={styles.inputWrapper}>
+                      <Ionicons name="calendar-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                      <input
+                        type="date"
+                        value={dateOfBirth}
+                        max={formatDateToIso(new Date())}
+                        onChange={(event) => {
+                          const selected = event.target.value;
+                          setDateOfBirth(selected);
+                          const parsed = parseIsoDate(selected);
+                          if (parsed) {
+                            setDobPickerDate(parsed);
+                          }
+                        }}
+                        style={styles.webDateInput as any}
+                      />
+                    </View>
+                  ) : (
+                    <TouchableOpacity style={styles.selectInput} onPress={openDatePicker}>
+                      <Ionicons name="calendar-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                      <Text style={dateOfBirth ? styles.selectedText : styles.placeholderText}>
+                        {dateOfBirth || 'Select date of birth'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={20} color="#07bbc0" style={{ marginRight: 8 }} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Physical Address */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Address</Text>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="location-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                    <TextInput
+                      style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                      value={physicalAddress}
+                      placeholder="Physical Address"
+                      placeholderTextColor="#6b8693"
+                      onChangeText={setPhysicalAddress}
+                      multiline
+                      numberOfLines={2}
+                    />
+                  </View>
                 </View>
               </View>
 
-              {/* Phone */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Phone</Text>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="call-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                    value={phone}
-                    placeholder="Phone Number"
-                    placeholderTextColor="#6b8693"
-                    onChangeText={setPhone}
-                    keyboardType="phone-pad"
-                  />
-                </View>
-              </View>
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Credentials & Certifications</Text>
 
-              {/* Email */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Email</Text>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="mail-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                    value={email}
-                    placeholder="Email Address"
-                    placeholderTextColor="#6b8693"
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </View>
-              </View>
-
-              {/* Academy Name */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Academy Name</Text>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="school-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                    value={academyName}
-                    placeholder="Academy Name"
-                    placeholderTextColor="#6b8693"
-                    onChangeText={setAcademyName}
-                    autoCapitalize="words"
-                  />
-                </View>
-              </View>
-
-              {/* Belt Color - Only show if trainer has selected a belt-based martial art */}
-              {defenseStyles.some(style => beltBasedMartialArts.includes(style)) && (
-                <View style={[styles.inputGroup, showBeltDropdown && styles.inputGroupWithDropdown]}>
-                  <Text style={styles.inputLabel}>Belt Color</Text>
-                  <TouchableOpacity 
+                <View style={[styles.inputGroup, showStyleDropdown && styles.inputGroupWithDropdown]}>
+                  <Text style={styles.inputLabel}>Defense Styles</Text>
+                  <TouchableOpacity
                     style={styles.selectInput}
-                    onPress={() => setShowBeltDropdown(!showBeltDropdown)}
+                    onPress={() => {
+                      setShowStyleDropdown((prev) => !prev);
+                      setShowExperienceDropdown(false);
+                      setShowTeachingDropdown(false);
+                      setShowBeltDropdown(false);
+                    }}
                   >
-                    <Ionicons name="ribbon-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
-                    <Text style={beltColor ? styles.selectedText : styles.placeholderText}>
-                      {beltColor || 'Select belt color...'}
+                    <Ionicons name="shield-checkmark-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                    <Text style={defenseStyles.length ? styles.selectedText : styles.placeholderText} numberOfLines={1}>
+                      {defenseStyles.length ? `${defenseStyles.length} style(s) selected` : 'Select defense styles'}
                     </Text>
                     <Ionicons name="chevron-down" size={20} color="#07bbc0" style={{ marginRight: 8 }} />
                   </TouchableOpacity>
-                  {showBeltDropdown && (
-                    <>
-                      <TouchableOpacity
-                        style={styles.dropdownOverlay}
-                        activeOpacity={1}
-                        onPress={() => {
-                          setShowBeltDropdown(false);
-                          setBeltSearch('');
-                        }}
+                </View>
+
+                <View style={[styles.inputGroup, showExperienceDropdown && styles.inputGroupWithDropdown]}>
+                  <Text style={styles.inputLabel}>Years of Experience</Text>
+                  <TouchableOpacity
+                    style={styles.selectInput}
+                    onPress={() => {
+                      setShowExperienceDropdown((prev) => !prev);
+                      setShowTeachingDropdown(false);
+                      setShowBeltDropdown(false);
+                      setShowStyleDropdown(false);
+                    }}
+                  >
+                    <Ionicons name="medal-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                    <Text style={yearsOfExperience ? styles.selectedText : styles.placeholderText}>
+                      {yearsOfExperience ? `${yearsOfExperience} year(s)` : 'Select years of experience'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={{ marginRight: 8 }} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.inputGroup, showTeachingDropdown && styles.inputGroupWithDropdown]}>
+                  <Text style={styles.inputLabel}>Years of Teaching</Text>
+                  <TouchableOpacity
+                    style={styles.selectInput}
+                    onPress={() => {
+                      setShowTeachingDropdown((prev) => !prev);
+                      setShowExperienceDropdown(false);
+                      setShowBeltDropdown(false);
+                      setShowStyleDropdown(false);
+                    }}
+                  >
+                    <Ionicons name="people-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                    <Text style={yearsOfTeaching ? styles.selectedText : styles.placeholderText}>
+                      {yearsOfTeaching ? `${yearsOfTeaching} year(s)` : 'Select years of teaching'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={{ marginRight: 8 }} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Belt Color - Only show if trainer has selected a belt-based martial art */}
+                {hasBeltStyle && (
+                  <View style={[styles.inputGroup, showBeltDropdown && styles.inputGroupWithDropdown]}>
+                    <Text style={styles.inputLabel}>Current Belt</Text>
+                    <TouchableOpacity 
+                      style={styles.selectInput}
+                      onPress={() => {
+                        setShowBeltDropdown((prev) => !prev);
+                        setShowExperienceDropdown(false);
+                        setShowTeachingDropdown(false);
+                        setShowStyleDropdown(false);
+                      }}
+                    >
+                      <Ionicons name="ribbon-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                      <Text style={beltColor ? styles.selectedText : styles.placeholderText}>
+                        {beltColor || 'Select current rank...'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={20} color="#07bbc0" style={{ marginRight: 8 }} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {!hasBeltStyle && (
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Current Belt</Text>
+                    <View style={styles.inputWrapper}>
+                      <Ionicons name="ribbon-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
+                      <TextInput
+                        style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                        value={beltColor}
+                        placeholder="Current rank (optional)"
+                        placeholderTextColor="#6b8693"
+                        onChangeText={setBeltColor}
                       />
-                      <View style={styles.dropdown}>
-                        <View style={styles.searchContainer}>
-                          <Ionicons name="search-outline" size={20} color="#6b8693" style={styles.searchIcon} />
-                          <TextInput
-                            style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                            placeholder="Search belt color..."
-                            placeholderTextColor="#6b8693"
-                            value={beltSearch}
-                            onChangeText={setBeltSearch}
-                            autoFocus={false}
-                          />
-                          {beltSearch.length > 0 && (
-                            <TouchableOpacity onPress={() => setBeltSearch('')}>
-                              <Ionicons name="close-circle" size={20} color="#6b8693" />
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                        <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                          {filteredBelts.length > 0 ? (
-                            filteredBelts.map((belt) => (
-                              <TouchableOpacity
-                                key={belt}
-                                style={[
-                                  styles.dropdownItem,
-                                  beltColor === belt && styles.dropdownItemSelected,
-                                ]}
-                                onPress={() => {
-                                  setBeltColor(belt);
-                                  setShowBeltDropdown(false);
-                                  setBeltSearch('');
-                                }}
-                              >
-                                <Text style={[
-                                  styles.dropdownItemText,
-                                  beltColor === belt && styles.dropdownItemTextSelected,
-                                ]}>
-                                  {belt}
-                                </Text>
-                                {beltColor === belt && (
-                                  <Ionicons name="checkmark" size={20} color="#07bbc0" />
-                                )}
-                              </TouchableOpacity>
-                            ))
-                          ) : (
-                            <View style={styles.dropdownItem}>
-                              <Text style={styles.dropdownItemText}>No results found</Text>
-                            </View>
-                          )}
-                        </ScrollView>
-                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.actionRow}>
+                <TouchableOpacity 
+                  style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+                  onPress={handleSave}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                      <Text style={styles.saveButtonText}>Save Profile</Text>
                     </>
                   )}
-                </View>
-              )}
-
-              {/* Physical Address */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Physical Address</Text>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="location-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.input, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                    value={physicalAddress}
-                    placeholder="Physical Address"
-                    placeholderTextColor="#6b8693"
-                    onChangeText={setPhysicalAddress}
-                    multiline
-                    numberOfLines={2}
-                  />
-                </View>
+                </TouchableOpacity>
               </View>
-
-              {/* About Me */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>About Me</Text>
-                <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
-                  <Ionicons name="document-text-outline" size={20} color="#FFFFFF" style={{ marginLeft: 6, marginRight: 8, marginTop: 12, alignSelf: 'flex-start' }} />
-                  <TextInput
-                    style={[styles.input, styles.textArea, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                    value={aboutMe}
-                    placeholder="Tell us about yourself..."
-                    placeholderTextColor="#6b8693"
-                    onChangeText={setAboutMe}
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                  />
-                </View>
-              </View>
-
-              {/* Save Changes */}
-              <TouchableOpacity 
-                style={[styles.saveButton, loading && styles.saveButtonDisabled]}
-                onPress={handleSave}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
-                )}
-              </TouchableOpacity>
             </View>
           </ScrollView>
         </View>
       </View>
+
+      <Modal visible={showStyleDropdown} transparent animationType="fade" onRequestClose={() => setShowStyleDropdown(false)}>
+        <TouchableOpacity style={styles.portalOverlay} activeOpacity={1} onPress={() => setShowStyleDropdown(false)}>
+          <View style={styles.portalCard}>
+            <View style={styles.searchContainer}>
+              <Ionicons name="search-outline" size={20} color="#6b8693" style={styles.searchIcon} />
+              <TextInput
+                style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                placeholder="Search styles..."
+                placeholderTextColor="#6b8693"
+                value={styleSearch}
+                onChangeText={setStyleSearch}
+              />
+              {styleSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setStyleSearch('')}>
+                  <Ionicons name="close-circle" size={20} color="#6b8693" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+              {filteredDefenseStyles.length > 0 ? (
+                filteredDefenseStyles.map((style) => {
+                  const selected = defenseStyles.includes(style);
+                  return (
+                    <TouchableOpacity
+                      key={style}
+                      style={[styles.dropdownItem, selected && styles.dropdownItemSelected]}
+                      onPress={() => toggleDefenseStyle(style)}
+                    >
+                      <Text style={[styles.dropdownItemText, selected && styles.dropdownItemTextSelected]}>{style}</Text>
+                      <View style={[styles.checkbox, selected && styles.checkboxChecked]}>
+                        {selected ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <View style={styles.dropdownItem}>
+                  <Text style={styles.dropdownItemText}>No results found</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={showExperienceDropdown} transparent animationType="fade" onRequestClose={() => setShowExperienceDropdown(false)}>
+        <TouchableOpacity style={styles.portalOverlay} activeOpacity={1} onPress={() => setShowExperienceDropdown(false)}>
+          <View style={styles.portalCard}>
+            <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+              {yearOptions.map((year) => (
+                <TouchableOpacity
+                  key={`exp-${year}`}
+                  style={[styles.dropdownItem, yearsOfExperience === year && styles.dropdownItemSelected]}
+                  onPress={() => {
+                    setYearsOfExperience(year);
+                    setShowExperienceDropdown(false);
+                  }}
+                >
+                  <Text style={[styles.dropdownItemText, yearsOfExperience === year && styles.dropdownItemTextSelected]}>
+                    {year} year(s)
+                  </Text>
+                  {yearsOfExperience === year && <Ionicons name="checkmark" size={18} color="#07bbc0" />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={showTeachingDropdown} transparent animationType="fade" onRequestClose={() => setShowTeachingDropdown(false)}>
+        <TouchableOpacity style={styles.portalOverlay} activeOpacity={1} onPress={() => setShowTeachingDropdown(false)}>
+          <View style={styles.portalCard}>
+            <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+              {yearOptions.map((year) => (
+                <TouchableOpacity
+                  key={`teach-${year}`}
+                  style={[styles.dropdownItem, yearsOfTeaching === year && styles.dropdownItemSelected]}
+                  onPress={() => {
+                    setYearsOfTeaching(year);
+                    setShowTeachingDropdown(false);
+                  }}
+                >
+                  <Text style={[styles.dropdownItemText, yearsOfTeaching === year && styles.dropdownItemTextSelected]}>
+                    {year} year(s)
+                  </Text>
+                  {yearsOfTeaching === year && <Ionicons name="checkmark" size={18} color="#07bbc0" />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={showBeltDropdown}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowBeltDropdown(false);
+          setBeltSearch('');
+        }}
+      >
+        <TouchableOpacity
+          style={styles.portalOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            setShowBeltDropdown(false);
+            setBeltSearch('');
+          }}
+        >
+          <View style={styles.portalCard}>
+            <View style={styles.searchContainer}>
+              <Ionicons name="search-outline" size={20} color="#6b8693" style={styles.searchIcon} />
+              <TextInput
+                style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
+                placeholder="Search belt..."
+                placeholderTextColor="#6b8693"
+                value={beltSearch}
+                onChangeText={setBeltSearch}
+                autoFocus={false}
+              />
+              {beltSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setBeltSearch('')}>
+                  <Ionicons name="close-circle" size={20} color="#6b8693" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+              {filteredBelts.length > 0 ? (
+                filteredBelts.map((belt) => (
+                  <TouchableOpacity
+                    key={belt}
+                    style={[styles.dropdownItem, beltColor === belt && styles.dropdownItemSelected]}
+                    onPress={() => {
+                      setBeltColor(belt);
+                      setShowBeltDropdown(false);
+                      setBeltSearch('');
+                    }}
+                  >
+                    <Text style={[styles.dropdownItemText, beltColor === belt && styles.dropdownItemTextSelected]}>
+                      {belt}
+                    </Text>
+                    {beltColor === belt && <Ionicons name="checkmark" size={20} color="#07bbc0" />}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={styles.dropdownItem}>
+                  <Text style={styles.dropdownItemText}>No results found</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {showDatePicker && Platform.OS === 'android' && (
+        <DateTimePicker
+          value={dobPickerDate}
+          mode="date"
+          display="default"
+          maximumDate={new Date()}
+          onChange={handleDateChange}
+        />
+      )}
+
+      <Modal
+        visible={showDatePicker && Platform.OS === 'ios'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <TouchableOpacity style={styles.portalOverlay} activeOpacity={1} onPress={() => setShowDatePicker(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.datePickerCard}>
+            <View style={styles.datePickerActionRow}>
+              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <Text style={styles.datePickerActionText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <DateTimePicker
+              value={dobPickerDate}
+              mode="date"
+              display="spinner"
+              maximumDate={new Date()}
+              onChange={handleDateChange}
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Toast Notification */}
       <Toast
@@ -614,7 +966,7 @@ const styles = StyleSheet.create({
   },
   mainContent: {
     flex: 1,
-    paddingHorizontal: 30,
+    paddingHorizontal: 16,
     position: 'relative',
   },
   backButton: {
@@ -639,14 +991,54 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   profileFormSection: {
+    backgroundColor: '#031a2c',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.28)',
+    paddingVertical: 24,
+    paddingHorizontal: 14,
     marginBottom: 40,
+    width: '100%',
+    maxWidth: 920,
+    alignSelf: 'center',
+    overflow: 'visible',
+  },
+  heroCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(7, 187, 192, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.24)',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+  },
+  heroTextWrap: {
+    flex: 1,
+    alignItems: 'center',
   },
   formTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 28,
+    color: '#e8fbff',
+    marginBottom: 4,
     textAlign: 'center',
+  },
+  sectionCard: {
+    backgroundColor: 'rgba(7, 187, 192, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.2)',
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginBottom: 16,
+    overflow: 'visible',
+  },
+  sectionTitle: {
+    color: '#07bbc0',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 12,
+    paddingHorizontal: '10%',
   },
   inputGroup: {
     marginBottom: 24,
@@ -659,24 +1051,29 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: 8,
     alignSelf: 'center',
-    width: '65%',
+    width: '80%',
     textAlign: 'left',
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderColor: '#FFFFFF',
+    borderColor: 'rgba(156, 205, 224, 0.65)',
     borderWidth: 1,
-    borderRadius: 20,
+    borderRadius: 14,
     paddingHorizontal: 12,
-    height: 48,
+    minHeight: 50,
     alignSelf: 'center',
-    width: '65%',
+    width: '80%',
+    backgroundColor: 'rgba(2, 27, 41, 0.85)',
   },
-  textAreaWrapper: {
-    height: 120,
-    alignItems: 'flex-start',
-    paddingTop: 12,
+  inputReadOnly: {
+    borderColor: 'rgba(107,134,147,0.6)',
+    backgroundColor: 'rgba(10, 54, 69, 0.45)',
+  },
+  readOnlyText: {
+    flex: 1,
+    color: '#b8c8d0',
+    fontSize: 15,
   },
   input: {
     flex: 1,
@@ -686,27 +1083,31 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
     includeFontPadding: false,
   },
-  textArea: {
-    textAlignVertical: 'top',
-    paddingTop: 8,
-    minHeight: 80,
-  },
+  webDateInput: {
+    flex: 1,
+    color: '#FFFFFF',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    fontSize: 16,
+    outlineStyle: 'none',
+  } as any,
   inputGroupWithDropdown: {
     position: 'relative',
-    zIndex: 1000,
+    zIndex: 3000,
+    elevation: 40,
   },
   selectInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#01151F',
-    borderRadius: 25,
+    backgroundColor: 'rgba(2, 27, 41, 0.95)',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#07bbc0',
+    borderColor: 'rgba(156, 205, 224, 0.65)',
     paddingHorizontal: 15,
-    minHeight: 48,
+    minHeight: 50,
     justifyContent: 'space-between',
     alignSelf: 'center',
-    width: '65%',
+    width: '80%',
   },
   placeholderText: {
     flex: 1,
@@ -730,17 +1131,20 @@ const styles = StyleSheet.create({
   dropdown: {
     position: 'absolute',
     top: '100%',
-    left: 0,
-    right: 0,
+    left: '10%',
+    right: '10%',
     backgroundColor: '#01151F',
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 2,
     borderColor: '#07bbc0',
     marginTop: 4,
     maxHeight: 200,
-    zIndex: 9999,
-    alignSelf: 'center',
-    width: '65%',
+    zIndex: 12000,
+    elevation: 50,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -782,14 +1186,69 @@ const styles = StyleSheet.create({
     color: '#07bbc0',
     fontWeight: '600',
   },
+  portalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: '10%',
+  },
+  portalCard: {
+    width: '80%',
+    maxWidth: 736,
+    backgroundColor: '#01151F',
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#07bbc0',
+    maxHeight: '70%',
+    overflow: 'hidden',
+  },
+  datePickerCard: {
+    width: '80%',
+    maxWidth: 736,
+    backgroundColor: '#01151F',
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#07bbc0',
+    paddingBottom: 8,
+  },
+  datePickerActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0a3645',
+  },
+  datePickerActionText: {
+    color: '#07bbc0',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#688997',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  checkboxChecked: {
+    borderColor: '#07bbc0',
+    backgroundColor: '#07bbc0',
+  },
   saveButton: {
     backgroundColor: '#07bbc0',
     paddingVertical: 14,
-    borderRadius: 25,
+    borderRadius: 14,
     alignItems: 'center',
-    alignSelf: 'center',
-    minWidth: 200,
-    marginTop: 10,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    flex: 1,
+    minHeight: 50,
   },
   saveButtonText: {
     color: '#FFFFFF',
@@ -798,6 +1257,13 @@ const styles = StyleSheet.create({
   },
   saveButtonDisabled: {
     opacity: 0.6,
+  },
+  actionRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    position: 'relative',
+    zIndex: 1,
+    elevation: 0,
   },
   menuOverlay: {
     position: 'absolute',

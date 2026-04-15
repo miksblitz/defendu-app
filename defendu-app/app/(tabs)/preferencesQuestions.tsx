@@ -44,7 +44,6 @@ export default function SelfDefensePreferencesScreen() {
   const preferredTechniques = [
     { key: 'Punching', icon: <Ionicons name="flash" size={16} color="#09AEC3" /> },
     { key: 'Kicking', icon: <MaterialCommunityIcons name="human-handsup" size={16} color="#09AEC3" /> },
-    { key: 'Palm Strikes', icon: <FontAwesome name="hand-paper-o" size={16} color="#09AEC3" /> },
     { key: 'Elbow Strikes', icon: <FontAwesome5 name="hands-helping" size={16} color="#09AEC3" /> },
     { key: 'Knee Strikes', icon: <FontAwesome5 name="hand-rock" size={16} color="#09AEC3" /> },
     { key: 'Defensive Moves', icon: <FontAwesome5 name="shield-alt" size={16} color="#09AEC3" /> },

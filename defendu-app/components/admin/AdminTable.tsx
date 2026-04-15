@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   },
   tableContent: {
     minWidth: 780,
-    width: '100%',
+    alignSelf: 'flex-start',
   },
   tableContentCompact: {
     minWidth: 680,

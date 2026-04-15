@@ -30,6 +30,25 @@ interface TrainerWithData extends User {
   ratingSummary?: TrainerRatingSummary;
 }
 
+const getTrainerDisplayName = (trainer: TrainerWithData): string => {
+  const userFullName = `${trainer.firstName || ''} ${trainer.lastName || ''}`.trim();
+  if (userFullName) return userFullName;
+
+  const appName = trainer.applicationData?.fullLegalName?.trim();
+  if (appName) return appName;
+
+  const alias = trainer.username?.trim();
+  if (alias) return alias;
+
+  return 'Trainer';
+};
+
+const getTrainerDisplayEmail = (trainer: TrainerWithData): string => {
+  const appEmail = trainer.applicationData?.email?.trim();
+  if (appEmail) return appEmail;
+  return trainer.email?.trim() || 'Email not provided';
+};
+
 export default function TrainerPage() {
   const router = useRouter();
   const params = useLocalSearchParams<{ moduleSubmitted?: string }>();
@@ -151,9 +170,9 @@ export default function TrainerPage() {
     }
     const query = searchQuery.toLowerCase().trim();
     return trainers.filter(trainer => {
-      const name = `${trainer.firstName} ${trainer.lastName}`.toLowerCase();
+      const name = getTrainerDisplayName(trainer).toLowerCase();
       const username = trainer.username?.toLowerCase() || '';
-      const email = trainer.email?.toLowerCase() || '';
+      const email = getTrainerDisplayEmail(trainer).toLowerCase();
       const styles = trainer.applicationData?.defenseStyles?.join(' ') || 
                      trainer.preferredTechnique?.join(' ') || '';
       const location = trainer.applicationData?.physicalAddress?.toLowerCase() || '';
@@ -171,12 +190,31 @@ export default function TrainerPage() {
     setShowCredentialsModal(true);
   };
 
-  const handleRegisterTrainer = () => {
-    if (isCurrentUserTrainer) {
-      // If user is already a trainer, navigate to edit trainer profile
-      router.push('/edit-trainer-profile');
-    } else {
+  const handleRegisterTrainer = async () => {
+    try {
+      const user = currentUser || (await AuthController.getCurrentUser());
+      if (!user) {
+        router.replace('/(auth)/login');
+        return;
+      }
+
+      if (user.role === 'trainer' && user.trainerApproved === true) {
+        showToast('You already have a trainer profile. Please use Edit Trainer Profile instead.');
+        return;
+      }
+
+      const existingApplication = await AuthController.getUserTrainerApplication(user.uid);
+      if (existingApplication && existingApplication.status !== 'rejected') {
+        showToast(
+          'You can only send one trainer application at a time. Please wait for admin response before applying again.'
+        );
+        return;
+      }
+
       router.push('/trainer-registration');
+    } catch (error) {
+      console.error('Error validating trainer application status:', error);
+      showToast('Unable to verify your trainer application right now. Please try again.');
     }
   };
 
@@ -222,6 +260,23 @@ export default function TrainerPage() {
     if (!query) return;
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
     await openExternalUrl(mapsUrl);
+  };
+
+  const isSelectedTrainerCurrentUser = !!selectedTrainer && currentUser?.uid === selectedTrainer.uid;
+
+  const handleTrainerPrimaryAction = () => {
+    if (!selectedTrainer) return;
+    if (isSelectedTrainerCurrentUser) {
+      setShowCredentialsModal(false);
+      router.push('/edit-trainer-profile');
+      return;
+    }
+    setShowCredentialsModal(false);
+    const name = getTrainerDisplayName(selectedTrainer);
+    const photo = selectedTrainer.profilePicture || '';
+    router.push(
+      `/messages?with=${selectedTrainer.uid}&name=${encodeURIComponent(name)}&photo=${encodeURIComponent(photo)}` as any
+    );
   };
 
   return (
@@ -314,20 +369,22 @@ export default function TrainerPage() {
                     </Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  style={styles.registerButton}
-                  onPress={handleRegisterTrainer}
-                >
-                  <Ionicons
-                    name={isCurrentUserTrainer ? "create-outline" : "person-add-outline"}
-                    size={18}
-                    color="#FFFFFF"
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={styles.registerButtonText}>
-                    {isCurrentUserTrainer ? 'Edit Trainer Profile' : 'Register as a certified Trainer'}
-                  </Text>
-                </TouchableOpacity>
+                {!isCurrentUserTrainer && (
+                  <TouchableOpacity
+                    style={styles.registerButton}
+                    onPress={handleRegisterTrainer}
+                  >
+                    <Ionicons
+                      name="person-add-outline"
+                      size={18}
+                      color="#FFFFFF"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.registerButtonText}>
+                      Register as a certified Trainer
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
 
@@ -380,11 +437,11 @@ export default function TrainerPage() {
             ) : filteredTrainers.length > 0 ? (
               filteredTrainers.map((trainer) => {
                   const appData = trainer.applicationData;
-                  const username = appData?.professionalAlias || trainer.username || '';
+                  const displayName = getTrainerDisplayName(trainer);
                   const academyName = appData?.academyName || '';
                   const location = appData?.physicalAddress || 'Location not provided';
                   const phone = appData?.phone || 'Phone not provided';
-                  const email = trainer.email || 'Email not provided';
+                  const email = getTrainerDisplayEmail(trainer);
                   const avgRating = trainer.ratingSummary?.averageRating || 0;
                   const totalReviews = trainer.ratingSummary?.totalReviews || 0;
 
@@ -413,13 +470,8 @@ export default function TrainerPage() {
                       {/* Trainer Information */}
                       <View style={styles.trainerInfo}>
                         <Text style={styles.trainerName}>
-                          {trainer.firstName} {trainer.lastName}
+                          {displayName}
                         </Text>
-                        {username && (
-                          <Text style={styles.trainerUsername}>
-                            @{username.replace('@', '')}
-                          </Text>
-                        )}
                         <View style={styles.ratingPill}>
                           <Ionicons name="star" size={13} color="#f0c14b" />
                           <Text style={styles.ratingPillText}>
@@ -575,29 +627,27 @@ export default function TrainerPage() {
                         )}
                         <View style={styles.credentialHeaderInfo}>
                           <Text style={styles.credentialName} numberOfLines={2} ellipsizeMode="tail">
-                            {selectedTrainer.applicationData.fullLegalName}
+                            {getTrainerDisplayName(selectedTrainer)}
                           </Text>
-                          {selectedTrainer.applicationData.professionalAlias && (
-                            <Text style={styles.credentialAlias} numberOfLines={1} ellipsizeMode="tail">
-                              @{selectedTrainer.applicationData.professionalAlias.replace('@', '')}
-                            </Text>
-                          )}
                         </View>
-                        {currentUser?.uid !== selectedTrainer.uid && (
-                          <TouchableOpacity
-                            style={styles.contactTrainerButton}
-                            onPress={() => {
-                              setShowCredentialsModal(false);
-                              const name = selectedTrainer.applicationData?.fullLegalName || `${selectedTrainer.firstName} ${selectedTrainer.lastName}`.trim();
-                              const photo = selectedTrainer.profilePicture || '';
-                              router.push(`/messages?with=${selectedTrainer.uid}&name=${encodeURIComponent(name)}&photo=${encodeURIComponent(photo)}` as any);
-                            }}
-                            activeOpacity={0.8}
-                          >
-                            <Ionicons name="chatbubble-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-                            <Text style={styles.contactTrainerButtonText}>Contact Trainer</Text>
-                          </TouchableOpacity>
-                        )}
+                        <TouchableOpacity
+                          style={[
+                            styles.contactTrainerButton,
+                            isSelectedTrainerCurrentUser && styles.editTrainerButton,
+                          ]}
+                          onPress={handleTrainerPrimaryAction}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons
+                            name={isSelectedTrainerCurrentUser ? 'create-outline' : 'chatbubble-outline'}
+                            size={18}
+                            color="#FFFFFF"
+                            style={{ marginRight: 6 }}
+                          />
+                          <Text style={styles.contactTrainerButtonText}>
+                            {isSelectedTrainerCurrentUser ? 'Edit Trainer Profile' : 'Contact Trainer'}
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
 
@@ -606,7 +656,7 @@ export default function TrainerPage() {
                       <Text style={styles.credentialSectionTitle}>Personal Information</Text>
                       <View style={styles.credentialInfoRow}>
                         <Text style={styles.credentialLabel}>Email:</Text>
-                        <Text style={styles.credentialValue}>{selectedTrainer.email}</Text>
+                        <Text style={styles.credentialValue}>{getTrainerDisplayEmail(selectedTrainer)}</Text>
                       </View>
                       {selectedTrainer.applicationData.academyName && (
                         <View style={styles.credentialInfoRow}>
@@ -724,15 +774,6 @@ export default function TrainerPage() {
                       </View>
                     )}
 
-                    {/* About Me */}
-                    {selectedTrainer.applicationData.aboutMe && (
-                      <View style={styles.credentialSection}>
-                        <Text style={styles.credentialSectionTitle}>About Me</Text>
-                        <View style={styles.credentialInfoRow}>
-                          <Text style={styles.credentialValue}>{selectedTrainer.applicationData.aboutMe}</Text>
-                        </View>
-                      </View>
-                    )}
                   </>
                 ) : (
                     <View style={styles.noDataContainer}>
@@ -742,21 +783,24 @@ export default function TrainerPage() {
                           {selectedTrainer.firstName} {selectedTrainer.lastName}
                         </Text>
                       </View>
-                      {currentUser?.uid !== selectedTrainer.uid && (
-                        <TouchableOpacity
-                          style={styles.contactTrainerButton}
-                          onPress={() => {
-                            setShowCredentialsModal(false);
-                            const name = `${selectedTrainer.firstName} ${selectedTrainer.lastName}`.trim();
-                            const photo = selectedTrainer.profilePicture || '';
-                            router.push(`/messages?with=${selectedTrainer.uid}&name=${encodeURIComponent(name)}&photo=${encodeURIComponent(photo)}` as any);
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="chatbubble-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-                          <Text style={styles.contactTrainerButtonText}>Contact Trainer</Text>
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                        style={[
+                          styles.contactTrainerButton,
+                          isSelectedTrainerCurrentUser && styles.editTrainerButton,
+                        ]}
+                        onPress={handleTrainerPrimaryAction}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons
+                          name={isSelectedTrainerCurrentUser ? 'create-outline' : 'chatbubble-outline'}
+                          size={18}
+                          color="#FFFFFF"
+                          style={{ marginRight: 6 }}
+                        />
+                        <Text style={styles.contactTrainerButtonText}>
+                          {isSelectedTrainerCurrentUser ? 'Edit Trainer Profile' : 'Contact Trainer'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                     <Text style={styles.credentialValue}>{selectedTrainer.email}</Text>
                   </View>
@@ -1121,11 +1165,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 6,
   },
-  trainerUsername: {
-    fontSize: 14,
-    color: '#6b8693',
-    marginBottom: 8,
-  },
   ratingPill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -1326,9 +1365,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 4,
   },
-  credentialAlias: {
-    color: '#6b8693',
-    fontSize: 14,
+  editTrainerButton: {
+    backgroundColor: '#0b8f95',
   },
   credentialSectionTitle: {
     color: '#07bbc0',

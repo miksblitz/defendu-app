@@ -1191,7 +1191,13 @@ export class AuthController {
   static async approveTrainerApplication(uid: string): Promise<void> {
     try {
       console.log('🔵 Approving trainer application:', uid);
-      await update(ref(db, `users/${uid}`), { trainerApproved: true });
+      await update(ref(db, `users/${uid}`), {
+        trainerApproved: true,
+        role: 'trainer',
+      });
+      await update(ref(db, `TrainerApplication/${uid}`), {
+        status: 'approved',
+      });
       console.log('✅ Trainer application approved successfully');
     } catch (error: any) {
       console.error('❌ Error approving trainer application:', error);
@@ -1291,7 +1297,7 @@ export class AuthController {
         if (!userDataRaw || typeof userDataRaw !== 'object') continue;
         
         // Only include approved trainers
-        if (userDataRaw.role === 'trainer' && userDataRaw.trainerApproved === true) {
+        if (userDataRaw.trainerApproved === true && userDataRaw.role !== 'admin') {
           try {
             const user: User = {
               ...userDataRaw,
@@ -1651,11 +1657,23 @@ export class AuthController {
       if (updates.phone !== undefined) {
         updateData.phone = updates.phone;
       }
+      if (updates.dateOfBirth !== undefined) {
+        updateData.dateOfBirth = updates.dateOfBirth || null;
+      }
       if (updates.email !== undefined) {
         updateData.email = updates.email;
       }
       if (updates.academyName !== undefined) {
         updateData.academyName = updates.academyName.trim() || null;
+      }
+      if (updates.defenseStyles !== undefined) {
+        updateData.defenseStyles = Array.isArray(updates.defenseStyles) ? updates.defenseStyles : [];
+      }
+      if (updates.yearsOfExperience !== undefined) {
+        updateData.yearsOfExperience = updates.yearsOfExperience;
+      }
+      if (updates.yearsOfTeaching !== undefined) {
+        updateData.yearsOfTeaching = updates.yearsOfTeaching;
       }
       if (updates.currentRank !== undefined) {
         updateData.currentRank = updates.currentRank.trim() || null;

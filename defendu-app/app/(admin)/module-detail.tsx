@@ -112,6 +112,7 @@ export default function ModuleDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletionReason, setDeletionReason] = useState('');
   const [customDeletionReason, setCustomDeletionReason] = useState('');
+  const [enablingModule, setEnablingModule] = useState(false);
   const [showExtractModal, setShowExtractModal] = useState(false);
   const [poseTicketSubmitting, setPoseTicketSubmitting] = useState(false);
 
@@ -605,6 +606,20 @@ export default function ModuleDetailPage() {
       showToast(error.message || 'Failed to delete module');
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleEnableModule = async () => {
+    if (!moduleId) return;
+    try {
+      setEnablingModule(true);
+      await AuthController.enableModule(moduleId);
+      showToast('Module enabled successfully.');
+      await loadModule();
+    } catch (error: any) {
+      showToast(error.message || 'Failed to enable module');
+    } finally {
+      setEnablingModule(false);
     }
   };
 
@@ -1946,6 +1961,30 @@ export default function ModuleDetailPage() {
 
           {/* Delete module (all statuses) */}
           <TouchableOpacity
+            style={[
+              styles.toggleAvailabilityButton,
+              module.status === 'disabled'
+                ? styles.toggleAvailabilityButtonEnable
+                : styles.toggleAvailabilityButtonDisable,
+            ]}
+            onPress={module.status === 'disabled' ? handleEnableModule : openDeleteModal}
+            disabled={processing || enablingModule}
+          >
+            {module.status === 'disabled' ? (
+              <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
+            ) : (
+              <Ionicons name="ban-outline" size={20} color="#FFFFFF" />
+            )}
+            <Text style={styles.toggleAvailabilityButtonText}>
+              {module.status === 'disabled'
+                ? enablingModule
+                  ? 'Enabling module...'
+                  : 'Enable module'
+                : 'Disable module'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.deleteModuleButton}
             onPress={openDeleteModal}
             disabled={processing}
@@ -2888,6 +2927,27 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   deleteModuleButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  toggleAvailabilityButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  toggleAvailabilityButtonDisable: {
+    backgroundColor: '#ef5350',
+  },
+  toggleAvailabilityButtonEnable: {
+    backgroundColor: '#2e7d32',
+  },
+  toggleAvailabilityButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',

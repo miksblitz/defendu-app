@@ -122,6 +122,9 @@ export default function ManageTrainersPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [viewMode]);
 
   const sortedApplications = useMemo(() => {
     const result = [...filteredApplications];
@@ -270,7 +273,7 @@ export default function ManageTrainersPage() {
     try {
       setProcessingApplication(uid);
       await AuthController.approveTrainerApplication(uid);
-      await loadApplications();
+      await loadAllData();
       setSelectedApplication(null);
       showToast('Trainer application approved successfully!');
     } catch (error: any) {
@@ -913,27 +916,29 @@ export default function ManageTrainersPage() {
             />
           </Animated.View>
 
-          <AdminTable
-            columns={viewMode === 'applications' ? columns : trainerColumns}
-            data={viewMode === 'applications' ? paginatedApplications : paginatedApprovedTrainers}
-            loading={loading}
-            compact={isCompact}
-            keyExtractor={(row) => row.uid}
-            sortState={viewMode === 'applications' ? sortState : undefined}
-            onSortChange={viewMode === 'applications' ? handleSortChange : undefined}
-            emptyTitle={viewMode === 'applications'
-              ? (searchQuery ? 'No applications match your search' : 'No trainer applications found')
-              : (searchQuery ? 'No trainers match your search' : 'No approved trainers found')}
-            emptyDescription={viewMode === 'applications'
-              ? 'Applications will appear here when trainers submit their profiles.'
-              : 'Approved trainers will appear here.'}
-            pagination={{
-              currentPage,
-              totalPages: sortedTotalPages,
-              onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
-              onNext: () => setCurrentPage((p) => Math.min(sortedTotalPages, p + 1)),
-            }}
-          />
+          <View style={styles.tableWrap}>
+            <AdminTable
+              columns={viewMode === 'applications' ? columns : trainerColumns}
+              data={viewMode === 'applications' ? paginatedApplications : paginatedApprovedTrainers}
+              loading={loading}
+              compact={isCompact}
+              keyExtractor={(row) => row.uid}
+              sortState={viewMode === 'applications' ? sortState : undefined}
+              onSortChange={viewMode === 'applications' ? handleSortChange : undefined}
+              emptyTitle={viewMode === 'applications'
+                ? (searchQuery ? 'No applications match your search' : 'No trainer applications found')
+                : (searchQuery ? 'No trainers match your search' : 'No approved trainers found')}
+              emptyDescription={viewMode === 'applications'
+                ? 'Applications will appear here when trainers submit their profiles.'
+                : 'Approved trainers will appear here.'}
+              pagination={{
+                currentPage,
+                totalPages: sortedTotalPages,
+                onPrevious: () => setCurrentPage((p) => Math.max(1, p - 1)),
+                onNext: () => setCurrentPage((p) => Math.min(sortedTotalPages, p + 1)),
+              }}
+            />
+          </View>
         </ScrollView>
       </View>
 
@@ -1067,7 +1072,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingLeft: 100,
-    paddingRight: 20,
+    paddingRight: 8,
     paddingTop: 20,
     paddingBottom: 12,
   },
@@ -1105,18 +1110,26 @@ const styles = StyleSheet.create({
   },
   mainContent: {
     flex: 1,
-    paddingLeft: 100,
-    paddingRight: 20,
+    paddingLeft: 8,
+    paddingRight: 8,
     paddingTop: 20,
   },
   mainContentCompact: {
-    paddingLeft: 86,
-    paddingRight: 12,
+    paddingLeft: 6,
+    paddingRight: 6,
     paddingTop: 14,
   },
   searchContainer: {
     width: '100%',
-    marginBottom: 16,
+    maxWidth: 960,
+    alignSelf: 'center',
+    marginBottom: 18,
+    gap: 10,
+  },
+  tableWrap: {
+    width: '100%',
+    maxWidth: 960,
+    alignSelf: 'center',
   },
   modeSwitchRow: {
     flexDirection: 'row',

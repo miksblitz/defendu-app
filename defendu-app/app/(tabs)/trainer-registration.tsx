@@ -287,7 +287,7 @@ export default function TrainerRegistrationScreen() {
 
   const validatePhone = (phone: string): string => {
     if (!phone.trim()) {
-      return 'Phone number is required';
+      return '';
     }
     const phoneRegex = /^[\d\s\-\+\(\)]+$/;
     if (!phoneRegex.test(phone)) {
@@ -432,7 +432,7 @@ export default function TrainerRegistrationScreen() {
         appliedDate: new Date(),
         status: 'awaiting review',
         dateOfBirth: dateOfBirth.trim() || undefined,
-        phone: phoneNumber,
+        phone: phoneNumber.trim(),
         physicalAddress: physicalAddress,
         defenseStyles: selectedMartialArts,
         yearsOfExperience: yearsExperience,
@@ -909,7 +909,7 @@ export default function TrainerRegistrationScreen() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Phone number <Text style={styles.requiredDot}>*</Text></Text>
+                  <Text style={[styles.inputLabel, isMobile && styles.inputLabelMobile]}>Phone number (optional)</Text>
                   <View style={[styles.inputWrapper, errors.phoneNumber ? styles.inputWrapperError : null, isMobile && styles.inputWrapperMobile]}>
                     <TextInput
                       style={[styles.input, isMobile && styles.inputMobile, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
