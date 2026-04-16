@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
     Animated,
     Image,
+  Modal,
+  Pressable,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -15,7 +17,7 @@ import {
 import Svg, { Polyline } from 'react-native-svg';
 import EmptyState from '../../components/admin/EmptyState';
 import { useLogout } from '../../hooks/useLogout';
-import { AnalyticsController, AnalyticsData, TopModule, TrainerLeaderboardEntry } from '../controllers/AnalyticsController';
+import { AnalyticsController, AnalyticsData } from '../controllers/AnalyticsController';
 import LoadingSkeleton from './LoadingSkeleton';
 
 export default function AdminDashboard() {
@@ -23,6 +25,8 @@ export default function AdminDashboard() {
   const handleLogout = useLogout();
   const { width } = useWindowDimensions();
   const [showMenu, setShowMenu] = useState(false);
+  const [showTrainerModal, setShowTrainerModal] = useState(false);
+  const [selectedTrainer, setSelectedTrainer] = useState<AnalyticsData['trainerLeaderboard'][number] | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -36,7 +40,6 @@ export default function AdminDashboard() {
   const kpiCard1Anim = useRef(new Animated.Value(0)).current;
   const kpiCard2Anim = useRef(new Animated.Value(0)).current;
   const kpiCard3Anim = useRef(new Animated.Value(0)).current;
-  const chartAnim = useRef(new Animated.Value(0)).current;
   const insightsAnim = useRef(new Animated.Value(0)).current;
   
   // Hover scale animations
@@ -45,7 +48,6 @@ export default function AdminDashboard() {
   const kpiCard1Scale = useRef(new Animated.Value(1)).current;
   const kpiCard2Scale = useRef(new Animated.Value(1)).current;
   const kpiCard3Scale = useRef(new Animated.Value(1)).current;
-  const chartScale = useRef(new Animated.Value(1)).current;
   const insightsScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -93,11 +95,6 @@ export default function AdminDashboard() {
             useNativeDriver: true,
           }),
         ]),
-        Animated.timing(chartAnim, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
         Animated.timing(insightsAnim, {
           toValue: 1,
           duration: 600,
@@ -128,6 +125,16 @@ export default function AdminDashboard() {
     }).start();
   };
 
+  const handleOpenTrainerDetails = (trainer: AnalyticsData['trainerLeaderboard'][number]) => {
+    setSelectedTrainer(trainer);
+    setShowTrainerModal(true);
+  };
+
+  const handleCloseTrainerDetails = () => {
+    setShowTrainerModal(false);
+    setSelectedTrainer(null);
+  };
+
   const formatNumber = (num: number): string => {
     if (num >= 1000) {
       return (num / 1000).toFixed(1) + 'k';
@@ -151,85 +158,33 @@ export default function AdminDashboard() {
     return Math.min(100, Math.round((active / total) * 100));
   };
 
-  // Mini Line Chart Component for Total Registrations
-  const MiniLineChart = () => {
-    // Sample data for the mini chart (12 weeks)
-    const chartData = [2, 4, 3, 6, 5, 8, 7, 9, 8, 10, 9, 12];
-    const maxValue = Math.max(...chartData);
-    const chartWidth = 80;
+  // Mini Line Chart for 12-week registration trend (oldest → newest)
+  const MiniLineChart = ({ chartData }: { chartData: number[] }) => {
+    const chartWidth = 90;
     const chartHeight = 40;
     const padding = 4;
-    const points = chartData.map((value, index) => {
-      const x = (index / (chartData.length - 1)) * (chartWidth - padding * 2) + padding;
-      const y = chartHeight - (value / maxValue) * (chartHeight - padding * 2) - padding;
-      return `${x},${y}`;
-    }).join(' ');
+
+    const safeData = chartData && chartData.length > 1 ? chartData : [0, 0];
+    const maxValue = Math.max(...safeData, 1); // avoid divide-by-zero on flat/empty data
+
+    const points = safeData
+      .map((value, index) => {
+        const x = (index / (safeData.length - 1)) * (chartWidth - padding * 2) + padding;
+        const y = chartHeight - (value / maxValue) * (chartHeight - padding * 2) - padding;
+        return `${x},${y}`;
+      })
+      .join(' ');
 
     return (
       <View style={styles.miniChartContainer}>
-        <Text style={styles.miniChartTitle}>Months vs Usage</Text>
         <Svg width={chartWidth} height={chartHeight} style={styles.miniChartSvg}>
           <Polyline
             points={points}
             fill="none"
             stroke="#38a6de"
-            strokeWidth="2"
+            strokeWidth="2.2"
           />
         </Svg>
-      </View>
-    );
-  };
-
-  // Bar Chart Component with Y-axis
-  const BarChart = ({ data, maxValue }: { data: { technique: string; count: number }[]; maxValue: number }) => {
-    if (data.length === 0) {
-      return (
-        <View style={styles.chartContainer}>
-          <EmptyState
-            title="No technique activity yet"
-            description="This chart will populate once users start performing techniques."
-            iconName="bar-chart-outline"
-          />
-        </View>
-      );
-    }
-
-    const chartData = data.slice(0, 5);
-    const axisMax = Math.max(4, Math.ceil(maxValue / 4) * 4);
-    const step = axisMax / 4;
-    const yAxisLabels = [axisMax, axisMax - step, axisMax - step * 2, axisMax - step * 3, 0];
-    const chartHeight = 160;
-
-    return (
-      <View style={styles.chartContainer}>
-        {/* Y-axis labels */}
-        <View style={styles.yAxisContainer}>
-          {yAxisLabels.map((label, index) => (
-            <Text key={index} style={styles.yAxisLabel}>{label}</Text>
-          ))}
-        </View>
-        
-        {/* Chart area */}
-        <View style={styles.barChartArea}>
-          <View style={styles.chartGrid}>
-            {yAxisLabels.map((_, index) => (
-              <View key={index} style={styles.chartGridLine} />
-            ))}
-          </View>
-          {chartData.map((item, index) => {
-            const barHeight = maxValue > 0 ? (item.count / axisMax) * chartHeight : 0;
-            const barOpacity = 1 - (index * 0.12);
-            return (
-              <View key={index} style={styles.barChartItem}>
-                <View style={styles.barWrapper}>
-                  <Text style={styles.barCount}>{item.count}</Text>
-                  <View style={[styles.bar, { height: Math.max(barHeight, 4), opacity: barOpacity }]} />
-                </View>
-                <Text style={styles.barChartLabel} numberOfLines={2}>{item.technique}</Text>
-              </View>
-            );
-          })}
-        </View>
       </View>
     );
   };
@@ -249,18 +204,37 @@ export default function AdminDashboard() {
   }
 
   const data = analytics || AnalyticsController.getDefaultAnalytics();
-  const maxTechniqueCount = data.topPerformedTechniques.length > 0
-    ? Math.max(...data.topPerformedTechniques.map(t => t.count))
-    : 1;
   const userOnlineRate = getPercent(data.activeUsersOnline, data.totalActiveUsers);
   const trainerOnlineRate = getPercent(data.activeTrainersOnline, data.activeTrainers);
-  const topTechnique = data.topPerformedTechniques[0];
-  const totalTechniqueRuns = data.topPerformedTechniques.reduce((sum, item) => sum + item.count, 0);
-  const topTechniqueShare = totalTechniqueRuns > 0 && topTechnique
-    ? Math.round((topTechnique.count / totalTechniqueRuns) * 100)
-    : 0;
   const registrationSummary = `${formatNumber(data.totalRegistrations)} accounts in total`;
   const pendingTotal = data.pendingTrainerVerifications + data.pendingModuleReviews;
+  const topTrainer = data.trainerLeaderboard[0];
+  const runnerUpTrainers = data.trainerLeaderboard.slice(1);
+
+  // Month-over-month delta visuals (real data)
+  const momPct = data.registrationsMomPct;
+  const hasMomHistory = data.registrationsLastMonth > 0 || data.registrationsThisMonth > 0;
+  const momIsPositive = momPct > 0;
+  const momIsNegative = momPct < 0;
+  const momColor = momIsPositive ? '#6bd49a' : momIsNegative ? '#ff8a8a' : '#8db1c4';
+  const momIcon: 'trending-up' | 'trending-down' | 'remove' = momIsPositive
+    ? 'trending-up'
+    : momIsNegative
+      ? 'trending-down'
+      : 'remove';
+  const momText = hasMomHistory
+    ? `${momIsPositive ? '+' : ''}${momPct}%`
+    : 'New';
+  const momChipBg = momIsPositive
+    ? 'rgba(107, 212, 154, 0.14)'
+    : momIsNegative
+      ? 'rgba(255, 138, 138, 0.16)'
+      : 'rgba(141, 177, 196, 0.16)';
+  const momChipBorder = momIsPositive
+    ? 'rgba(107, 212, 154, 0.3)'
+    : momIsNegative
+      ? 'rgba(255, 138, 138, 0.36)'
+      : 'rgba(141, 177, 196, 0.3)';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -336,11 +310,18 @@ export default function AdminDashboard() {
           contentContainerStyle={[styles.scrollContent, { paddingLeft: contentPadding }]}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.sectionLabel}>Overview</Text>
-          {/* Active Users and Trainers Boxes */}
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderAccent} />
+            <Text style={styles.sectionLabel}>Live overview</Text>
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveBadgeText}>Real-time</Text>
+            </View>
+          </View>
+
           <View style={styles.activeBoxesRow}>
             <Animated.View style={[
-              { flex: 1 },
+              { flex: 1, minWidth: 260 },
               {
                 opacity: activeBoxAnim1,
                 transform: [
@@ -355,24 +336,40 @@ export default function AdminDashboard() {
               },
             ]}>
               <TouchableOpacity
-                style={styles.activeBox}
+                style={[styles.activeBox, styles.activeBoxUsers]}
                 onPress={() => router.push('/(admin)/manage-users')}
                 activeOpacity={1}
                 onPressIn={() => handleCardHover(activeBox1Scale, true)}
                 onPressOut={() => handleCardHover(activeBox1Scale, false)}
               >
+                <View style={[styles.activeBoxAccentStrip, { backgroundColor: '#38a6de' }]} />
+                <View style={styles.activeBoxTopRow}>
+                  <View style={[styles.activeBoxIconTile, { backgroundColor: 'rgba(56, 166, 222, 0.18)' }]}>
+                    <Ionicons name="people" size={22} color="#38a6de" />
+                  </View>
+                  <View style={styles.activeBoxOnlineChip}>
+                    <View style={[styles.activeBoxOnlineChipDot, { backgroundColor: '#6bd49a' }]} />
+                    <Text style={styles.activeBoxOnlineChipText}>{data.activeUsersOnline} online</Text>
+                  </View>
+                </View>
                 <Text style={styles.activeBoxLabel}>Active Users</Text>
-                <Text style={styles.activeBoxSubLabel}>Individual</Text>
-                <Text style={styles.activeBoxValue}>{data.totalActiveUsers}</Text>
-                <Text style={styles.activeBoxOnline}>{data.activeUsersOnline} Online ({userOnlineRate}%)</Text>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${userOnlineRate}%` }]} />
+                <Text style={styles.activeBoxSubLabel}>Individual accounts</Text>
+                <Text style={styles.activeBoxValue}>{formatNumber(data.totalActiveUsers)}</Text>
+                <View style={styles.progressRow}>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${userOnlineRate}%`, backgroundColor: '#38a6de' }]} />
+                  </View>
+                  <Text style={styles.progressPercent}>{userOnlineRate}%</Text>
+                </View>
+                <View style={styles.activeBoxFooterRow}>
+                  <Text style={styles.activeBoxFooterText}>Tap to manage users</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#8db1c4" />
                 </View>
               </TouchableOpacity>
             </Animated.View>
 
             <Animated.View style={[
-              { flex: 1 },
+              { flex: 1, minWidth: 260 },
               {
                 opacity: activeBoxAnim2,
                 transform: [
@@ -387,28 +384,47 @@ export default function AdminDashboard() {
               },
             ]}>
               <TouchableOpacity
-                style={styles.activeBox}
+                style={[styles.activeBox, styles.activeBoxTrainers]}
                 onPress={() => router.push('/(admin)/manage-trainers')}
                 activeOpacity={1}
                 onPressIn={() => handleCardHover(activeBox2Scale, true)}
                 onPressOut={() => handleCardHover(activeBox2Scale, false)}
               >
+                <View style={[styles.activeBoxAccentStrip, { backgroundColor: '#b491ff' }]} />
+                <View style={styles.activeBoxTopRow}>
+                  <View style={[styles.activeBoxIconTile, { backgroundColor: 'rgba(180, 145, 255, 0.18)' }]}>
+                    <Ionicons name="ribbon" size={22} color="#b491ff" />
+                  </View>
+                  <View style={styles.activeBoxOnlineChip}>
+                    <View style={[styles.activeBoxOnlineChipDot, { backgroundColor: '#6bd49a' }]} />
+                    <Text style={styles.activeBoxOnlineChipText}>{data.activeTrainersOnline} online</Text>
+                  </View>
+                </View>
                 <Text style={styles.activeBoxLabel}>Active Trainers</Text>
-                <Text style={styles.activeBoxSubLabel}>Verified</Text>
-                <Text style={styles.activeBoxValue}>{data.activeTrainers}</Text>
-                <Text style={styles.activeBoxOnline}>{data.activeTrainersOnline} Online ({trainerOnlineRate}%)</Text>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${trainerOnlineRate}%` }]} />
+                <Text style={styles.activeBoxSubLabel}>Verified professionals</Text>
+                <Text style={styles.activeBoxValue}>{formatNumber(data.activeTrainers)}</Text>
+                <View style={styles.progressRow}>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${trainerOnlineRate}%`, backgroundColor: '#b491ff' }]} />
+                  </View>
+                  <Text style={styles.progressPercent}>{trainerOnlineRate}%</Text>
+                </View>
+                <View style={styles.activeBoxFooterRow}>
+                  <Text style={styles.activeBoxFooterText}>Tap to manage trainers</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#8db1c4" />
                 </View>
               </TouchableOpacity>
             </Animated.View>
           </View>
 
-          {/* KPI Cards Row - Horizontal */}
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionHeaderAccent, { backgroundColor: '#07bbc0' }]} />
+            <Text style={styles.sectionLabel}>Key metrics</Text>
+          </View>
+
           <View style={styles.kpiRow}>
-            {/* Total Registrations */}
             <Animated.View style={[
-              { flex: 1 },
+              { flex: 1, minWidth: 240 },
               {
                 opacity: kpiCard1Anim,
                 transform: [
@@ -429,24 +445,37 @@ export default function AdminDashboard() {
                 onPressIn={() => handleCardHover(kpiCard1Scale, true)}
                 onPressOut={() => handleCardHover(kpiCard1Scale, false)}
               >
-                <View style={styles.kpiHeader}>
-                  <Text style={styles.kpiTitle}>Total Registrations</Text>
+                <View style={styles.kpiTopRow}>
+                  <View style={[styles.kpiIconTile, { backgroundColor: 'rgba(56, 166, 222, 0.18)' }]}>
+                    <Ionicons name="person-add" size={18} color="#38a6de" />
+                  </View>
+                  <View
+                    style={[
+                      styles.kpiDeltaChip,
+                      { backgroundColor: momChipBg, borderColor: momChipBorder },
+                    ]}
+                  >
+                    <Ionicons name={momIcon} size={11} color={momColor} />
+                    <Text style={[styles.kpiDeltaChipText, { color: momColor }]}>{momText}</Text>
+                  </View>
                 </View>
+                <Text style={styles.kpiTitle}>Total Registrations</Text>
                 <Text style={styles.kpiValue}>{formatNumber(data.totalRegistrations)}</Text>
-                <Text style={styles.kpiSubtext}>{registrationSummary}</Text>
-                <View style={styles.kpiTrend}>
-                  <Ionicons name="trending-up" size={14} color="#4CAF50" />
-                  <Text style={styles.kpiTrendText}>+15% this month</Text>
-                </View>
-                <View style={styles.kpiChartContainer}>
-                  <MiniLineChart />
+                <Text style={styles.kpiSubtext}>
+                  {hasMomHistory
+                    ? `${data.registrationsThisMonth} new this month · ${registrationSummary}`
+                    : registrationSummary}
+                </Text>
+                <View style={styles.kpiDivider} />
+                <View style={styles.kpiFooterRow}>
+                  <Text style={styles.kpiFooterLabel}>12-week trend</Text>
+                  <MiniLineChart chartData={data.registrationsTrend} />
                 </View>
               </TouchableOpacity>
             </Animated.View>
 
-            {/* Pending Trainer Verifications */}
             <Animated.View style={[
-              { flex: 1 },
+              { flex: 1, minWidth: 240 },
               {
                 opacity: kpiCard2Anim,
                 transform: [
@@ -467,12 +496,21 @@ export default function AdminDashboard() {
                 onPressIn={() => handleCardHover(kpiCard2Scale, true)}
                 onPressOut={() => handleCardHover(kpiCard2Scale, false)}
               >
-                <View style={styles.kpiHeader}>
-                  <Text style={styles.kpiTitle}>Pending Trainer</Text>
-                  <Text style={styles.kpiTitle}>Verifications</Text>
+                <View style={styles.kpiTopRow}>
+                  <View style={[styles.kpiIconTile, { backgroundColor: 'rgba(255, 180, 84, 0.18)' }]}>
+                    <Ionicons name="shield-checkmark" size={18} color="#ffb454" />
+                  </View>
+                  {data.pendingTrainerVerifications > 0 && (
+                    <View style={[styles.kpiDeltaChip, { backgroundColor: 'rgba(255, 180, 84, 0.16)', borderColor: 'rgba(255, 180, 84, 0.35)' }]}>
+                      <View style={[styles.kpiPulseDot, { backgroundColor: '#ffb454' }]} />
+                      <Text style={[styles.kpiDeltaChipText, { color: '#ffd08c' }]}>Needs review</Text>
+                    </View>
+                  )}
                 </View>
+                <Text style={styles.kpiTitle}>Pending Trainer Verifications</Text>
                 <Text style={styles.kpiValue}>{data.pendingTrainerVerifications}</Text>
                 <Text style={styles.kpiSubtext}>Applications awaiting review</Text>
+                <View style={styles.kpiDivider} />
                 <View style={styles.warningPill}>
                   <Ionicons name="time-outline" size={14} color="#ffb454" />
                   <Text style={styles.warningPillText}>Queue is active</Text>
@@ -480,9 +518,8 @@ export default function AdminDashboard() {
               </TouchableOpacity>
             </Animated.View>
 
-            {/* Pending Module Reviews */}
             <Animated.View style={[
-              { flex: 1 },
+              { flex: 1, minWidth: 240 },
               {
                 opacity: kpiCard3Anim,
                 transform: [
@@ -503,12 +540,21 @@ export default function AdminDashboard() {
                 onPressIn={() => handleCardHover(kpiCard3Scale, true)}
                 onPressOut={() => handleCardHover(kpiCard3Scale, false)}
               >
-                <View style={styles.kpiHeader}>
-                  <Text style={styles.kpiTitle}>Pending Module</Text>
-                  <Text style={styles.kpiTitle}>Reviews</Text>
+                <View style={styles.kpiTopRow}>
+                  <View style={[styles.kpiIconTile, { backgroundColor: 'rgba(94, 194, 139, 0.18)' }]}>
+                    <Ionicons name="document-text" size={18} color="#6bd49a" />
+                  </View>
+                  {data.pendingModuleReviews > 0 && (
+                    <View style={[styles.kpiDeltaChip, { backgroundColor: 'rgba(94, 194, 139, 0.14)', borderColor: 'rgba(94, 194, 139, 0.35)' }]}>
+                      <View style={[styles.kpiPulseDot, { backgroundColor: '#6bd49a' }]} />
+                      <Text style={[styles.kpiDeltaChipText, { color: '#b6f1ca' }]}>In queue</Text>
+                    </View>
+                  )}
                 </View>
+                <Text style={styles.kpiTitle}>Pending Module Reviews</Text>
                 <Text style={styles.kpiValue}>{data.pendingModuleReviews}</Text>
                 <Text style={styles.kpiSubtext}>New modules awaiting approval</Text>
+                <View style={styles.kpiDivider} />
                 <View style={styles.infoPill}>
                   <Ionicons name="checkmark-done-outline" size={14} color="#9be6b3" />
                   <Text style={styles.infoPillText}>Keep SLA under 24h</Text>
@@ -517,59 +563,12 @@ export default function AdminDashboard() {
             </Animated.View>
           </View>
 
-          <Text style={styles.sectionLabel}>Performance</Text>
-          {/* Top Performed Techniques Chart */}
-          <Animated.View style={[
-            styles.chartCard,
-            {
-              opacity: chartAnim,
-              transform: [
-                {
-                  translateY: chartAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [50, 0],
-                  }),
-                },
-                { scale: chartScale },
-              ],
-            },
-          ]}>
-            <TouchableOpacity
-              activeOpacity={1}
-              onPressIn={() => handleCardHover(chartScale, true)}
-              onPressOut={() => handleCardHover(chartScale, false)}
-            >
-              <View style={styles.chartHeaderRow}>
-                <View style={styles.chartTitleGroup}>
-                  <View style={styles.chartTitleRow}>
-                    <Ionicons name="pulse-outline" size={18} color="#8fd8ff" />
-                    <Text style={styles.chartTitle}>Top Performed Techniques</Text>
-                  </View>
-                  <Text style={styles.chartSubtitle}>
-                    {topTechnique
-                      ? `${topTechnique.technique} leads with ${topTechnique.count} runs (${topTechniqueShare}%)`
-                      : 'No activity captured yet'}
-                  </Text>
-                </View>
-                <View style={styles.chartMetricCluster}>
-                  <View style={styles.chartMetricChip}>
-                    <Text style={styles.chartMetricValue}>{totalTechniqueRuns}</Text>
-                    <Text style={styles.chartMetricLabel}>runs</Text>
-                  </View>
-                  <View style={styles.chartMetricChip}>
-                    <Text style={styles.chartMetricValue}>{data.topPerformedTechniques.length}</Text>
-                    <Text style={styles.chartMetricLabel}>techniques</Text>
-                  </View>
-                </View>
-              </View>
-              <BarChart data={data.topPerformedTechniques} maxValue={maxTechniqueCount} />
-            </TouchableOpacity>
-          </Animated.View>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionHeaderAccent, { backgroundColor: '#f5a742' }]} />
+            <Text style={styles.sectionLabel}>Trainer leaderboard</Text>
+          </View>
 
-          <Text style={styles.sectionLabel}>Content Insights</Text>
-          {/* Top Rated Modules + Trainer Leaderboard side by side */}
           <Animated.View style={[
-            styles.insightsRow,
             {
               opacity: insightsAnim,
               transform: [
@@ -583,93 +582,189 @@ export default function AdminDashboard() {
               ],
             },
           ]}>
-            {/* Top Rated Modules */}
-            <TouchableOpacity
-              style={styles.insightCard}
-              activeOpacity={1}
-              onPressIn={() => handleCardHover(insightsScale, true)}
-              onPressOut={() => handleCardHover(insightsScale, false)}
+            <View
+              style={styles.trainerLeaderboardCard}
             >
-              <View style={styles.insightCardHeader}>
-                <Ionicons name="star-outline" size={18} color="#f5c842" />
-                <Text style={styles.insightCardTitle}>Top Rated Modules</Text>
+              <View style={styles.insightCardHeaderRow}>
+                <View style={styles.insightCardTitleGroup}>
+                  <View style={[styles.insightCardIconTile, { backgroundColor: 'rgba(245, 167, 66, 0.18)' }]}>
+                    <Ionicons name="trophy" size={18} color="#f5a742" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.insightCardTitle}>Top trainers by rating</Text>
+                    <Text style={styles.insightCardSubtitle}>Ranked by average star rating from real user reviews</Text>
+                  </View>
+                </View>
+                <View style={styles.insightHeaderPill}>
+                  <Text style={styles.insightHeaderPillText}>
+                    {data.trainerLeaderboard.length} ranked
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.insightCardSubtitle}>Based on user ratings from the mobile app</Text>
-              {data.topModules.length === 0 ? (
-                <EmptyState
-                  title="No ratings yet"
-                  description="Module ratings submitted in the mobile app will appear here."
-                  iconName="star-outline"
-                />
-              ) : (
-                data.topModules.map((mod: TopModule, index: number) => (
-                  <TouchableOpacity
-                    key={mod.moduleId}
-                    style={styles.insightRow}
-                    activeOpacity={0.7}
-                    onPress={() => router.push({ pathname: '/(admin)/module-detail', params: { moduleId: mod.moduleId } })}
-                  >
-                    <View style={styles.insightRankBadge}>
-                      <Text style={styles.insightRank}>{index + 1}</Text>
-                    </View>
-                    <View style={styles.insightInfo}>
-                      <Text style={styles.insightTitle} numberOfLines={1}>{mod.moduleTitle}</Text>
-                      <Text style={styles.insightMeta}>{mod.trainerName} · {mod.category}</Text>
-                    </View>
-                    <View style={styles.insightRatingCluster}>
-                      <Text style={styles.insightRatingValue}>{'★'} {mod.averageRating.toFixed(1)}</Text>
-                      <Text style={styles.insightRatingCount}>{mod.reviewCount} reviews</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={14} color="#4a7a93" style={{ marginLeft: 4 }} />
-                  </TouchableOpacity>
-                ))
-              )}
-            </TouchableOpacity>
 
-            {/* Trainer Leaderboard */}
-            <TouchableOpacity
-              style={styles.insightCard}
-              activeOpacity={1}
-            >
-              <View style={styles.insightCardHeader}>
-                <Ionicons name="trophy-outline" size={18} color="#f5a742" />
-                <Text style={styles.insightCardTitle}>Trainer Leaderboard</Text>
-              </View>
-              <Text style={styles.insightCardSubtitle}>Avg rating across all their approved modules</Text>
               {data.trainerLeaderboard.length === 0 ? (
                 <EmptyState
-                  title="No trainer data yet"
-                  description="Trainer rankings will appear once their modules receive ratings."
+                  title="No trainer ratings yet"
+                  description="Trainer rankings will appear once their modules receive user ratings."
                   iconName="trophy-outline"
                 />
               ) : (
-                data.trainerLeaderboard.map((trainer: TrainerLeaderboardEntry, index: number) => (
-                  <TouchableOpacity
-                    key={trainer.trainerId}
-                    style={styles.insightRow}
-                    activeOpacity={0.7}
-                    onPress={() => router.push('/(admin)/manage-modules')}
-                  >
-                    <View style={[
-                      styles.insightRankBadge,
-                      index === 0 && styles.insightRankGold,
-                      index === 1 && styles.insightRankSilver,
-                      index === 2 && styles.insightRankBronze,
-                    ]}>
-                      <Text style={styles.insightRank}>{index + 1}</Text>
+                <>
+                  {/* Featured top trainer card */}
+                  {topTrainer && (
+                    <Animated.View style={{ transform: [{ scale: insightsScale }] }}>
+                      <TouchableOpacity
+                        style={styles.topTrainerCard}
+                        activeOpacity={0.85}
+                        onPressIn={() => handleCardHover(insightsScale, true)}
+                        onPressOut={() => handleCardHover(insightsScale, false)}
+                        onPress={() => handleOpenTrainerDetails(topTrainer)}
+                      >
+                        <View style={styles.topTrainerCover}>
+                          {topTrainer.coverPhoto ? (
+                            <Image
+                              source={{ uri: topTrainer.coverPhoto }}
+                              style={styles.topTrainerCoverImage}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View style={styles.topTrainerCoverFallback}>
+                              <Ionicons name="image-outline" size={28} color="#4a7a93" />
+                              <Text style={styles.topTrainerCoverFallbackText}>No cover photo</Text>
+                            </View>
+                          )}
+                          <View style={styles.topTrainerCoverOverlay} />
+                          <View style={styles.topTrainerCrownPill}>
+                            <Ionicons name="trophy" size={12} color="#f5c842" />
+                            <Text style={styles.topTrainerCrownText}>#1 Top Trainer</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.topTrainerBody}>
+                          <View style={styles.topTrainerAvatarWrap}>
+                            {topTrainer.profilePicture ? (
+                              <Image
+                                source={{ uri: topTrainer.profilePicture }}
+                                style={styles.topTrainerAvatar}
+                              />
+                            ) : (
+                              <View style={[styles.topTrainerAvatar, styles.topTrainerAvatarFallback]}>
+                                <Ionicons name="person" size={28} color="#6b8693" />
+                              </View>
+                            )}
+                          </View>
+
+                          <View style={styles.topTrainerInfo}>
+                            <View style={styles.topTrainerNameRow}>
+                              <Text style={styles.topTrainerName} numberOfLines={1}>
+                                {topTrainer.trainerName}
+                              </Text>
+                              <View style={styles.topTrainerRatingPill}>
+                                <Ionicons name="star" size={13} color="#f5c842" />
+                                <Text style={styles.topTrainerRatingValue}>
+                                  {topTrainer.averageRating.toFixed(1)}
+                                </Text>
+                                <Text style={styles.topTrainerRatingCount}>
+                                  ({topTrainer.totalReviews})
+                                </Text>
+                              </View>
+                            </View>
+
+                            <View style={styles.topTrainerMetaRow}>
+                              <View style={styles.topTrainerMetaItem}>
+                                <Ionicons name="business-outline" size={13} color="#8db1c4" />
+                                <Text style={styles.topTrainerMetaText} numberOfLines={1}>
+                                  {topTrainer.academyName || 'Independent trainer'}
+                                </Text>
+                              </View>
+                              <View style={styles.topTrainerMetaItem}>
+                                <Ionicons name="ribbon-outline" size={13} color="#8db1c4" />
+                                <Text style={styles.topTrainerMetaText} numberOfLines={1}>
+                                  {topTrainer.specialty || 'General self-defense'}
+                                </Text>
+                              </View>
+                              <View style={styles.topTrainerMetaItem}>
+                                <Ionicons name="document-text-outline" size={13} color="#8db1c4" />
+                                <Text style={styles.topTrainerMetaText} numberOfLines={1}>
+                                  {topTrainer.moduleCount} module{topTrainer.moduleCount !== 1 ? 's' : ''}
+                                </Text>
+                              </View>
+                            </View>
+
+                            {topTrainer.aboutMe ? (
+                              <Text style={styles.topTrainerAbout} numberOfLines={2}>
+                                "{topTrainer.aboutMe}"
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  )}
+
+                  {/* Runner-up trainers */}
+                  {runnerUpTrainers.length > 0 && (
+                    <View style={styles.runnerUpList}>
+                      {runnerUpTrainers.map((trainer, index) => {
+                        const rank = index + 2;
+                        const isLast = index === runnerUpTrainers.length - 1;
+                        return (
+                          <TouchableOpacity
+                            key={trainer.trainerId}
+                            style={[styles.runnerUpRow, isLast && styles.runnerUpRowLast]}
+                            activeOpacity={0.75}
+                            onPress={() => handleOpenTrainerDetails(trainer)}
+                          >
+                            <View style={[
+                              styles.insightRankBadge,
+                              rank === 2 && styles.insightRankSilver,
+                              rank === 3 && styles.insightRankBronze,
+                            ]}>
+                              {rank <= 3 ? (
+                                <Ionicons
+                                  name="trophy"
+                                  size={13}
+                                  color={rank === 2 ? '#d8e0e6' : '#e3a565'}
+                                />
+                              ) : (
+                                <Text style={styles.insightRank}>{rank}</Text>
+                              )}
+                            </View>
+
+                            {trainer.profilePicture ? (
+                              <Image source={{ uri: trainer.profilePicture }} style={styles.runnerUpAvatar} />
+                            ) : (
+                              <View style={[styles.runnerUpAvatar, styles.topTrainerAvatarFallback]}>
+                                <Ionicons name="person" size={16} color="#6b8693" />
+                              </View>
+                            )}
+
+                            <View style={styles.insightInfo}>
+                              <Text style={styles.insightTitle} numberOfLines={1}>{trainer.trainerName}</Text>
+                              <Text style={styles.insightMeta} numberOfLines={1}>
+                                {trainer.academyName || 'Independent'}
+                                {trainer.specialty ? ` · ${trainer.specialty}` : ''}
+                              </Text>
+                            </View>
+
+                            <View style={styles.insightRatingCluster}>
+                              <View style={styles.insightRatingPill}>
+                                <Ionicons name="star" size={12} color="#f5c842" />
+                                <Text style={styles.insightRatingValue}>{trainer.averageRating.toFixed(1)}</Text>
+                              </View>
+                              <Text style={styles.insightRatingCount}>
+                                {trainer.totalReviews} review{trainer.totalReviews !== 1 ? 's' : ''}
+                              </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={14} color="#4a7a93" style={{ marginLeft: 4 }} />
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
-                    <View style={styles.insightInfo}>
-                      <Text style={styles.insightTitle} numberOfLines={1}>{trainer.trainerName}</Text>
-                      <Text style={styles.insightMeta}>{trainer.moduleCount} module{trainer.moduleCount !== 1 ? 's' : ''}</Text>
-                    </View>
-                    <View style={styles.insightRatingCluster}>
-                      <Text style={styles.insightRatingValue}>{'★'} {trainer.averageRating.toFixed(1)}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={14} color="#4a7a93" style={{ marginLeft: 4 }} />
-                  </TouchableOpacity>
-                ))
+                  )}
+                </>
               )}
-            </TouchableOpacity>
+            </View>
           </Animated.View>
 
         </ScrollView>
@@ -696,6 +791,78 @@ export default function AdminDashboard() {
           </View>
         </TouchableOpacity>
       )}
+
+      <Modal
+        visible={showTrainerModal && !!selectedTrainer}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCloseTrainerDetails}
+      >
+        <Pressable style={styles.trainerModalOverlay} onPress={handleCloseTrainerDetails}>
+          <Pressable style={styles.trainerModalCard} onPress={() => {}}>
+            <View style={styles.trainerModalHeader}>
+              <View style={styles.trainerModalTitleWrap}>
+                <Text style={styles.trainerModalTitle}>Trainer Details</Text>
+                <Text style={styles.trainerModalSubtitle}>Top trainer profile snapshot</Text>
+              </View>
+              <TouchableOpacity style={styles.trainerModalCloseBtn} onPress={handleCloseTrainerDetails}>
+                <Ionicons name="close" size={18} color="#d7e6f0" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedTrainer && (
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.trainerModalContent}>
+                <View style={styles.trainerModalIdentityRow}>
+                  {selectedTrainer.profilePicture ? (
+                    <Image source={{ uri: selectedTrainer.profilePicture }} style={styles.trainerModalAvatar} />
+                  ) : (
+                    <View style={[styles.trainerModalAvatar, styles.topTrainerAvatarFallback]}>
+                      <Ionicons name="person" size={26} color="#6b8693" />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.trainerModalName}>{selectedTrainer.trainerName}</Text>
+                    <Text style={styles.trainerModalMeta}>
+                      {selectedTrainer.academyName || 'Independent trainer'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.trainerModalStatsRow}>
+                  <View style={styles.trainerModalStatPill}>
+                    <Ionicons name="star" size={13} color="#f5c842" />
+                    <Text style={styles.trainerModalStatText}>{selectedTrainer.averageRating.toFixed(1)} avg</Text>
+                  </View>
+                  <View style={styles.trainerModalStatPill}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={13} color="#9cc2d7" />
+                    <Text style={styles.trainerModalStatText}>{selectedTrainer.totalReviews} reviews</Text>
+                  </View>
+                  <View style={styles.trainerModalStatPill}>
+                    <Ionicons name="sparkles-outline" size={13} color="#ffd968" />
+                    <Text style={styles.trainerModalStatText}>{selectedTrainer.sumRatings || 0} stars</Text>
+                  </View>
+                  <View style={styles.trainerModalStatPill}>
+                    <Ionicons name="document-text-outline" size={13} color="#9cc2d7" />
+                    <Text style={styles.trainerModalStatText}>{selectedTrainer.moduleCount} modules</Text>
+                  </View>
+                </View>
+
+                <View style={styles.trainerModalDetailBlock}>
+                  <Text style={styles.trainerModalLabel}>Specialty</Text>
+                  <Text style={styles.trainerModalValue}>{selectedTrainer.specialty || 'General self-defense'}</Text>
+                </View>
+
+                <View style={styles.trainerModalDetailBlock}>
+                  <Text style={styles.trainerModalLabel}>About</Text>
+                  <Text style={styles.trainerModalValue}>
+                    {selectedTrainer.aboutMe || 'No detailed trainer bio is available yet.'}
+                  </Text>
+                </View>
+              </ScrollView>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -827,53 +994,149 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 16,
-    marginBottom: 24,
+    marginBottom: 22,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  sectionHeaderAccent: {
+    width: 3,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: '#38a6de',
   },
   sectionLabel: {
-    color: '#96b1be',
-    fontSize: 12,
+    color: '#d9e6ef',
+    fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.7,
-    marginBottom: 10,
+    letterSpacing: 1.2,
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(107, 212, 154, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(107, 212, 154, 0.32)',
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#6bd49a',
+  },
+  liveBadgeText: {
+    color: '#9be6b3',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   activeBox: {
     flex: 1,
-    minWidth: 240,
+    minWidth: 260,
     backgroundColor: '#0d1c2b',
-    borderRadius: 12,
-    padding: 18,
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    paddingLeft: 22,
     borderWidth: 1,
-    borderColor: 'rgba(80, 140, 180, 0.18)',
+    borderColor: 'rgba(80, 140, 180, 0.22)',
     cursor: 'pointer',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  activeBoxUsers: {
+    backgroundColor: '#0c2035',
+  },
+  activeBoxTrainers: {
+    backgroundColor: '#12172a',
+  },
+  activeBoxAccentStrip: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+  },
+  activeBoxTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  activeBoxIconTile: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeBoxOnlineChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(107, 212, 154, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(107, 212, 154, 0.28)',
+  },
+  activeBoxOnlineChipDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  activeBoxOnlineChipText: {
+    color: '#9be6b3',
+    fontSize: 11,
+    fontWeight: '700',
   },
   activeBoxLabel: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
+    color: '#f7fbff',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    marginBottom: 2,
   },
   activeBoxSubLabel: {
-    color: '#B0BEC5',
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  activeBoxValue: {
-    color: '#8fd8ff',
-    fontSize: 26,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  activeBoxOnline: {
-    color: '#8ad79f',
-    fontSize: 12,
-    fontWeight: '500',
+    color: '#8db1c4',
+    fontSize: 11,
     marginBottom: 10,
   },
+  activeBoxValue: {
+    color: '#f4fbff',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    marginBottom: 12,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   progressTrack: {
-    height: 7,
+    flex: 1,
+    height: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     overflow: 'hidden',
   },
   progressFill: {
@@ -881,53 +1144,120 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#4dc7b4',
   },
+  progressPercent: {
+    color: '#d9e6ef',
+    fontSize: 11,
+    fontWeight: '700',
+    minWidth: 36,
+    textAlign: 'right',
+  },
+  activeBoxFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  activeBoxFooterText: {
+    color: '#8db1c4',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
   kpiRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 16,
-    marginBottom: 24,
+    marginBottom: 22,
   },
   kpiCard: {
     flex: 1,
-    minWidth: 220,
+    minWidth: 240,
     backgroundColor: '#0e1e2d',
-    borderRadius: 12,
-    padding: 18,
+    borderRadius: 16,
+    padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(80, 140, 180, 0.18)',
-    minHeight: 180,
+    borderColor: 'rgba(80, 140, 180, 0.22)',
+    minHeight: 210,
     cursor: 'pointer',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  kpiHeader: {
-    marginBottom: 12,
+  kpiTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
   },
-  kpiTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
+  kpiIconTile: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  kpiValue: {
-    color: '#9be0ff',
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  kpiSubtext: {
-    color: '#B0BEC5',
-    fontSize: 11,
-    marginBottom: 8,
-  },
-  kpiTrend: {
+  kpiDeltaChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 8,
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(107, 212, 154, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(107, 212, 154, 0.3)',
   },
-  kpiTrendText: {
-    color: '#9de7b4',
+  kpiDeltaChipText: {
+    color: '#9be6b3',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  kpiPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  kpiTitle: {
+    color: '#cfe2ef',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  kpiValue: {
+    color: '#f4fbff',
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    marginBottom: 4,
+  },
+  kpiSubtext: {
+    color: '#8db1c4',
     fontSize: 11,
-    fontWeight: '500',
+    lineHeight: 15,
+  },
+  kpiDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  kpiFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  kpiFooterLabel: {
+    color: '#8db1c4',
+    fontSize: 11,
+    fontWeight: '600',
   },
   warningPill: {
     marginTop: 8,
@@ -961,168 +1291,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  kpiChartContainer: {
-    marginTop: 8,
-    alignItems: 'flex-end',
-  },
   miniChartContainer: {
     alignItems: 'flex-end',
   },
-  miniChartTitle: {
-    color: '#B0BEC5',
-    fontSize: 9,
-    marginBottom: 4,
-    textAlign: 'right',
-  },
   miniChartSvg: {
     alignSelf: 'flex-end',
-  },
-  chartCard: {
-    backgroundColor: '#0d1f2e',
-    borderRadius: 14,
-    padding: 22,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(80, 150, 180, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 3,
-    cursor: 'pointer',
-  },
-  chartTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 0,
-    letterSpacing: 0.3,
-  },
-  chartHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    flexWrap: 'wrap',
-    marginBottom: 14,
-  },
-  chartTitleGroup: {
-    flex: 1,
-    minWidth: 240,
-  },
-  chartTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  chartSubtitle: {
-    color: '#7a9cad',
-    fontSize: 12,
-    marginBottom: 0,
-  },
-  chartMetricCluster: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'flex-start',
-  },
-  chartMetricChip: {
-    backgroundColor: 'rgba(100, 170, 210, 0.08)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(100, 170, 210, 0.15)',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    minWidth: 72,
-  },
-  chartMetricValue: {
-    color: '#bceeff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  chartMetricLabel: {
-    color: '#8db9ce',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  chartContainer: {
-    flexDirection: 'row',
-    minHeight: 190,
-  },
-  yAxisContainer: {
-    justifyContent: 'space-between',
-    paddingRight: 10,
-    paddingBottom: 26,
-    paddingTop: 2,
-  },
-  yAxisLabel: {
-    color: '#88adbf',
-    fontSize: 11,
-    fontWeight: '500',
-    height: 35,
-    textAlign: 'right',
-  },
-  barChartArea: {
-    flex: 1,
-    position: 'relative',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    paddingBottom: 26,
-    paddingTop: 2,
-    gap: 10,
-  },
-  chartGrid: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between',
-    top: 2,
-    bottom: 26,
-  },
-  chartGridLine: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(130, 180, 203, 0.18)',
-  },
-  barChartItem: {
-    alignItems: 'center',
-    flex: 1,
-    minWidth: 64,
-  },
-  barWrapper: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    height: 160,
-    marginBottom: 10,
-  },
-  bar: {
-    width: 32,
-    backgroundColor: '#4eadd4',
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4,
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 2,
-    minHeight: 4,
-  },
-  barCount: {
-    color: '#a3d4ea',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 6,
-    lineHeight: 16,
-  },
-  barChartLabel: {
-    color: '#8badbf',
-    fontSize: 11,
-    fontWeight: '500',
-    lineHeight: 15,
-    textAlign: 'center',
-    maxWidth: 90,
-  },
-  noDataText: {
-    color: '#B0BEC5',
-    fontSize: 15,
-    textAlign: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 24,
-    lineHeight: 24,
   },
   menuOverlay: {
     position: 'absolute',
@@ -1167,99 +1340,425 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
-  insightsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 24,
-  },
-  insightCard: {
-    flex: 1,
-    minWidth: 280,
+  trainerLeaderboardCard: {
+    width: '100%',
     backgroundColor: '#0d1f2e',
-    borderRadius: 14,
-    padding: 20,
+    borderRadius: 16,
+    padding: 22,
+    marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(80, 150, 180, 0.2)',
+    borderColor: 'rgba(80, 150, 180, 0.22)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
     elevation: 3,
+  },
+  topTrainerCard: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#12263a',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 200, 66, 0.28)',
+    marginBottom: 18,
     cursor: 'pointer',
   },
-  insightCardHeader: {
+  topTrainerCover: {
+    position: 'relative',
+    width: '100%',
+    height: 150,
+    backgroundColor: '#0b1625',
+  },
+  topTrainerCoverImage: {
+    width: '100%',
+    height: '100%',
+  },
+  topTrainerCoverFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#0b1d2d',
+  },
+  topTrainerCoverFallbackText: {
+    color: '#6b8693',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  topTrainerCoverOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(6, 16, 28, 0.45)',
+  },
+  topTrainerCrownPill: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(245, 200, 66, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 200, 66, 0.45)',
+  },
+  topTrainerCrownText: {
+    color: '#ffd968',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  topTrainerBody: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    padding: 16,
+    paddingTop: 0,
+  },
+  topTrainerAvatarWrap: {
+    marginTop: -34,
+    padding: 3,
+    borderRadius: 999,
+    backgroundColor: '#12263a',
+    borderWidth: 2,
+    borderColor: 'rgba(245, 200, 66, 0.4)',
+  },
+  topTrainerAvatar: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+  },
+  topTrainerAvatarFallback: {
+    backgroundColor: '#15344a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topTrainerInfo: {
+    flex: 1,
+    paddingTop: 8,
+  },
+  topTrainerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  topTrainerName: {
+    flexShrink: 1,
+    color: '#f7fbff',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  topTrainerRatingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(245, 200, 66, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 200, 66, 0.36)',
+  },
+  topTrainerRatingValue: {
+    color: '#ffd968',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  topTrainerRatingCount: {
+    color: '#c7a95c',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  topTrainerMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 8,
+  },
+  topTrainerMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(100, 170, 210, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(100, 170, 210, 0.16)',
+    maxWidth: '100%',
+  },
+  topTrainerMetaText: {
+    color: '#cfe2ef',
+    fontSize: 11,
+    fontWeight: '600',
+    maxWidth: 180,
+  },
+  topTrainerAbout: {
+    color: '#a4bec9',
+    fontSize: 12,
+    lineHeight: 17,
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  runnerUpList: {
+    marginTop: 4,
+  },
+  runnerUpRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  runnerUpRowLast: {
+    borderBottomWidth: 0,
+  },
+  runnerUpAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  insightCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 18,
+  },
+  insightCardTitleGroup: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  insightCardIconTile: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  insightHeaderPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(100, 170, 210, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(100, 170, 210, 0.25)',
+  },
+  insightHeaderPillText: {
+    color: '#b6dcf0',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   insightCardTitle: {
-    color: '#FFFFFF',
+    color: '#f7fbff',
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
   insightCardSubtitle: {
-    color: '#7a9cad',
+    color: '#8db1c4',
     fontSize: 12,
-    marginBottom: 16,
+    marginTop: 2,
   },
   insightRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.07)',
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  insightRowLast: {
+    borderBottomWidth: 0,
   },
   insightRankBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     backgroundColor: 'rgba(100, 170, 210, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(100, 170, 210, 0.2)',
   },
   insightRankGold: {
-    backgroundColor: 'rgba(245, 200, 66, 0.22)',
+    backgroundColor: 'rgba(245, 200, 66, 0.18)',
+    borderColor: 'rgba(245, 200, 66, 0.4)',
   },
   insightRankSilver: {
-    backgroundColor: 'rgba(190, 200, 210, 0.2)',
+    backgroundColor: 'rgba(190, 200, 210, 0.14)',
+    borderColor: 'rgba(190, 200, 210, 0.32)',
   },
   insightRankBronze: {
-    backgroundColor: 'rgba(205, 127, 50, 0.2)',
+    backgroundColor: 'rgba(205, 127, 50, 0.16)',
+    borderColor: 'rgba(205, 127, 50, 0.36)',
   },
   insightRank: {
     color: '#d0eaf8',
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
   },
   insightInfo: {
     flex: 1,
   },
   insightTitle: {
-    color: '#e4f0f8',
-    fontSize: 13,
-    fontWeight: '600',
+    color: '#f4fbff',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   insightMeta: {
-    color: '#7a9cad',
+    color: '#8db1c4',
     fontSize: 11,
-    marginTop: 2,
+    marginTop: 3,
   },
   insightRatingCluster: {
     alignItems: 'flex-end',
     flexShrink: 0,
   },
+  insightRatingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(245, 200, 66, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 200, 66, 0.3)',
+  },
   insightRatingValue: {
-    color: '#f5c842',
-    fontSize: 14,
-    fontWeight: '700',
+    color: '#ffd968',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   insightRatingCount: {
-    color: '#7a9cad',
+    color: '#8db1c4',
     fontSize: 10,
+    marginTop: 3,
+  },
+  trainerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(4, 13, 24, 0.78)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+  },
+  trainerModalCard: {
+    width: '100%',
+    maxWidth: 620,
+    maxHeight: '82%',
+    borderRadius: 16,
+    backgroundColor: '#0d1f2e',
+    borderWidth: 1,
+    borderColor: 'rgba(122, 183, 211, 0.24)',
+    padding: 18,
+  },
+  trainerModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  trainerModalTitleWrap: {
+    flex: 1,
+  },
+  trainerModalTitle: {
+    color: '#f4fbff',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  trainerModalSubtitle: {
+    color: '#8db1c4',
+    fontSize: 12,
     marginTop: 2,
+  },
+  trainerModalCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(122, 183, 211, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(122, 183, 211, 0.24)',
+  },
+  trainerModalContent: {
+    paddingBottom: 8,
+    gap: 12,
+  },
+  trainerModalIdentityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 6,
+  },
+  trainerModalAvatar: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+  },
+  trainerModalName: {
+    color: '#f7fbff',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  trainerModalMeta: {
+    color: '#8db1c4',
+    fontSize: 12,
+    marginTop: 3,
+  },
+  trainerModalStatsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  trainerModalStatPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(100, 170, 210, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(100, 170, 210, 0.26)',
+  },
+  trainerModalStatText: {
+    color: '#d8e9f3',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  trainerModalDetailBlock: {
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: 'rgba(100, 170, 210, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(100, 170, 210, 0.18)',
+  },
+  trainerModalLabel: {
+    color: '#8db1c4',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  trainerModalValue: {
+    color: '#dbeaf3',
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

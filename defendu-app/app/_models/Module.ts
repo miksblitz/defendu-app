@@ -9,8 +9,8 @@ export interface Module {
   description: string;
   category: string;
 
-  /** Admin warm-up / cool-down entries (not a technique category). Omitted for normal modules. */
-  moduleSegment?: 'warmup' | 'cooldown';
+  /** Admin warm-up / cool-down / introduction entries (not a technique category). Omitted for normal modules. */
+  moduleSegment?: 'warmup' | 'cooldown' | 'introduction';
   
   // Introduction (text or video)
   introductionType: 'text' | 'video';

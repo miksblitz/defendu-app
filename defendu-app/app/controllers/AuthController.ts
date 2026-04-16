@@ -382,7 +382,13 @@ export class AuthController {
     const segNorm =
       typeof rawSeg === 'string' ? rawSeg.trim().toLowerCase().replace(/[\s_-]+/g, '') : '';
     const moduleSegment: Module['moduleSegment'] =
-      segNorm === 'warmup' ? 'warmup' : segNorm === 'cooldown' ? 'cooldown' : undefined;
+      segNorm === 'warmup'
+        ? 'warmup'
+        : segNorm === 'cooldown'
+          ? 'cooldown'
+          : segNorm === 'introduction' || segNorm === 'intro'
+            ? 'introduction'
+            : undefined;
     return {
       ...moduleDataRaw,
       moduleId,
@@ -486,6 +492,25 @@ export class AuthController {
   static async isAuthenticated(): Promise<boolean> {
     const user = await this.getCurrentUser();
     return !!user;
+  }
+
+  /**
+   * Lightweight "heartbeat" that updates the current user's lastActive timestamp
+   * in Realtime Database. Used by the app shell while the app is in the foreground
+   * so admin analytics (active users / trainers online) reflect real-time activity.
+   *
+   * Best-effort: failures are swallowed because this runs on a timer and must not
+   * crash the UI.
+   */
+  static async updateLastActive(): Promise<void> {
+    try {
+      const firebaseUser = auth.currentUser;
+      if (!firebaseUser) return;
+      const now = Date.now();
+      await update(ref(db, `users/${firebaseUser.uid}`), { lastActive: now });
+    } catch (error) {
+      // Silent: heartbeat should never throw to caller.
+    }
   }
 
   // Wait for Firebase Auth to be ready and return current user
@@ -1379,7 +1404,7 @@ export class AuthController {
       spaceRequirements?: string[];
       physicalDemandTags?: string[];
       repRange?: string;
-      trainingDurationSeconds?: number;
+      trainingDurationSeconds?: number | null;
       /** Cloudinary or empty/null to clear */
       techniqueVideoUrl?: string | null;
       /** External link or empty/null to clear */
@@ -1881,9 +1906,14 @@ export class AuthController {
       if (currentUser.role !== 'admin') throw new Error('Permission denied. Admin access required.');
 
       if (!moduleData.moduleTitle.trim()) throw new Error('Module title is required');
-      const hasSegment = moduleData.moduleSegment === 'warmup' || moduleData.moduleSegment === 'cooldown';
-      if (!hasSegment && !moduleData.category.trim()) throw new Error('Category is required');
+      const isWarmOrCool =
+        moduleData.moduleSegment === 'warmup' || moduleData.moduleSegment === 'cooldown';
+      const isIntroduction = moduleData.moduleSegment === 'introduction';
+      const hasSegment = isWarmOrCool || isIntroduction;
+      // Category is required for technique modules AND introduction modules (but not warm-up / cool-down)
+      if (!isWarmOrCool && !moduleData.category.trim()) throw new Error('Category is required');
       const trainerId = (moduleData.trainerId || '').trim();
+      // Trainer is only required for technique modules (admin owns all segment entries)
       if (!hasSegment && !trainerId) throw new Error('Trainer is required');
 
       const now = Date.now();
@@ -1897,7 +1927,7 @@ export class AuthController {
         trainerName: (moduleData.trainerName || '').trim(),
         moduleTitle: moduleData.moduleTitle.trim(),
         description: moduleData.description?.trim() || '',
-        category: hasSegment ? '' : moduleData.category.trim(),
+        category: isWarmOrCool ? '' : moduleData.category.trim(),
         difficultyLevel: moduleData.difficultyLevel ?? 'basic',
         intensityLevel: moduleData.intensityLevel ?? 1,
         spaceRequirements: moduleData.spaceRequirements || [],

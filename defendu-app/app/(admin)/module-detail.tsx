@@ -71,8 +71,32 @@ function getPlayableVideoUrl(url: string | undefined): string {
 }
 
 function isSegmentModule(m: Module | null | undefined): boolean {
-  return m?.moduleSegment === 'warmup' || m?.moduleSegment === 'cooldown';
+  return (
+    m?.moduleSegment === 'warmup' ||
+    m?.moduleSegment === 'cooldown' ||
+    m?.moduleSegment === 'introduction'
+  );
 }
+
+// 30 sec, 1–15 min in seconds
+const trainingDurationOptions: { label: string; value: number }[] = [
+  { label: '30s', value: 30 },
+  { label: '1m', value: 60 },
+  { label: '2m', value: 120 },
+  { label: '3m', value: 180 },
+  { label: '4m', value: 240 },
+  { label: '5m', value: 300 },
+  { label: '6m', value: 360 },
+  { label: '7m', value: 420 },
+  { label: '8m', value: 480 },
+  { label: '9m', value: 540 },
+  { label: '10m', value: 600 },
+  { label: '11m', value: 660 },
+  { label: '12m', value: 720 },
+  { label: '13m', value: 780 },
+  { label: '14m', value: 840 },
+  { label: '15m', value: 900 },
+];
 
 export default function ModuleDetailPage() {
   const router = useRouter();
@@ -87,8 +111,13 @@ export default function ModuleDetailPage() {
   const isCreateMode = mode === 'create';
   const segmentParam = Array.isArray(segmentParamRaw) ? segmentParamRaw[0] : segmentParamRaw;
   const createSegment: Module['moduleSegment'] | undefined =
-    segmentParam === 'warmup' || segmentParam === 'cooldown' ? segmentParam : undefined;
+    segmentParam === 'warmup' || segmentParam === 'cooldown' || segmentParam === 'introduction'
+      ? segmentParam
+      : undefined;
   const isSegmentCreateMode = isCreateMode && !!createSegment;
+  const isIntroductionCreateMode = isCreateMode && createSegment === 'introduction';
+  const isWarmOrCoolCreateMode =
+    isCreateMode && (createSegment === 'warmup' || createSegment === 'cooldown');
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
   const [module, setModule] = useState<Module | null>(null);
@@ -132,6 +161,7 @@ export default function ModuleDetailPage() {
   const [editIntensity, setEditIntensity] = useState<number>(1);
   const [editSpaceRequirements, setEditSpaceRequirements] = useState<string[]>([]);
   const [editPhysicalDemandTags, setEditPhysicalDemandTags] = useState<string[]>([]);
+  const [editTrainingDurationSeconds, setEditTrainingDurationSeconds] = useState<number | ''>('');
   const [approvedTrainers, setApprovedTrainers] = useState<User[]>([]);
   const [editTrainerId, setEditTrainerId] = useState('');
   const [editTrainerName, setEditTrainerName] = useState('');
@@ -161,6 +191,11 @@ export default function ModuleDetailPage() {
       AuthController.getModuleCategories()
         .then(setCategories)
         .catch((err) => console.error('Failed to load categories:', err));
+    } else if (isCreateMode && createSegment === 'introduction') {
+      // Introduction modules still pick a technique category
+      AuthController.getModuleCategories()
+        .then(setCategories)
+        .catch((err) => console.error('Failed to load categories:', err));
     } else if (isCreateMode && createSegment) {
       setCategories([]);
     } else if (moduleId) {
@@ -170,6 +205,7 @@ export default function ModuleDetailPage() {
         .then(setCategories)
         .catch((err) => console.error('Failed to load categories:', err));
     }
+    // Trainers only needed for technique modules (all segment types are admin-owned)
     if (!isCreateMode || !createSegment) {
       AuthController.getApprovedTrainers()
         .then(setApprovedTrainers)
@@ -190,6 +226,9 @@ export default function ModuleDetailPage() {
       setEditIntensity(module.intensityLevel || 1);
       setEditSpaceRequirements(module.spaceRequirements || []);
       setEditPhysicalDemandTags(module.physicalDemandTags || []);
+      setEditTrainingDurationSeconds(
+        typeof module.trainingDurationSeconds === 'number' ? module.trainingDurationSeconds : ''
+      );
       setEditTrainerId(module.trainerId || '');
       setEditTrainerName(module.trainerName || '');
       setEditStancePosition(module.stancePosition === 'front view' ? 'front view' : 'side view');
@@ -430,6 +469,8 @@ export default function ModuleDetailPage() {
       return;
     }
     const segmentModuleSave = isSegmentModule(module);
+    const isIntroSave = module.moduleSegment === 'introduction';
+    const isWarmOrCoolSave = module.moduleSegment === 'warmup' || module.moduleSegment === 'cooldown';
     try {
       setProcessing(true);
       const vid = editTechniqueVideoUrl.trim();
@@ -439,37 +480,42 @@ export default function ModuleDetailPage() {
         !!editTrainerId &&
         (editTrainerId !== module.trainerId ||
           trimmedTrainerName !== (module.trainerName || '').trim());
+      // Introduction modules keep their category + video; warm/cool modules wipe those fields.
       await AuthController.updateModuleMetadata(moduleId, {
         moduleTitle: trimmedTitle,
-        description: editDescription.trim(),
-        introduction: editIntroduction.trim(),
+        description: isIntroSave ? '' : editDescription.trim(),
+        introduction: isIntroSave ? '' : editIntroduction.trim(),
         category: editCategory.trim() || undefined,
         difficultyLevel: editDifficulty,
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
-        referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
+        referenceGuideUrl: isIntroSave ? undefined : editReferenceGuideUrl.trim() || undefined,
         intensityLevel: segmentModuleSave ? 1 : editIntensity,
         spaceRequirements: segmentModuleSave ? ['Stationary'] : editSpaceRequirements,
         physicalDemandTags: segmentModuleSave ? [] : editPhysicalDemandTags,
-        techniqueVideoUrl: segmentModuleSave ? null : vid || null,
-        techniqueVideoUrl2: segmentModuleSave ? null : !vid && !savedLink ? null : undefined,
+        trainingDurationSeconds:
+          typeof editTrainingDurationSeconds === 'number' ? editTrainingDurationSeconds : null,
+        techniqueVideoUrl: isWarmOrCoolSave ? null : vid || null,
+        techniqueVideoUrl2: isWarmOrCoolSave ? null : !vid && !savedLink ? null : undefined,
         ...(trainerNeedsUpdate ? { trainerId: editTrainerId, trainerName: trimmedTrainerName } : {}),
         stancePosition: segmentModuleSave ? 'side view' : editStancePosition === 'front view' ? 'front view' : 'side view',
       });
       const updated: Module = {
         ...module,
         moduleTitle: trimmedTitle,
-        description: editDescription.trim(),
-        introduction: editIntroduction.trim() || module.introduction,
+        description: isIntroSave ? '' : editDescription.trim(),
+        introduction: isIntroSave ? '' : (editIntroduction.trim() || module.introduction),
         category: editCategory.trim() || module.category,
         difficultyLevel: editDifficulty,
         stancePosition: segmentModuleSave ? 'side view' : editStancePosition === 'front view' ? 'front view' : 'side view',
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
-        referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
+        referenceGuideUrl: isIntroSave ? undefined : editReferenceGuideUrl.trim() || undefined,
         intensityLevel: segmentModuleSave ? 1 : editIntensity,
         spaceRequirements: segmentModuleSave ? ['Stationary'] : editSpaceRequirements,
         physicalDemandTags: segmentModuleSave ? [] : editPhysicalDemandTags,
-        techniqueVideoUrl: segmentModuleSave ? undefined : vid || undefined,
-        techniqueVideoUrl2: segmentModuleSave ? undefined : !vid && !savedLink ? undefined : module.techniqueVideoUrl2,
+        trainingDurationSeconds:
+          typeof editTrainingDurationSeconds === 'number' ? editTrainingDurationSeconds : undefined,
+        techniqueVideoUrl: isWarmOrCoolSave ? undefined : vid || undefined,
+        techniqueVideoUrl2: isWarmOrCoolSave ? undefined : !vid && !savedLink ? undefined : module.techniqueVideoUrl2,
         ...(trainerNeedsUpdate ? { trainerId: editTrainerId, trainerName: trimmedTrainerName } : {}),
         updatedAt: new Date(),
       };
@@ -487,24 +533,34 @@ export default function ModuleDetailPage() {
   const handleCreateModule = async () => {
     const trimmedTitle = editTitle.trim();
     if (!trimmedTitle) { showToast('Title is required'); return; }
-    if (!createSegment && !createCategory) { showToast('Category is required'); return; }
-    if (!createSegment && !editTrainerId) { showToast('Trainer is required'); return; }
     const seg = createSegment;
+    const isWarmOrCool = seg === 'warmup' || seg === 'cooldown';
+    const isIntro = seg === 'introduction';
+    // Category: required for technique and introduction modules
+    if (!isWarmOrCool && !createCategory) { showToast('Category is required'); return; }
+    // Trainer: required for technique modules only
+    if (!seg && !editTrainerId) { showToast('Trainer is required'); return; }
+    // Introduction needs thumbnail + video
+    if (isIntro && !editThumbnailUrl.trim()) { showToast('Thumbnail is required'); return; }
+    if (isIntro && !editTechniqueVideoUrl.trim()) { showToast('Video is required'); return; }
     try {
       setProcessing(true);
       const newModuleId = await AuthController.adminCreateModule({
         moduleTitle: trimmedTitle,
         description: seg ? '' : createDescription.trim(),
-        category: seg ? '' : createCategory,
+        category: isWarmOrCool ? '' : createCategory,
         trainerId: seg ? undefined : editTrainerId,
         trainerName: seg ? undefined : editTrainerName,
-        difficultyLevel: editDifficulty || 'basic',
+        difficultyLevel: isWarmOrCool || isIntro ? 'basic' : (editDifficulty || 'basic'),
         intensityLevel: seg ? 1 : editIntensity,
         spaceRequirements: seg ? ['Stationary'] : editSpaceRequirements,
         physicalDemandTags: seg ? [] : editPhysicalDemandTags,
+        trainingDurationSeconds:
+          typeof editTrainingDurationSeconds === 'number' ? editTrainingDurationSeconds : undefined,
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
-        techniqueVideoUrl: seg ? undefined : editTechniqueVideoUrl.trim() || undefined,
-        referenceGuideUrl: editReferenceGuideUrl.trim() || undefined,
+        // Introduction uses the technique video field to store the intro video
+        techniqueVideoUrl: isWarmOrCool ? undefined : editTechniqueVideoUrl.trim() || undefined,
+        referenceGuideUrl: isIntro ? undefined : editReferenceGuideUrl.trim() || undefined,
         stancePosition: seg ? 'side view' : editStancePosition === 'front view' ? 'front view' : 'side view',
         moduleSegment: seg,
       });
@@ -513,7 +569,9 @@ export default function ModuleDetailPage() {
           ? 'Warm-up created successfully.'
           : seg === 'cooldown'
             ? 'Cool-down created successfully.'
-            : 'Module created successfully.'
+            : seg === 'introduction'
+              ? 'Introduction created successfully.'
+              : 'Module created successfully.'
       );
       router.replace({
         pathname: '/(admin)/module-detail',
@@ -768,7 +826,9 @@ export default function ModuleDetailPage() {
                     ? 'New Warm-up'
                     : createSegment === 'cooldown'
                       ? 'New Cool-down'
-                      : 'New Module'}
+                      : createSegment === 'introduction'
+                        ? 'New Introduction'
+                        : 'New Module'}
                 </Text>
               </View>
             </View>
@@ -778,7 +838,9 @@ export default function ModuleDetailPage() {
                 ? 'Create Warmup'
                 : createSegment === 'cooldown'
                   ? 'Create Cooldown'
-                  : 'Create Module'}
+                  : createSegment === 'introduction'
+                    ? 'Create Introduction'
+                    : 'Create Module'}
             </Text>
 
             <View style={styles.editSection}>
@@ -805,13 +867,17 @@ export default function ModuleDetailPage() {
                     numberOfLines={3}
                   />
                 </>
+              ) : isIntroductionCreateMode ? (
+                <Text style={[styles.editHint, { marginBottom: 12 }]}>
+                  Introduction entry: set a title, pick a category, then upload a thumbnail and intro video.
+                </Text>
               ) : (
                 <Text style={[styles.editHint, { marginBottom: 12 }]}>
                   Warm-up / cool-down entry: use a clear title; description is optional and hidden here.
                 </Text>
               )}
 
-              {!isSegmentCreateMode ? (
+              {!isWarmOrCoolCreateMode ? (
                 <>
                   <Text style={styles.editLabel}>Category *</Text>
                   <TouchableOpacity
@@ -870,20 +936,24 @@ export default function ModuleDetailPage() {
                 </View>
               )}
 
-              <Text style={styles.editLabel}>Difficulty</Text>
-              <View style={styles.difficultyRow}>
-                {(['basic', 'intermediate', 'advanced'] as const).map((level) => (
-                  <TouchableOpacity
-                    key={level}
-                    style={[styles.difficultyChip, editDifficulty === level && styles.difficultyChipActive]}
-                    onPress={() => setEditDifficulty(level)}
-                  >
-                    <Text style={[styles.difficultyChipText, editDifficulty === level && styles.difficultyChipTextActive]}>
-                      {level.charAt(0).toUpperCase() + level.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {!isIntroductionCreateMode ? (
+                <>
+                  <Text style={styles.editLabel}>Difficulty</Text>
+                  <View style={styles.difficultyRow}>
+                    {(['basic', 'intermediate', 'advanced'] as const).map((level) => (
+                      <TouchableOpacity
+                        key={level}
+                        style={[styles.difficultyChip, editDifficulty === level && styles.difficultyChipActive]}
+                        onPress={() => setEditDifficulty(level)}
+                      >
+                        <Text style={[styles.difficultyChipText, editDifficulty === level && styles.difficultyChipTextActive]}>
+                          {level.charAt(0).toUpperCase() + level.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              ) : null}
 
               {!isSegmentCreateMode ? (
               <>
@@ -979,26 +1049,51 @@ export default function ModuleDetailPage() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.editLabel}>Reference guide (GIF or image)</Text>
-              <Text style={styles.editHint}>Upload a demo GIF or image for the practice screen (recommended for warmups and cooldowns).</Text>
-              {editReferenceGuideUrl ? (
-                <Image source={{ uri: editReferenceGuideUrl }} style={styles.editReferenceGuidePreview} resizeMode="contain" />
+              {!isIntroductionCreateMode ? (
+                <>
+                  <Text style={styles.editLabel}>Reference guide (GIF or image)</Text>
+                  <Text style={styles.editHint}>Upload a demo GIF or image for the practice screen (recommended for warmups and cooldowns).</Text>
+                  {editReferenceGuideUrl ? (
+                    <Image source={{ uri: editReferenceGuideUrl }} style={styles.editReferenceGuidePreview} resizeMode="contain" />
+                  ) : null}
+                  {Platform.OS === 'web' ? (
+                    <input
+                      ref={referenceGuideWebInputRef}
+                      type="file"
+                      accept="image/*,.gif"
+                      style={{ display: 'none' }}
+                      onChange={handleWebReferenceGuidePick}
+                    />
+                  ) : null}
+                  <TouchableOpacity style={styles.referenceGuideButton} onPress={handlePickReferenceGuide} disabled={processing}>
+                    <Ionicons name="image-outline" size={18} color="#38a6de" />
+                    <Text style={styles.thumbnailButtonText}>
+                      {editReferenceGuideUrl ? 'Replace reference guide' : 'Choose image or GIF'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
               ) : null}
-              {Platform.OS === 'web' ? (
-                <input
-                  ref={referenceGuideWebInputRef}
-                  type="file"
-                  accept="image/*,.gif"
-                  style={{ display: 'none' }}
-                  onChange={handleWebReferenceGuidePick}
-                />
+
+              {isIntroductionCreateMode ? (
+                <>
+                  <Text style={styles.editLabel}>Introduction video *</Text>
+                  <Text style={styles.editHint}>Pick the intro video from your gallery or file browser.</Text>
+                  {editTechniqueVideoUrl ? (
+                    <Text style={styles.editTechniqueVideoUrl} numberOfLines={2}>{editTechniqueVideoUrl}</Text>
+                  ) : null}
+                  <View style={styles.thumbnailButtonsRow}>
+                    <TouchableOpacity style={styles.thumbnailButton} onPress={handlePickTechniqueVideo} disabled={processing}>
+                      <Ionicons name="videocam-outline" size={18} color="#38a6de" />
+                      <Text style={styles.thumbnailButtonText}>
+                        {editTechniqueVideoUrl ? 'Replace video' : 'Choose video from gallery'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  {Platform.OS === 'web' ? (
+                    <input ref={techniqueVideoInputRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={handleWebTechniqueVideoChange} />
+                  ) : null}
+                </>
               ) : null}
-              <TouchableOpacity style={styles.referenceGuideButton} onPress={handlePickReferenceGuide} disabled={processing}>
-                <Ionicons name="image-outline" size={18} color="#38a6de" />
-                <Text style={styles.thumbnailButtonText}>
-                  {editReferenceGuideUrl ? 'Replace reference guide' : 'Choose image or GIF'}
-                </Text>
-              </TouchableOpacity>
 
               {!isSegmentCreateMode ? (
               <>
@@ -1026,6 +1121,29 @@ export default function ModuleDetailPage() {
                   />
                 ))}
                 <Text style={styles.intensityEditText}>{editIntensity}/5</Text>
+              </View>
+
+              <Text style={styles.editLabel}>Training duration (practice time)</Text>
+              <View style={styles.tagsRow}>
+                {trainingDurationOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.tag,
+                      editTrainingDurationSeconds === opt.value && styles.tagActive,
+                    ]}
+                    onPress={() => setEditTrainingDurationSeconds(opt.value)}
+                  >
+                    <Text
+                      style={[
+                        styles.tagText,
+                        editTrainingDurationSeconds === opt.value && styles.tagTextActive,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
 
               <Text style={styles.editLabel}>Space Requirements</Text>
@@ -1069,7 +1187,9 @@ export default function ModuleDetailPage() {
                       ? 'Create Warmup'
                       : createSegment === 'cooldown'
                         ? 'Create Cooldown'
-                        : 'Create Module'}
+                        : createSegment === 'introduction'
+                          ? 'Create Introduction'
+                          : 'Create Module'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -1112,6 +1232,9 @@ export default function ModuleDetailPage() {
   const isDraft = module.status === 'draft';
   const canOpenModuleEditor = isApproved || isPending || isDraft;
   const isSegmentDetailModule = isSegmentModule(module);
+  const isIntroductionDetailModule = module?.moduleSegment === 'introduction';
+  const isWarmOrCoolDetailModule =
+    module?.moduleSegment === 'warmup' || module?.moduleSegment === 'cooldown';
 
   const displayTechniqueVideoUrl =
     isApproved && isEditing ? editTechniqueVideoUrl.trim() : (module.techniqueVideoUrl || '');
@@ -1219,7 +1342,12 @@ export default function ModuleDetailPage() {
                       </Text>
                     ) : (
                       <Text style={styles.editHeroId}>
-                        {module.moduleSegment === 'warmup' ? 'Warm-up' : 'Cool-down'} · {module.moduleId}
+                        {module.moduleSegment === 'warmup'
+                          ? 'Warm-up'
+                          : module.moduleSegment === 'cooldown'
+                            ? 'Cool-down'
+                            : 'Introduction'}{' '}
+                        · {module.moduleId}
                       </Text>
                     )}
                   </View>
@@ -1290,9 +1418,9 @@ export default function ModuleDetailPage() {
                 </>
               ) : null}
 
-              {!isSegmentDetailModule ? (
+              {!isWarmOrCoolDetailModule ? (
                 <>
-                  <Text style={styles.editLabel}>Category</Text>
+                  <Text style={styles.editLabel}>Category{isIntroductionDetailModule ? ' *' : ''}</Text>
                   <TouchableOpacity
                     style={styles.trainerPickerButton}
                     onPress={() => setShowEditCategoryPicker(true)}
@@ -1349,28 +1477,32 @@ export default function ModuleDetailPage() {
                 </View>
               )}
 
-              <Text style={styles.editLabel}>Difficulty</Text>
-              <View style={styles.difficultyRow}>
-                {(['basic', 'intermediate', 'advanced'] as const).map((level) => (
-                  <TouchableOpacity
-                    key={level}
-                    style={[
-                      styles.difficultyChip,
-                      editDifficulty === level && styles.difficultyChipActive,
-                    ]}
-                    onPress={() => setEditDifficulty(level)}
-                  >
-                    <Text
-                      style={[
-                        styles.difficultyChipText,
-                        editDifficulty === level && styles.difficultyChipTextActive,
-                      ]}
-                    >
-                      {level.charAt(0).toUpperCase() + level.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {!isIntroductionDetailModule ? (
+                <>
+                  <Text style={styles.editLabel}>Difficulty</Text>
+                  <View style={styles.difficultyRow}>
+                    {(['basic', 'intermediate', 'advanced'] as const).map((level) => (
+                      <TouchableOpacity
+                        key={level}
+                        style={[
+                          styles.difficultyChip,
+                          editDifficulty === level && styles.difficultyChipActive,
+                        ]}
+                        onPress={() => setEditDifficulty(level)}
+                      >
+                        <Text
+                          style={[
+                            styles.difficultyChipText,
+                            editDifficulty === level && styles.difficultyChipTextActive,
+                          ]}
+                        >
+                          {level.charAt(0).toUpperCase() + level.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              ) : null}
 
               {!isSegmentDetailModule ? (
               <>
@@ -1515,34 +1647,86 @@ export default function ModuleDetailPage() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.editLabel}>Reference guide (GIF or image)</Text>
-              <Text style={styles.editHint}>One picture or GIF for user guidance only.</Text>
-              {editReferenceGuideUrl ? (
-                <Image
-                  source={{ uri: editReferenceGuideUrl }}
-                  style={styles.editReferenceGuidePreview}
-                  resizeMode="contain"
-                />
+              {!isIntroductionDetailModule ? (
+                <>
+                  <Text style={styles.editLabel}>Reference guide (GIF or image)</Text>
+                  <Text style={styles.editHint}>One picture or GIF for user guidance only.</Text>
+                  {editReferenceGuideUrl ? (
+                    <Image
+                      source={{ uri: editReferenceGuideUrl }}
+                      style={styles.editReferenceGuidePreview}
+                      resizeMode="contain"
+                    />
+                  ) : null}
+                  {Platform.OS === 'web' ? (
+                    <input
+                      ref={referenceGuideWebInputRef}
+                      type="file"
+                      accept="image/*,.gif"
+                      style={{ display: 'none' }}
+                      onChange={handleWebReferenceGuidePick}
+                    />
+                  ) : null}
+                  <TouchableOpacity
+                    style={styles.referenceGuideButton}
+                    onPress={handlePickReferenceGuide}
+                    disabled={processing}
+                  >
+                    <Ionicons name="image-outline" size={18} color="#38a6de" />
+                    <Text style={styles.thumbnailButtonText}>
+                      {editReferenceGuideUrl ? 'Replace reference guide' : 'Choose from gallery or upload'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
               ) : null}
-              {Platform.OS === 'web' ? (
-                <input
-                  ref={referenceGuideWebInputRef}
-                  type="file"
-                  accept="image/*,.gif"
-                  style={{ display: 'none' }}
-                  onChange={handleWebReferenceGuidePick}
-                />
+
+              {isIntroductionDetailModule ? (
+                <>
+                  <Text style={styles.editLabel}>Introduction video *</Text>
+                  <Text style={styles.editHint}>
+                    Pick the intro video from your gallery or file browser.
+                  </Text>
+                  {editTechniqueVideoUrl ? (
+                    <Text style={styles.editTechniqueVideoUrl} numberOfLines={2}>
+                      {editTechniqueVideoUrl}
+                    </Text>
+                  ) : null}
+                  <View style={styles.thumbnailButtonsRow}>
+                    <TouchableOpacity
+                      style={styles.thumbnailButton}
+                      onPress={handlePickTechniqueVideo}
+                      disabled={processing}
+                    >
+                      <Ionicons name="videocam-outline" size={18} color="#38a6de" />
+                      <Text style={styles.thumbnailButtonText}>
+                        {editTechniqueVideoUrl ? 'Replace video' : 'Choose video from gallery'}
+                      </Text>
+                    </TouchableOpacity>
+                    {editTechniqueVideoUrl ? (
+                      <TouchableOpacity
+                        style={styles.thumbnailButton}
+                        onPress={() => {
+                          setEditTechniqueVideoUrl('');
+                          showToast('Uploaded video cleared (save to apply)');
+                        }}
+                        disabled={processing}
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#e57373" />
+                        <Text style={[styles.thumbnailButtonText, { color: '#e57373' }]}>Clear upload</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  {Platform.OS === 'web' ? (
+                    <input
+                      ref={techniqueVideoInputRef}
+                      type="file"
+                      accept="video/*"
+                      style={{ display: 'none' }}
+                      onChange={handleWebTechniqueVideoChange}
+                    />
+                  ) : null}
+                </>
               ) : null}
-              <TouchableOpacity
-                style={styles.referenceGuideButton}
-                onPress={handlePickReferenceGuide}
-                disabled={processing}
-              >
-                <Ionicons name="image-outline" size={18} color="#38a6de" />
-                <Text style={styles.thumbnailButtonText}>
-                  {editReferenceGuideUrl ? 'Replace reference guide' : 'Choose from gallery or upload'}
-                </Text>
-              </TouchableOpacity>
 
               {!isSegmentDetailModule ? (
               <>
@@ -1606,6 +1790,29 @@ export default function ModuleDetailPage() {
                 <Text style={styles.intensityEditText}>{editIntensity}/5</Text>
               </View>
 
+              <Text style={styles.editLabel}>Training duration (practice time)</Text>
+              <View style={styles.tagsRow}>
+                {trainingDurationOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.tag,
+                      editTrainingDurationSeconds === opt.value && styles.tagActive,
+                    ]}
+                    onPress={() => setEditTrainingDurationSeconds(opt.value)}
+                  >
+                    <Text
+                      style={[
+                        styles.tagText,
+                        editTrainingDurationSeconds === opt.value && styles.tagTextActive,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <Text style={styles.editLabel}>Space Requirements</Text>
               <View style={styles.tagsRow}>
                 {['Stationary', 'Arm/Leg Span (Medium Space)', 'Mobility (Large Space)'].map(
@@ -1656,6 +1863,10 @@ export default function ModuleDetailPage() {
                 )}
               </View>
               </>
+              ) : isIntroductionDetailModule ? (
+                <Text style={[styles.editHint, { marginTop: 8 }]}>
+                  Introduction: title, category, thumbnail, and intro video are editable above. Difficulty, reference guide, and pose tools are hidden for this type.
+                </Text>
               ) : (
                 <Text style={[styles.editHint, { marginTop: 8 }]}>
                   Warm-up / cool-down: difficulty, thumbnail, and reference GIF or image are editable above. Technique video and pose tools are hidden for this type.
@@ -1704,29 +1915,35 @@ export default function ModuleDetailPage() {
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Listing:</Text>
                 <Text style={styles.infoValue}>
-                  Warm-up or cool-down — shown by title only (no reference code).
+                  {isIntroductionDetailModule
+                    ? 'Introduction — shown by title, thumbnail, and intro video.'
+                    : 'Warm-up or cool-down — shown by title only (no reference code).'}
                 </Text>
               </View>
             )}
 
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Category:</Text>
-              <Text style={styles.infoValue}>{module.category}</Text>
+              <Text style={styles.infoValue}>{module.category || '—'}</Text>
             </View>
 
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Difficulty:</Text>
-              <Text style={styles.infoValue}>
-                {module.difficultyLevel
-                  ? module.difficultyLevel.charAt(0).toUpperCase() + module.difficultyLevel.slice(1)
-                  : 'Basic'}
-              </Text>
-            </View>
+            {!isIntroductionDetailModule ? (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Difficulty:</Text>
+                <Text style={styles.infoValue}>
+                  {module.difficultyLevel
+                    ? module.difficultyLevel.charAt(0).toUpperCase() + module.difficultyLevel.slice(1)
+                    : 'Basic'}
+                </Text>
+              </View>
+            ) : null}
 
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Trainer:</Text>
-              <Text style={styles.infoValue}>{module.trainerName || 'N/A'}</Text>
-            </View>
+            {!isIntroductionDetailModule ? (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Trainer:</Text>
+                <Text style={styles.infoValue}>{module.trainerName || 'N/A'}</Text>
+              </View>
+            ) : null}
 
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Date Created:</Text>
@@ -1747,52 +1964,62 @@ export default function ModuleDetailPage() {
               </View>
             )}
 
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Stance position:</Text>
-              <Text style={styles.infoValue}>{formatStancePositionLabel(module.stancePosition)}</Text>
-            </View>
+            {!isIntroductionDetailModule ? (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Stance position:</Text>
+                <Text style={styles.infoValue}>{formatStancePositionLabel(module.stancePosition)}</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Description Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Description</Text>
-            <Text style={styles.descriptionText}>{module.description}</Text>
-          </View>
+          {!isIntroductionDetailModule ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Description</Text>
+              <Text style={styles.descriptionText}>{module.description}</Text>
+            </View>
+          ) : null}
 
           {/* Introduction Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Introduction</Text>
-            {module.introductionType === 'text' ? (
-              <Text style={styles.descriptionText}>
-                {module.introduction || 'No introduction provided'}
-              </Text>
-            ) : (
-              <View>
-                {module.introductionVideoUrl ? (
-                  <TouchableOpacity
-                    style={styles.videoButton}
-                    onPress={() => openVideoUrl(module.introductionVideoUrl!, true)}
-                  >
-                    <Ionicons name="play-circle" size={24} color="#38a6de" />
-                    <Text style={styles.videoButtonText}>View Introduction Video</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <Text style={styles.descriptionText}>No introduction video provided</Text>
-                )}
-              </View>
-            )}
-          </View>
+          {!isIntroductionDetailModule ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Introduction</Text>
+              {module.introductionType === 'text' ? (
+                <Text style={styles.descriptionText}>
+                  {module.introduction || 'No introduction provided'}
+                </Text>
+              ) : (
+                <View>
+                  {module.introductionVideoUrl ? (
+                    <TouchableOpacity
+                      style={styles.videoButton}
+                      onPress={() => openVideoUrl(module.introductionVideoUrl!, true)}
+                    >
+                      <Ionicons name="play-circle" size={24} color="#38a6de" />
+                      <Text style={styles.videoButtonText}>View Introduction Video</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={styles.descriptionText}>No introduction video provided</Text>
+                  )}
+                </View>
+              )}
+            </View>
+          ) : null}
 
-          {/* Technique Video Section */}
+          {/* Technique / Introduction Video Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Technique Video</Text>
+            <Text style={styles.sectionTitle}>
+              {isIntroductionDetailModule ? 'Introduction Video' : 'Technique Video'}
+            </Text>
             {displayTechniqueVideoUrl ? (
               <TouchableOpacity
                 style={styles.videoButton}
                 onPress={() => openVideoUrl(displayTechniqueVideoUrl, true)}
               >
                 <Ionicons name="play-circle" size={24} color="#38a6de" />
-                <Text style={styles.videoButtonText}>View Technique Video</Text>
+                <Text style={styles.videoButtonText}>
+                  {isIntroductionDetailModule ? 'View Introduction Video' : 'View Technique Video'}
+                </Text>
               </TouchableOpacity>
             ) : displayTechniqueVideoLink ? (
               <TouchableOpacity
@@ -1808,7 +2035,9 @@ export default function ModuleDetailPage() {
                 onPress={() => openVideoUrl(module.techniqueVideoUrl2!, true)}
               >
                 <Ionicons name="play-circle" size={24} color="#38a6de" />
-                <Text style={styles.videoButtonText}>View Technique Video</Text>
+                <Text style={styles.videoButtonText}>
+                  {isIntroductionDetailModule ? 'View Introduction Video' : 'View Technique Video'}
+                </Text>
               </TouchableOpacity>
             ) : (
               <Text style={styles.descriptionText}>No video provided</Text>
@@ -1826,32 +2055,36 @@ export default function ModuleDetailPage() {
               </TouchableOpacity>
             ) : null}
 
-            <Text style={styles.mediaSubsectionTitle}>Reference video guide</Text>
-            {displayReferenceGuideUrl ? (
+            {!isIntroductionDetailModule ? (
               <>
-                <View style={styles.referenceGuideViewWrap}>
-                  <Image
-                    source={{ uri: displayReferenceGuideUrl }}
-                    style={styles.referenceGuideViewImage}
-                    resizeMode="contain"
-                  />
-                </View>
-                <TouchableOpacity
-                  style={styles.videoButton}
-                  onPress={() =>
-                    Linking.openURL(displayReferenceGuideUrl).catch((err) => {
-                      console.error('Failed to open URL:', err);
-                      showToast('Failed to open reference guide');
-                    })
-                  }
-                >
-                  <Ionicons name="images-outline" size={24} color="#38a6de" />
-                  <Text style={styles.videoButtonText}>Open reference guide</Text>
-                </TouchableOpacity>
+                <Text style={styles.mediaSubsectionTitle}>Reference video guide</Text>
+                {displayReferenceGuideUrl ? (
+                  <>
+                    <View style={styles.referenceGuideViewWrap}>
+                      <Image
+                        source={{ uri: displayReferenceGuideUrl }}
+                        style={styles.referenceGuideViewImage}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <TouchableOpacity
+                      style={styles.videoButton}
+                      onPress={() =>
+                        Linking.openURL(displayReferenceGuideUrl).catch((err) => {
+                          console.error('Failed to open URL:', err);
+                          showToast('Failed to open reference guide');
+                        })
+                      }
+                    >
+                      <Ionicons name="images-outline" size={24} color="#38a6de" />
+                      <Text style={styles.videoButtonText}>Open reference guide</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <Text style={styles.descriptionText}>No reference guide provided</Text>
+                )}
               </>
-            ) : (
-              <Text style={styles.descriptionText}>No reference guide provided</Text>
-            )}
+            ) : null}
           </View>
 
           {/* Thumbnail Section */}
@@ -1869,62 +2102,73 @@ export default function ModuleDetailPage() {
           )}
 
           {/* AI Training Specifications Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>AI Training Specifications</Text>
-            
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Intensity Level:</Text>
-              <View style={styles.intensityContainer}>
-                {[1, 2, 3, 4, 5].map((level) => (
-                  <View
-                    key={level}
-                    style={[
-                      styles.intensityDot,
-                      level <= module.intensityLevel && styles.intensityDotActive,
-                    ]}
-                  />
-                ))}
-                <Text style={styles.intensityText}>{module.intensityLevel}/5</Text>
+          {!isIntroductionDetailModule ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>AI Training Specifications</Text>
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Intensity Level:</Text>
+                <View style={styles.intensityContainer}>
+                  {[1, 2, 3, 4, 5].map((level) => (
+                    <View
+                      key={level}
+                      style={[
+                        styles.intensityDot,
+                        level <= module.intensityLevel && styles.intensityDotActive,
+                      ]}
+                    />
+                  ))}
+                  <Text style={styles.intensityText}>{module.intensityLevel}/5</Text>
+                </View>
               </View>
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Training duration:</Text>
+                <Text style={styles.infoValue}>
+                  {module.trainingDurationSeconds ? formatDuration(module.trainingDurationSeconds) : 'N/A'}
+                </Text>
+              </View>
+
+              {module.spaceRequirements && module.spaceRequirements.length > 0 && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Space Requirements:</Text>
+                  <View style={styles.tagsContainer}>
+                    {module.spaceRequirements.map((req, index) => (
+                      <View key={index} style={styles.tag}>
+                        <Text style={styles.tagText}>{req}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {module.physicalDemandTags && module.physicalDemandTags.length > 0 && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Physical Demand Tags:</Text>
+                  <View style={styles.tagsContainer}>
+                    {module.physicalDemandTags.map((tag, index) => (
+                      <View key={index} style={styles.tag}>
+                        <Text style={styles.tagText}>{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
-
-            {module.spaceRequirements && module.spaceRequirements.length > 0 && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Space Requirements:</Text>
-                <View style={styles.tagsContainer}>
-                  {module.spaceRequirements.map((req, index) => (
-                    <View key={index} style={styles.tag}>
-                      <Text style={styles.tagText}>{req}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {module.physicalDemandTags && module.physicalDemandTags.length > 0 && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Physical Demand Tags:</Text>
-                <View style={styles.tagsContainer}>
-                  {module.physicalDemandTags.map((tag, index) => (
-                    <View key={index} style={styles.tag}>
-                      <Text style={styles.tagText}>{tag}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-          </View>
+          ) : null}
 
           {/* Certification Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Certification</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Trainer Certified:</Text>
-              <Text style={styles.infoValue}>
-                {module.certificationChecked ? 'Yes' : 'No'}
-              </Text>
+          {!isIntroductionDetailModule ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Certification</Text>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Trainer Certified:</Text>
+                <Text style={styles.infoValue}>
+                  {module.certificationChecked ? 'Yes' : 'No'}
+                </Text>
+              </View>
             </View>
-          </View>
+          ) : null}
 
           {/* Rejection Reason (if rejected) */}
           {isRejected && module.rejectionReason && (

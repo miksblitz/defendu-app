@@ -50,8 +50,8 @@ const DELETION_REASONS = [
 
 type FilterType = 'active' | 'pending';
 
-/** Which rows the main AdminTable shows: technique modules or warm-up / cool-down entries. */
-type ModuleTableSegment = 'technique' | 'warmup' | 'cooldown';
+/** Which rows the main AdminTable shows: technique modules, warm-up, cool-down, or introduction entries. */
+type ModuleTableSegment = 'technique' | 'warmup' | 'cooldown' | 'introduction';
 
 const PAGE_SIZE = 15;
 
@@ -338,6 +338,11 @@ export default function ManageModulesPage() {
     [modules, applyCommonFilters]
   );
 
+  const introductionModulesFiltered = useMemo(
+    () => applyCommonFilters(modules.filter((m) => m.moduleSegment === 'introduction')),
+    [modules, applyCommonFilters]
+  );
+
   const sortModuleListLikeMain = useCallback(
     (list: Module[]) => {
       const result = [...list];
@@ -373,6 +378,11 @@ export default function ManageModulesPage() {
   const sortedCooldownModules = useMemo(
     () => sortModuleListLikeMain(cooldownModulesFiltered),
     [cooldownModulesFiltered, sortModuleListLikeMain]
+  );
+
+  const sortedIntroductionModules = useMemo(
+    () => sortModuleListLikeMain(introductionModulesFiltered),
+    [introductionModulesFiltered, sortModuleListLikeMain]
   );
 
   const approvedWarmupLibraryForAssign = useMemo(
@@ -430,8 +440,15 @@ export default function ManageModulesPage() {
   const sortedDisplayModules = useMemo(() => {
     if (moduleTableSegment === 'warmup') return sortedWarmupModules;
     if (moduleTableSegment === 'cooldown') return sortedCooldownModules;
+    if (moduleTableSegment === 'introduction') return sortedIntroductionModules;
     return sortedTechniqueModules;
-  }, [moduleTableSegment, sortedWarmupModules, sortedCooldownModules, sortedTechniqueModules]);
+  }, [
+    moduleTableSegment,
+    sortedWarmupModules,
+    sortedCooldownModules,
+    sortedIntroductionModules,
+    sortedTechniqueModules,
+  ]);
 
   const totalPages = Math.max(
     1,
@@ -725,7 +742,11 @@ export default function ManageModulesPage() {
       key: 'difficulty',
       title: 'Difficulty',
       minWidth: 120,
-      render: (module) => <Text style={styles.cellText}>{formatDifficulty(module.difficultyLevel)}</Text>,
+      render: (module) => (
+        <Text style={styles.cellText}>
+          {module.moduleSegment === 'introduction' ? '—' : formatDifficulty(module.difficultyLevel)}
+        </Text>
+      ),
     },
     {
       key: 'category',
@@ -788,40 +809,30 @@ export default function ManageModulesPage() {
     {
       key: 'actions',
       title: 'Actions',
-      minWidth: 190,
+      minWidth: 220,
       align: 'right',
       render: (module) => (
-        <View style={[styles.actionRow, isCompact && styles.actionRowCompact]}>
+        <View style={[styles.actionRow, styles.actionRowFilled, isCompact && styles.actionRowCompact]}>
           <TouchableOpacity
-            style={[styles.secondaryActionButton, isCompact && styles.secondaryActionButtonCompact]}
+            style={[
+              styles.secondaryActionButton,
+              styles.secondaryActionButtonFill,
+              isCompact && styles.secondaryActionButtonCompact,
+            ]}
             onPress={() => handleViewModule(module)}
           >
             <Text style={styles.secondaryActionText}>View</Text>
           </TouchableOpacity>
           {module.status === 'approved' && (
             <TouchableOpacity
-              style={[styles.secondaryActionButton, isCompact && styles.secondaryActionButtonCompact]}
+              style={[
+                styles.secondaryActionButton,
+                styles.secondaryActionButtonFill,
+                isCompact && styles.secondaryActionButtonCompact,
+              ]}
               onPress={() => handleEditModule(module)}
             >
               <Text style={styles.secondaryActionText}>Edit</Text>
-            </TouchableOpacity>
-          )}
-          {module.status === 'disabled' ? (
-            <TouchableOpacity
-              style={[styles.secondaryActionButton, isCompact && styles.secondaryActionButtonCompact]}
-              onPress={() => handleEnableModule(module.moduleId)}
-              disabled={enablingModuleId === module.moduleId}
-            >
-              <Text style={styles.secondaryActionText}>
-                {enablingModuleId === module.moduleId ? '...' : 'Enable'}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.dangerActionButton, isCompact && styles.dangerActionButtonCompact]}
-              onPress={() => openDeleteModal(module)}
-            >
-              <Text style={styles.dangerActionText}>{isCompact ? 'Dis.' : 'Disable'}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -885,14 +896,66 @@ export default function ManageModulesPage() {
                 style={styles.headerLogoImage}
                 resizeMode="contain"
               />
-              <Text style={styles.headerAdminText}>Admin</Text>
+              <Text style={styles.headerAdminText}>Admin · Manage Modules</Text>
               <Text style={styles.subTitle}>
-                Active Modules {filterType === 'active' ? activeCount : pendingCount}
+                Curate the library, approve trainer uploads, and build the learner program.
               </Text>
             </View>
           </Animated.View>
 
           <View style={[styles.mainContent, isCompact && styles.mainContentCompact]}>
+            <Animated.View
+              style={[
+                styles.statsRow,
+                isCompact && styles.statsRowCompact,
+                {
+                  opacity: controlsAnim,
+                  transform: [
+                    {
+                      translateY: controlsAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <View style={[styles.statCard, styles.statCardActive]}>
+                <View style={[styles.statIconWrap, { backgroundColor: 'rgba(56, 166, 222, 0.18)' }]}>
+                  <Ionicons name="fitness" size={20} color="#38a6de" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.statValue}>{activeCount}</Text>
+                  <Text style={styles.statLabel}>Active modules</Text>
+                </View>
+              </View>
+              <View style={[styles.statCard, styles.statCardPending]}>
+                <View style={[styles.statIconWrap, { backgroundColor: 'rgba(255, 193, 7, 0.18)' }]}>
+                  <Ionicons name="time-outline" size={20} color="#ffc107" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.statValue}>{pendingCount}</Text>
+                  <Text style={styles.statLabel}>Pending / Disabled</Text>
+                </View>
+              </View>
+              <View style={[styles.statCard, styles.statCardCategories]}>
+                <View style={[styles.statIconWrap, { backgroundColor: 'rgba(7, 187, 192, 0.18)' }]}>
+                  <Ionicons name="pricetags-outline" size={20} color="#07bbc0" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.statValue}>{displayCategories.length}</Text>
+                  <Text style={styles.statLabel}>Categories</Text>
+                </View>
+              </View>
+              <View style={[styles.statCard, styles.statCardTrainers]}>
+                <View style={[styles.statIconWrap, { backgroundColor: 'rgba(180, 145, 255, 0.18)' }]}>
+                  <Ionicons name="people-outline" size={20} color="#b491ff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.statValue}>{approvedTrainerNames.length}</Text>
+                  <Text style={styles.statLabel}>Approved trainers</Text>
+                </View>
+              </View>
+            </Animated.View>
+
             <Animated.View
               style={[
                 styles.controlsWrap,
@@ -906,40 +969,94 @@ export default function ManageModulesPage() {
                 },
               ]}
             >
-              <View style={styles.primaryFiltersRow}>
-                <TouchableOpacity
-                  style={[styles.tabButton, filterType === 'active' && styles.tabButtonActive]}
-                  onPress={() => setFilterType('active')}
-                >
-                  <Text style={[styles.tabText, filterType === 'active' && styles.tabTextActive]}>
-                    Active {activeCount}
+              <View style={styles.sectionCard}>
+                <View style={styles.sectionCardHeader}>
+                  <View style={styles.sectionCardTitleWrap}>
+                    <Ionicons name="options-outline" size={18} color="#38a6de" />
+                    <Text style={styles.sectionCardTitle}>Library status</Text>
+                  </View>
+                  <Text style={styles.sectionCardCaption}>
+                    Switch between approved content and items awaiting review.
                   </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.tabButton, filterType === 'pending' && styles.tabButtonActive]}
-                  onPress={() => setFilterType('pending')}
-                >
-                  <Text style={[styles.tabText, filterType === 'pending' && styles.tabTextActive]}>
-                    Pending/Disabled {pendingCount}
-                  </Text>
-                </TouchableOpacity>
-                <View style={{ flex: 1 }} />
+                </View>
+                <View style={styles.primaryFiltersRow}>
+                  <TouchableOpacity
+                    style={[styles.tabButton, filterType === 'active' && styles.tabButtonActive]}
+                    onPress={() => setFilterType('active')}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={15}
+                      color={filterType === 'active' ? '#38a6de' : '#8199a5'}
+                    />
+                    <Text style={[styles.tabText, filterType === 'active' && styles.tabTextActive]}>
+                      Active
+                    </Text>
+                    <View
+                      style={[
+                        styles.tabCountBadge,
+                        filterType === 'active' && styles.tabCountBadgeActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.tabCountBadgeText,
+                          filterType === 'active' && styles.tabCountBadgeTextActive,
+                        ]}
+                      >
+                        {activeCount}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.tabButton, filterType === 'pending' && styles.tabButtonActive]}
+                    onPress={() => setFilterType('pending')}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name="time"
+                      size={15}
+                      color={filterType === 'pending' ? '#ffc107' : '#8199a5'}
+                    />
+                    <Text style={[styles.tabText, filterType === 'pending' && styles.tabTextActive]}>
+                      Pending / Disabled
+                    </Text>
+                    <View
+                      style={[
+                        styles.tabCountBadge,
+                        filterType === 'pending' && styles.tabCountBadgeActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.tabCountBadgeText,
+                          filterType === 'pending' && styles.tabCountBadgeTextActive,
+                        ]}
+                      >
+                        {pendingCount}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              <SearchInput
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search by title, category, trainer, or ID"
-              />
-
               <View style={styles.segmentPickerCard}>
-                <Text style={styles.segmentPickerHeading}>Warm-up & cool-down</Text>
-                <Text style={styles.segmentPickerHint}>
-                  Tap a circle to list those entries in the main table. Tap the active circle again to return to techniques.
-                </Text>
+                <View style={styles.sectionCardHeader}>
+                  <View style={styles.sectionCardTitleWrap}>
+                    <Ionicons name="flame-outline" size={18} color="#38a6de" />
+                    <Text style={styles.sectionCardTitle}>Warm-up & cool-down</Text>
+                  </View>
+                  <Text style={styles.sectionCardCaption}>
+                    Tap a circle to filter the table. Tap it again to return to technique modules.
+                  </Text>
+                </View>
                 <View style={styles.segmentPickerRow}>
                   <TouchableOpacity
-                    style={styles.segmentCircleHit}
+                    style={[
+                      styles.segmentCircleHit,
+                      moduleTableSegment === 'warmup' && styles.segmentCircleHitActive,
+                    ]}
                     onPress={() =>
                       setModuleTableSegment((prev) => (prev === 'warmup' ? 'technique' : 'warmup'))
                     }
@@ -953,11 +1070,10 @@ export default function ManageModulesPage() {
                         moduleTableSegment === 'warmup' && styles.segmentCircleOuterActive,
                       ]}
                     >
-                      <View
-                        style={[
-                          styles.segmentCircleInner,
-                          moduleTableSegment === 'warmup' && styles.segmentCircleInnerActive,
-                        ]}
+                      <Ionicons
+                        name="flame"
+                        size={20}
+                        color={moduleTableSegment === 'warmup' ? '#ff8a5c' : '#9db3be'}
                       />
                     </View>
                     <Text
@@ -971,7 +1087,10 @@ export default function ManageModulesPage() {
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.segmentCircleHit}
+                    style={[
+                      styles.segmentCircleHit,
+                      moduleTableSegment === 'cooldown' && styles.segmentCircleHitActive,
+                    ]}
                     onPress={() =>
                       setModuleTableSegment((prev) => (prev === 'cooldown' ? 'technique' : 'cooldown'))
                     }
@@ -985,11 +1104,10 @@ export default function ManageModulesPage() {
                         moduleTableSegment === 'cooldown' && styles.segmentCircleOuterActive,
                       ]}
                     >
-                      <View
-                        style={[
-                          styles.segmentCircleInner,
-                          moduleTableSegment === 'cooldown' && styles.segmentCircleInnerActive,
-                        ]}
+                      <Ionicons
+                        name="leaf"
+                        size={20}
+                        color={moduleTableSegment === 'cooldown' ? '#7ed9a1' : '#9db3be'}
                       />
                     </View>
                     <Text
@@ -999,6 +1117,42 @@ export default function ManageModulesPage() {
                       ]}
                     >
                       Cool-down
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.segmentCircleHit,
+                      moduleTableSegment === 'introduction' && styles.segmentCircleHitActive,
+                    ]}
+                    onPress={() =>
+                      setModuleTableSegment((prev) =>
+                        prev === 'introduction' ? 'technique' : 'introduction'
+                      )
+                    }
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: moduleTableSegment === 'introduction' }}
+                  >
+                    <View
+                      style={[
+                        styles.segmentCircleOuter,
+                        moduleTableSegment === 'introduction' && styles.segmentCircleOuterActive,
+                      ]}
+                    >
+                      <Ionicons
+                        name="play-circle"
+                        size={20}
+                        color={moduleTableSegment === 'introduction' ? '#b491ff' : '#9db3be'}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.segmentCircleLabel,
+                        moduleTableSegment === 'introduction' && styles.segmentCircleLabelActive,
+                      ]}
+                    >
+                      Introduction
                     </Text>
                   </TouchableOpacity>
 
@@ -1015,7 +1169,7 @@ export default function ManageModulesPage() {
                     activeOpacity={0.75}
                   >
                     <Ionicons name="add-circle-outline" size={18} color="#38a6de" />
-                    <Text style={styles.segmentAddButtonText}>Add warm up</Text>
+                    <Text style={styles.segmentAddButtonText}>Add warm-up</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.segmentAddButton}
@@ -1028,108 +1182,149 @@ export default function ManageModulesPage() {
                     activeOpacity={0.75}
                   >
                     <Ionicons name="add-circle-outline" size={18} color="#38a6de" />
-                    <Text style={styles.segmentAddButtonText}>Add cooldown</Text>
+                    <Text style={styles.segmentAddButtonText}>Add cool-down</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.segmentAddButton}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(admin)/module-detail',
+                        params: { mode: 'create', segment: 'introduction' },
+                      } as any)
+                    }
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="#38a6de" />
+                    <Text style={styles.segmentAddButtonText}>Add introduction</Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
-              {moduleTableSegment === 'technique' ? (
-                <View>
-                  <View style={styles.categoryRow}>
-                    <Text style={styles.categoryRowLabel}>CATEGORY</Text>
-                    <View style={styles.categoryActions}>
-                      <TouchableOpacity
-                        style={styles.addCategoryButton}
-                        onPress={() => setShowAddCategoryModal(true)}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons name="add-circle-outline" size={15} color="#38a6de" />
-                        <Text style={styles.addCategoryButtonText}>Add</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.removeCategoryButton}
-                        onPress={() => { setConfirmRemoveStep(false); setShowRemoveCategoryModal(true); }}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons name="remove-circle-outline" size={15} color="#e57373" />
-                        <Text style={styles.removeCategoryButtonText}>Remove</Text>
-                      </TouchableOpacity>
-                    </View>
+              <View style={styles.sectionCard}>
+                <View style={styles.sectionCardHeader}>
+                  <View style={styles.sectionCardTitleWrap}>
+                    <Ionicons name="funnel-outline" size={18} color="#38a6de" />
+                    <Text style={styles.sectionCardTitle}>Filters</Text>
                   </View>
+                  <Text style={styles.sectionCardCaption}>
+                    Narrow the table by category, difficulty, and trainer.
+                  </Text>
+                </View>
+
+                {moduleTableSegment === 'technique' ? (
+                  <View style={styles.filterGroup}>
+                    <View style={styles.categoryRow}>
+                      <Text style={styles.categoryRowLabel}>Category</Text>
+                      <View style={styles.categoryActions}>
+                        <TouchableOpacity
+                          style={styles.addCategoryButton}
+                          onPress={() => setShowAddCategoryModal(true)}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="add-circle-outline" size={15} color="#38a6de" />
+                          <Text style={styles.addCategoryButtonText}>Add</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.removeCategoryButton}
+                          onPress={() => { setConfirmRemoveStep(false); setShowRemoveCategoryModal(true); }}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="remove-circle-outline" size={15} color="#e57373" />
+                          <Text style={styles.removeCategoryButtonText}>Remove</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <FilterBar
+                      options={categoryFilterOptions}
+                      selectedValue={categoryFilter}
+                      onSelect={setCategoryFilter}
+                    />
+                  </View>
+                ) : null}
+
+                <View style={styles.filterGroup}>
                   <FilterBar
-                    options={categoryFilterOptions}
-                    selectedValue={categoryFilter}
-                    onSelect={setCategoryFilter}
+                    label="Difficulty"
+                    options={DIFFICULTY_OPTIONS}
+                    selectedValue={difficultyFilter}
+                    onSelect={setDifficultyFilter}
                   />
                 </View>
-              ) : null}
-              <FilterBar
-                label="Difficulty"
-                options={DIFFICULTY_OPTIONS}
-                selectedValue={difficultyFilter}
-                onSelect={setDifficultyFilter}
-              />
-              <View style={styles.trainerAndAssignRow}>
-                <View style={styles.trainerDropdownWrap}>
-                  <Text style={styles.trainerDropdownLabel}>TRAINER</Text>
-                  <TouchableOpacity
-                    style={styles.trainerDropdownButton}
-                    onPress={() => setShowTrainerDropdown((prev) => !prev)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.trainerDropdownButtonText}>
-                      {trainerOptions.find((o) => o.value === trainerFilter)?.label || 'All Trainers'}
-                    </Text>
-                    <Ionicons
-                      name={showTrainerDropdown ? 'chevron-up' : 'chevron-down'}
-                      size={16}
-                      color="#9db3be"
-                    />
-                  </TouchableOpacity>
-                  {showTrainerDropdown && (
-                    <ScrollView
-                      style={styles.trainerDropdownList}
-                      nestedScrollEnabled
+
+                <View style={[styles.filterGroup, styles.trainerAndAssignRow]}>
+                  <View style={styles.trainerDropdownWrap}>
+                    <Text style={styles.trainerDropdownLabel}>Trainer</Text>
+                    <TouchableOpacity
+                      style={styles.trainerDropdownButton}
+                      onPress={() => setShowTrainerDropdown((prev) => !prev)}
+                      activeOpacity={0.7}
                     >
-                      {trainerOptions.map((option) => {
-                        const isSelected = option.value === trainerFilter;
-                        return (
-                          <TouchableOpacity
-                            key={option.value}
-                            style={[
-                              styles.trainerDropdownItem,
-                              isSelected && styles.trainerDropdownItemSelected,
-                            ]}
-                            onPress={() => {
-                              setTrainerFilter(option.value);
-                              setShowTrainerDropdown(false);
-                            }}
-                          >
-                            <Text
+                      <View style={styles.trainerDropdownButtonInner}>
+                        <Ionicons name="person-circle-outline" size={18} color="#9db3be" />
+                        <Text style={styles.trainerDropdownButtonText} numberOfLines={1}>
+                          {trainerOptions.find((o) => o.value === trainerFilter)?.label || 'All Trainers'}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={showTrainerDropdown ? 'chevron-up' : 'chevron-down'}
+                        size={16}
+                        color="#9db3be"
+                      />
+                    </TouchableOpacity>
+                    {showTrainerDropdown && (
+                      <ScrollView
+                        style={styles.trainerDropdownList}
+                        nestedScrollEnabled
+                      >
+                        {trainerOptions.map((option) => {
+                          const isSelected = option.value === trainerFilter;
+                          return (
+                            <TouchableOpacity
+                              key={option.value}
                               style={[
-                                styles.trainerDropdownItemText,
-                                isSelected && styles.trainerDropdownItemTextSelected,
+                                styles.trainerDropdownItem,
+                                isSelected && styles.trainerDropdownItemSelected,
                               ]}
+                              onPress={() => {
+                                setTrainerFilter(option.value);
+                                setShowTrainerDropdown(false);
+                              }}
                             >
-                              {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  )}
+                              <Text
+                                style={[
+                                  styles.trainerDropdownItemText,
+                                  isSelected && styles.trainerDropdownItemTextSelected,
+                                ]}
+                              >
+                                {option.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
+                  </View>
                 </View>
-                <TouchableOpacity
-                  style={styles.assignSegmentProgramButton}
-                  onPress={openAssignSegmentModal}
-                  activeOpacity={0.75}
-                >
-                  <Ionicons name="fitness-outline" size={20} color="#38a6de" />
-                  <Text style={styles.assignSegmentProgramButtonText}>
-                    Assign warm-up and cooldowns
-                  </Text>
-                </TouchableOpacity>
               </View>
+
+              <TouchableOpacity
+                style={styles.assignSegmentProgramButton}
+                onPress={openAssignSegmentModal}
+                activeOpacity={0.85}
+              >
+                <View style={styles.assignSegmentProgramIconWrap}>
+                  <Ionicons name="fitness" size={22} color="#38a6de" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.assignSegmentProgramButtonText}>
+                    Assign warm-ups & cool-downs
+                  </Text>
+                  <Text style={styles.assignSegmentProgramButtonHint}>
+                    Set the program learners see per technique category.
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#38a6de" />
+              </TouchableOpacity>
             </Animated.View>
 
             <AdminTable
@@ -1149,16 +1344,22 @@ export default function ManageModulesPage() {
                     ? searchQuery.trim()
                       ? 'No cooldowns match your search'
                       : 'No cooldowns yet'
-                    : searchQuery.trim()
-                      ? 'No modules match your search'
-                      : 'No modules found'
+                    : moduleTableSegment === 'introduction'
+                      ? searchQuery.trim()
+                        ? 'No introductions match your search'
+                        : 'No introductions yet'
+                      : searchQuery.trim()
+                        ? 'No modules match your search'
+                        : 'No modules found'
               }
               emptyDescription={
                 moduleTableSegment === 'warmup'
                   ? 'Use "Add warm up" above, or tap the Warm-up circle again to return to technique modules.'
                   : moduleTableSegment === 'cooldown'
                     ? 'Use "Add cooldown" above, or tap the Cool-down circle again to return to technique modules.'
-                    : 'Try updating your filters or review module approval data in the backend.'
+                    : moduleTableSegment === 'introduction'
+                      ? 'Use "Add introduction" above, or tap the Introduction circle again to return to technique modules.'
+                      : 'Try updating your filters or review module approval data in the backend.'
               }
               pagination={{
                 currentPage,
@@ -1193,18 +1394,28 @@ export default function ManageModulesPage() {
             </Text>
 
             <ScrollView
-              style={[styles.assignSegmentBodyScroll, { maxHeight: Math.min(height * 0.58, 560) }]}
+              style={StyleSheet.flatten([
+                styles.assignSegmentBodyScroll,
+                { maxHeight: Math.min(height * 0.58, 560) },
+              ])}
               contentContainerStyle={styles.assignSegmentBodyScrollContent}
               keyboardShouldPersistTaps="handled"
               nestedScrollEnabled
               showsVerticalScrollIndicator
             >
-              <Text style={[styles.assignSegmentFieldLabel, styles.assignSegmentCategoryFieldLabel]}>Category</Text>
+              <Text style={StyleSheet.flatten([
+                styles.assignSegmentFieldLabel,
+                styles.assignSegmentCategoryFieldLabel,
+              ])}>
+                Category
+              </Text>
               {assignSegmentCategory ? (
-                <Text style={styles.assignSegmentCategoryForLine} numberOfLines={2}>
-                  Program for{' '}
-                  <Text style={styles.assignSegmentCategoryForName}>{assignSegmentCategory}</Text>
-                </Text>
+                <View style={styles.assignSegmentCategoryForRow}>
+                  <Text style={styles.assignSegmentCategoryForPrefix}>Program for</Text>
+                  <Text style={styles.assignSegmentCategoryForName} numberOfLines={2}>
+                    {assignSegmentCategory}
+                  </Text>
+                </View>
               ) : (
                 <Text style={styles.assignSegmentCategoryHintMuted}>Select a category below.</Text>
               )}
@@ -1830,32 +2041,123 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   subTitle: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '500',
-    color: '#FFFFFF',
+    color: '#b8ccd6',
     marginTop: 4,
-    opacity: 0.9,
+    opacity: 0.95,
+    maxWidth: 540,
+    lineHeight: 19,
   },
-  segmentPickerCard: {
-    backgroundColor: 'rgba(56, 166, 222, 0.06)',
-    borderRadius: 12,
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+    marginBottom: 2,
+  },
+  statsRowCompact: {
+    gap: 10,
+  },
+  statCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(56, 166, 222, 0.2)',
-    padding: 14,
-    marginBottom: 4,
+    backgroundColor: '#011f36',
+    minWidth: 180,
+    flexGrow: 1,
+    flexBasis: 180,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  segmentPickerHeading: {
-    color: '#FFFFFF',
+  statCardActive: {
+    borderColor: 'rgba(56, 166, 222, 0.35)',
+  },
+  statCardPending: {
+    borderColor: 'rgba(255, 193, 7, 0.30)',
+  },
+  statCardCategories: {
+    borderColor: 'rgba(7, 187, 192, 0.30)',
+  },
+  statCardTrainers: {
+    borderColor: 'rgba(180, 145, 255, 0.30)',
+  },
+  statIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statValue: {
+    color: '#f4fbff',
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  statLabel: {
+    color: '#9db3be',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  sectionCard: {
+    backgroundColor: 'rgba(1, 31, 54, 0.85)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(126, 153, 166, 0.22)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  sectionCardHeader: {
+    gap: 4,
+  },
+  sectionCardTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionCardTitle: {
+    color: '#f4fbff',
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: 0.3,
-    marginBottom: 6,
   },
-  segmentPickerHint: {
-    color: '#9db3be',
+  sectionCardCaption: {
+    color: '#8da8b5',
     fontSize: 12,
     lineHeight: 17,
-    marginBottom: 12,
+  },
+  filterGroup: {
+    gap: 8,
+  },
+  segmentPickerCard: {
+    backgroundColor: 'rgba(56, 166, 222, 0.08)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.28)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 2,
   },
   segmentPickerRow: {
     flexDirection: 'row',
@@ -1865,12 +2167,18 @@ const styles = StyleSheet.create({
   },
   segmentCircleHit: {
     alignItems: 'center',
-    minWidth: 72,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    minWidth: 84,
+  },
+  segmentCircleHitActive: {
+    backgroundColor: 'rgba(56, 166, 222, 0.12)',
   },
   segmentCircleOuter: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     borderWidth: 2,
     borderColor: 'rgba(126, 153, 166, 0.45)',
     backgroundColor: 'rgba(2, 68, 70, 0.35)',
@@ -1879,22 +2187,14 @@ const styles = StyleSheet.create({
   },
   segmentCircleOuterActive: {
     borderColor: '#38a6de',
-    backgroundColor: 'rgba(56, 166, 222, 0.18)',
-  },
-  segmentCircleInner: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: 'rgba(157, 179, 190, 0.35)',
-  },
-  segmentCircleInnerActive: {
-    backgroundColor: '#38a6de',
+    backgroundColor: 'rgba(56, 166, 222, 0.22)',
   },
   segmentCircleLabel: {
-    marginTop: 6,
+    marginTop: 8,
     color: '#9db3be',
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   segmentCircleLabelActive: {
     color: '#e5f5ff',
@@ -1938,26 +2238,52 @@ const styles = StyleSheet.create({
   primaryFiltersRow: {
     flexDirection: 'row',
     gap: 10,
+    flexWrap: 'wrap',
   },
   tabButton: {
-    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 9,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(126, 153, 166, 0.4)',
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(15, 41, 63, 0.6)',
   },
   tabButtonActive: {
     borderColor: '#38a6de',
-    backgroundColor: 'rgba(56, 166, 222, 0.2)',
+    backgroundColor: 'rgba(56, 166, 222, 0.22)',
   },
   tabText: {
     color: '#a9bdc6',
     fontSize: 13,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   tabTextActive: {
     color: '#e5f5ff',
+  },
+  tabCountBadge: {
+    minWidth: 24,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: 'rgba(126, 153, 166, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabCountBadgeActive: {
+    backgroundColor: 'rgba(56, 166, 222, 0.45)',
+  },
+  tabCountBadgeText: {
+    color: '#a9bdc6',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  tabCountBadgeTextActive: {
+    color: '#f4fbff',
   },
   moduleCell: {
     flexDirection: 'row',
@@ -2034,6 +2360,10 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     gap: 8,
+    justifyContent: 'flex-end',
+  },
+  actionRowFilled: {
+    width: '100%',
   },
   actionRowCompact: {
     gap: 6,
@@ -2045,6 +2375,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: 'rgba(56, 166, 222, 0.1)',
+  },
+  secondaryActionButtonFill: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   secondaryActionButtonCompact: {
     paddingHorizontal: 9,
@@ -2265,12 +2600,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 7,
+    marginBottom: 2,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   categoryRowLabel: {
     color: '#9db3be',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
@@ -2399,18 +2736,37 @@ const styles = StyleSheet.create({
   assignSegmentProgramButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderRadius: 10,
+    gap: 14,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(56, 166, 222, 0.45)',
-    backgroundColor: 'rgba(56, 166, 222, 0.12)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderColor: 'rgba(56, 166, 222, 0.5)',
+    backgroundColor: 'rgba(56, 166, 222, 0.14)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#38a6de',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  assignSegmentProgramIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: 'rgba(56, 166, 222, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   assignSegmentProgramButtonText: {
-    color: '#38a6de',
-    fontSize: 13,
+    color: '#e5f5ff',
+    fontSize: 14,
     fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  assignSegmentProgramButtonHint: {
+    color: '#9db3be',
+    fontSize: 12,
+    marginTop: 2,
   },
   assignSegmentModalContainer: {
     maxWidth: 560,
@@ -2428,6 +2784,20 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 10,
     marginTop: 2,
+  },
+  assignSegmentCategoryForRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+    marginTop: 2,
+  },
+  assignSegmentCategoryForPrefix: {
+    color: '#b8ccd6',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
   },
   assignSegmentCategoryForName: {
     color: '#38a6de',
@@ -2626,7 +2996,7 @@ const styles = StyleSheet.create({
   trainerDropdownLabel: {
     color: '#9db3be',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
@@ -2634,18 +3004,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(126, 153, 166, 0.5)',
-    backgroundColor: 'rgba(15, 41, 63, 0.6)',
+    backgroundColor: 'rgba(15, 41, 63, 0.75)',
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    maxWidth: 260,
+    paddingVertical: 12,
+    maxWidth: 320,
+    gap: 10,
+  },
+  trainerDropdownButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
   },
   trainerDropdownButtonText: {
     color: '#d2e8f3',
     fontSize: 13,
     fontWeight: '600',
+    flexShrink: 1,
   },
   trainerDropdownList: {
     maxHeight: 200,
