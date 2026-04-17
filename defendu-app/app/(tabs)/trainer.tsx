@@ -23,6 +23,7 @@ import { User } from '../_models/User';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController } from '../controllers/AuthController';
 import { TrainerRatingController, TrainerRatingSummary } from '../controllers/TrainerRatingController';
+import { isStableRemoteImageUri } from '../../utils/imageUri';
 
 interface TrainerWithData extends User {
   applicationData?: TrainerApplication | null;
@@ -224,6 +225,10 @@ export default function TrainerPage() {
 
   const openTrainerImagePreview = (uri: string | null | undefined, title: string) => {
     if (!uri) return;
+    if (!isStableRemoteImageUri(uri)) {
+      showToast('This image cannot be previewed. It may need to be re-uploaded as a hosted photo.');
+      return;
+    }
     setImagePreviewUri(uri);
     setImagePreviewTitle(title);
     setImagePreviewVisible(true);
@@ -449,9 +454,9 @@ export default function TrainerPage() {
                     >
                       {/* Avatar with checkmark */}
                       <View style={styles.avatarContainer}>
-                        {trainer.profilePicture ? (
+                        {isStableRemoteImageUri(trainer.profilePicture) ? (
                           <Image
-                            source={{ uri: trainer.profilePicture }}
+                            source={{ uri: trainer.profilePicture! }}
                             style={styles.avatar}
                           />
                         ) : (
@@ -584,18 +589,22 @@ export default function TrainerPage() {
 
               <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.modalHero}>
-                  {selectedTrainer.coverPhoto ? (
+                  {isStableRemoteImageUri(selectedTrainer.coverPhoto) ? (
                     <TouchableOpacity
                       onPress={() => openTrainerImagePreview(selectedTrainer.coverPhoto, 'Cover photo')}
                       activeOpacity={0.9}
                       style={styles.modalHeroImageWrap}
                     >
-                      <Image source={{ uri: selectedTrainer.coverPhoto }} style={styles.modalHeroImage} />
+                      <Image source={{ uri: selectedTrainer.coverPhoto! }} style={styles.modalHeroImage} />
                     </TouchableOpacity>
                   ) : (
                     <View style={styles.modalHeroPlaceholder}>
                       <SimpleIcon label="🖼" />
-                      <Text style={styles.modalHeroPlaceholderText}>No cover photo yet</Text>
+                      <Text style={styles.modalHeroPlaceholderText}>
+                        {selectedTrainer.coverPhoto
+                          ? 'Cover photo cannot be shown (invalid or temporary link)'
+                          : 'No cover photo yet'}
+                      </Text>
                     </View>
                   )}
                   <View style={styles.modalHeroShade} />
@@ -606,14 +615,14 @@ export default function TrainerPage() {
                     {/* Profile Summary */}
                     <View style={styles.credentialSection}>
                       <View style={styles.credentialHeader}>
-                        {selectedTrainer.profilePicture ? (
+                        {isStableRemoteImageUri(selectedTrainer.profilePicture) ? (
                           <TouchableOpacity
                             onPress={() => openTrainerImagePreview(selectedTrainer.profilePicture, 'Profile photo')}
                             activeOpacity={0.9}
                             style={styles.credentialAvatar}
                           >
                             <Image
-                              source={{ uri: selectedTrainer.profilePicture }}
+                              source={{ uri: selectedTrainer.profilePicture! }}
                               style={styles.credentialAvatarImage}
                             />
                           </TouchableOpacity>
@@ -811,8 +820,10 @@ export default function TrainerPage() {
               <SimpleIcon label="✕" />
             </TouchableOpacity>
           </View>
-          {imagePreviewUri ? (
+          {imagePreviewUri && isStableRemoteImageUri(imagePreviewUri) ? (
             <Image source={{ uri: imagePreviewUri }} style={styles.imagePreviewImage} resizeMode="contain" />
+          ) : imagePreviewUri ? (
+            <Text style={styles.imagePreviewUnavailableText}>Preview unavailable for this image.</Text>
           ) : null}
         </View>
       </Modal>
@@ -1490,6 +1501,11 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 1080,
     flex: 1,
+  },
+  imagePreviewUnavailableText: {
+    color: 'rgba(255,255,255,0.85)',
+    padding: 24,
+    textAlign: 'center',
   },
   simpleIcon: {
     color: '#FFFFFF',

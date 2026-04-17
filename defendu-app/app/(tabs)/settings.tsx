@@ -1,13 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -19,24 +18,8 @@ export default function SettingsPage() {
   const router = useRouter();
   const handleLogout = useLogout();
 
-  // Notification preferences
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [trainingReminders, setTrainingReminders] = useState(true);
-  const [messageAlerts, setMessageAlerts] = useState(true);
-
-  // Display preferences
-  const [darkMode, setDarkMode] = useState(true);
-  const [autoPlayVideos, setAutoPlayVideos] = useState(true);
-
-  // Privacy
-  const [profileVisible, setProfileVisible] = useState(true);
-  const [showProgress, setShowProgress] = useState(true);
-
-  // User's info
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -51,69 +34,8 @@ export default function SettingsPage() {
       }
     };
 
-    const loadSettings = async () => {
-      try {
-        const s = await AuthController.loadUserSettings();
-        setPushNotifications(s.pushNotifications);
-        setEmailNotifications(s.emailNotifications);
-        setTrainingReminders(s.trainingReminders);
-        setMessageAlerts(s.messageAlerts);
-        setDarkMode(s.darkMode);
-        setAutoPlayVideos(s.autoPlayVideos);
-        setProfileVisible(s.profileVisible);
-        setShowProgress(s.showProgress);
-      } catch (e) {
-        console.error('Error loading settings:', e);
-      } finally {
-        setSettingsLoaded(true);
-      }
-    };
-
     loadUser();
-    loadSettings();
   }, []);
-
-  // Persist settings whenever a toggle changes (after initial load)
-  const persistSettings = useCallback(
-    (overrides: Record<string, boolean>) => {
-      if (!settingsLoaded) return;
-      const current = {
-        pushNotifications,
-        emailNotifications,
-        trainingReminders,
-        messageAlerts,
-        darkMode,
-        autoPlayVideos,
-        profileVisible,
-        showProgress,
-        ...overrides,
-      };
-      AuthController.saveUserSettings(current).catch((e) =>
-        console.error('Error saving settings:', e),
-      );
-    },
-    [
-      settingsLoaded,
-      pushNotifications,
-      emailNotifications,
-      trainingReminders,
-      messageAlerts,
-      darkMode,
-      autoPlayVideos,
-      profileVisible,
-      showProgress,
-    ],
-  );
-
-  // Toggle handlers that update state AND persist
-  const togglePush = (v: boolean) => { setPushNotifications(v); persistSettings({ pushNotifications: v }); };
-  const toggleEmail = (v: boolean) => { setEmailNotifications(v); persistSettings({ emailNotifications: v }); };
-  const toggleReminders = (v: boolean) => { setTrainingReminders(v); persistSettings({ trainingReminders: v }); };
-  const toggleMessages = (v: boolean) => { setMessageAlerts(v); persistSettings({ messageAlerts: v }); };
-  const toggleDarkMode = (v: boolean) => { setDarkMode(v); persistSettings({ darkMode: v }); };
-  const toggleAutoPlay = (v: boolean) => { setAutoPlayVideos(v); persistSettings({ autoPlayVideos: v }); };
-  const toggleProfileVisible = (v: boolean) => { setProfileVisible(v); persistSettings({ profileVisible: v }); };
-  const toggleShowProgress = (v: boolean) => { setShowProgress(v); persistSettings({ showProgress: v }); };
 
   const handleResetProgress = () => {
     if (Platform.OS === 'web') {
@@ -153,7 +75,6 @@ export default function SettingsPage() {
   const handleDeleteAccount = () => {
     if (Platform.OS === 'web') {
       if (window.confirm('Are you sure you want to delete your account? This action is permanent and cannot be undone.')) {
-        // Account deletion would be handled here
         window.alert('Please contact support@defendu.com to complete account deletion.');
       }
     } else {
@@ -175,7 +96,6 @@ export default function SettingsPage() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#07bbc0" />
@@ -184,7 +104,6 @@ export default function SettingsPage() {
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Account Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.card}>
@@ -203,122 +122,9 @@ export default function SettingsPage() {
                 <Text style={styles.infoValue}>{userEmail || 'Not set'}</Text>
               </View>
             </View>
-            <View style={styles.divider} />
-            <TouchableOpacity style={styles.infoRow} onPress={() => router.push('/editprofile')}>
-              <Ionicons name="create-outline" size={20} color="#07bbc0" />
-              <Text style={styles.actionText}>Edit Profile</Text>
-              <Ionicons name="chevron-forward-outline" size={18} color="#6b8693" />
-            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Notifications Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notifications</Text>
-          <View style={styles.card}>
-            <View style={styles.toggleRow}>
-              <Ionicons name="notifications-outline" size={20} color="#07bbc0" />
-              <Text style={styles.toggleLabel}>Push Notifications</Text>
-              <Switch
-                value={pushNotifications}
-                onValueChange={togglePush}
-                trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.toggleRow}>
-              <Ionicons name="mail-outline" size={20} color="#07bbc0" />
-              <Text style={styles.toggleLabel}>Email Notifications</Text>
-              <Switch
-                value={emailNotifications}
-                onValueChange={toggleEmail}
-                trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.toggleRow}>
-              <Ionicons name="fitness-outline" size={20} color="#07bbc0" />
-              <Text style={styles.toggleLabel}>Training Reminders</Text>
-              <Switch
-                value={trainingReminders}
-                onValueChange={toggleReminders}
-                trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.toggleRow}>
-              <Ionicons name="chatbubble-outline" size={20} color="#07bbc0" />
-              <Text style={styles.toggleLabel}>Message Alerts</Text>
-              <Switch
-                value={messageAlerts}
-                onValueChange={toggleMessages}
-                trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Display Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Display</Text>
-          <View style={styles.card}>
-            <View style={styles.toggleRow}>
-              <Ionicons name="moon-outline" size={20} color="#07bbc0" />
-              <Text style={styles.toggleLabel}>Dark Mode</Text>
-              <Switch
-                value={darkMode}
-                onValueChange={toggleDarkMode}
-                trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.toggleRow}>
-              <Ionicons name="play-circle-outline" size={20} color="#07bbc0" />
-              <Text style={styles.toggleLabel}>Auto-Play Videos</Text>
-              <Switch
-                value={autoPlayVideos}
-                onValueChange={toggleAutoPlay}
-                trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Privacy Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Privacy</Text>
-          <View style={styles.card}>
-            <View style={styles.toggleRow}>
-              <Ionicons name="eye-outline" size={20} color="#07bbc0" />
-              <Text style={styles.toggleLabel}>Profile Visible to Others</Text>
-              <Switch
-                value={profileVisible}
-                onValueChange={toggleProfileVisible}
-                trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.toggleRow}>
-              <Ionicons name="bar-chart-outline" size={20} color="#07bbc0" />
-              <Text style={styles.toggleLabel}>Show Training Progress</Text>
-              <Switch
-                value={showProgress}
-                onValueChange={toggleShowProgress}
-                trackColor={{ false: '#2a3a4a', true: '#07bbc0' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Danger Zone */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: '#ff6b6b' }]}>Danger Zone</Text>
           <View style={styles.card}>
@@ -336,7 +142,6 @@ export default function SettingsPage() {
           </View>
         </View>
 
-        {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />
           <Text style={styles.logoutText}>Log Out</Text>
@@ -415,25 +220,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
     marginTop: 2,
-  },
-  actionText: {
-    flex: 1,
-    fontSize: 15,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    marginLeft: 14,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  toggleLabel: {
-    flex: 1,
-    fontSize: 15,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    marginLeft: 14,
   },
   divider: {
     height: 1,

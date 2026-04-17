@@ -552,12 +552,12 @@ export default function ResetPasswordScreen() {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity 
-        style={{ marginTop: 24 }} 
-        onPress={() => router.replace('/forgotpassword')}
+      <TouchableOpacity
+        style={{ marginTop: 24 }}
+        onPress={() => router.replace('/(auth)/login')}
         disabled={loading}
       >
-        <Text style={styles.backText}>← Request New Reset Link</Text>
+        <Text style={styles.backText}>← Back to login page</Text>
       </TouchableOpacity>
       {/* Toast Notification */}
       <Toast

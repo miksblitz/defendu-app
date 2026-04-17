@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
+    ActivityIndicator,
     Image,
     SafeAreaView,
     ScrollView,
@@ -23,6 +24,34 @@ import { useLogout } from '../../hooks/useLogout';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 
 const MOBILE_BREAKPOINT = 768;
+
+const MAX_CERT_FILE_BYTES = 10 * 1024 * 1024;
+
+type CertFileRow = {
+  id: string;
+  name: string;
+  uri: string;
+  type: string;
+  size: number;
+  uploading: boolean;
+  uploadError?: string;
+};
+
+function newCertFileId(): string {
+  if (typeof globalThis !== 'undefined' && globalThis.crypto && 'randomUUID' in globalThis.crypto) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+async function uploadCertToCloudinary(localUri: string, fileName: string, mimeType: string): Promise<string> {
+  const lower = fileName.toLowerCase();
+  const isPdf = mimeType === 'application/pdf' || lower.endsWith('.pdf');
+  if (isPdf) {
+    return AuthController.uploadDocumentToCloudinary(localUri, fileName);
+  }
+  return AuthController.uploadFileToCloudinary(localUri, 'image', fileName);
+}
 
 // Defense styles (searchable). Regional / specialty labels kept for clarity.
 const martialArts = [
@@ -125,12 +154,7 @@ export default function TrainerRegistrationScreen() {
   const [felonyExplanation, setFelonyExplanation] = useState('');
   const [certifyAccurate, setCertifyAccurate] = useState(false);
   const [agreeConduct, setAgreeConduct] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState<Array<{
-    name: string;
-    uri: string;
-    type: string;
-    size: number;
-  }>>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<CertFileRow[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<any>(null);
   const uploadAreaRef = useRef<any>(null);
@@ -139,6 +163,56 @@ export default function TrainerRegistrationScreen() {
   const [loading, setLoading] = useState(false);
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
+
+  const enqueueCertFiles = useCallback(
+    (picks: Array<{ name: string; uri: string; type: string; size: number }>) => {
+      const accepted: CertFileRow[] = [];
+      for (const p of picks) {
+        if (p.size > MAX_CERT_FILE_BYTES) {
+          showToast(`${p.name} exceeds 10MB and was skipped`);
+          continue;
+        }
+        accepted.push({
+          id: newCertFileId(),
+          name: p.name,
+          uri: p.uri,
+          type: p.type,
+          size: p.size,
+          uploading: true,
+        });
+      }
+      if (accepted.length === 0) return;
+      setUploadedFiles((prev) => [...prev, ...accepted]);
+      setErrors((prev) => ({ ...prev, uploadedFiles: '' }));
+
+      for (const row of accepted) {
+        const localUri = row.uri;
+        void (async () => {
+          try {
+            const secureUrl = await uploadCertToCloudinary(localUri, row.name, row.type);
+            setUploadedFiles((prev) => {
+              if (!prev.some((f) => f.id === row.id)) return prev;
+              return prev.map((f) =>
+                f.id === row.id ? { ...f, uri: secureUrl, uploading: false, uploadError: undefined } : f
+              );
+            });
+            if (Platform.OS === 'web' && localUri.startsWith('blob:')) {
+              URL.revokeObjectURL(localUri);
+            }
+          } catch (e: any) {
+            const msg = e?.message || 'Upload failed';
+            setUploadedFiles((prev) => {
+              if (!prev.some((f) => f.id === row.id)) return prev;
+              return prev.map((f) =>
+                f.id === row.id ? { ...f, uploading: false, uploadError: msg } : f
+              );
+            });
+          }
+        })();
+      }
+    },
+    [showToast]
+  );
   
   // Validation errors state
   const [errors, setErrors] = useState({
@@ -371,7 +445,23 @@ export default function TrainerRegistrationScreen() {
     const defenseStyleError = selectedMartialArts.length === 0 ? 'Please select at least one defense style' : '';
     const yearsExperienceError = !yearsExperience ? 'Years of experience is required' : '';
     const yearsTeachingError = !yearsTeaching ? 'Years of teaching experience is required' : '';
-    const uploadedFilesError = uploadedFiles.length === 0 ? 'Please upload at least one certification file' : '';
+    let uploadedFilesError = '';
+    if (uploadedFiles.length === 0) {
+      uploadedFilesError = 'Please upload at least one certification file';
+    } else if (uploadedFiles.some((f) => f.uploading)) {
+      uploadedFilesError = 'Please wait for all files to finish uploading';
+    } else if (uploadedFiles.some((f) => f.uploadError)) {
+      uploadedFilesError = 'One or more files failed to upload. Remove them or try adding again.';
+    } else if (uploadedFiles.some((f) => f.uri.startsWith('blob:'))) {
+      uploadedFilesError = 'Files are still processing. Please wait.';
+    } else {
+      const ready = uploadedFiles.filter(
+        (f) => !f.uploading && !f.uploadError && (f.uri.startsWith('http://') || f.uri.startsWith('https://'))
+      );
+      if (ready.length === 0) {
+        uploadedFilesError = 'Please upload at least one valid certification file';
+      }
+    }
     const certifyAccurateError = !certifyAccurate ? 'You must certify that all information is accurate' : '';
     const agreeConductError = !agreeConduct ? 'You must agree to maintain professional conduct' : '';
 
@@ -441,7 +531,14 @@ export default function TrainerRegistrationScreen() {
         facebookLink: facebookLink.trim() || undefined,
         instagramLink: instagramLink.trim() || undefined,
         otherLink: otherLink.trim() || undefined,
-        uploadedFiles: uploadedFiles,
+        uploadedFiles: uploadedFiles
+          .filter(
+            (f) =>
+              !f.uploading &&
+              !f.uploadError &&
+              (f.uri.startsWith('http://') || f.uri.startsWith('https://'))
+          )
+          .map(({ name, uri, type, size }) => ({ name, uri, type, size })),
         credentialsRevoked: credentialsRevoked,
         credentialsRevokedExplanation: credentialsRevoked === 'yes' && credentialsRevokedExplanation.trim() ? credentialsRevokedExplanation : undefined,
         felonyConviction: felonyConviction,
@@ -481,17 +578,13 @@ export default function TrainerRegistrationScreen() {
         });
 
         if (!result.canceled && result.assets) {
-          const newFiles = result.assets.map(asset => ({
+          const newFiles = result.assets.map((asset) => ({
             name: asset.name || 'Unknown',
             uri: asset.uri,
             type: asset.mimeType || 'application/octet-stream',
             size: asset.size || 0,
           }));
-          setUploadedFiles(prev => [...prev, ...newFiles]);
-          // Clear error when files are uploaded
-          if (errors.uploadedFiles) {
-            setErrors(prev => ({ ...prev, uploadedFiles: '' }));
-          }
+          enqueueCertFiles(newFiles);
         }
       }
     } catch (error: any) {
@@ -507,12 +600,7 @@ export default function TrainerRegistrationScreen() {
       type: file.type,
       size: file.size,
     }));
-    setUploadedFiles(prev => [...prev, ...newFiles]);
-    // Clear error when files are uploaded
-    if (errors.uploadedFiles) {
-      setErrors(prev => ({ ...prev, uploadedFiles: '' }));
-    }
-    // Reset input
+    enqueueCertFiles(newFiles);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -571,11 +659,7 @@ export default function TrainerRegistrationScreen() {
           type: file.type,
           size: file.size,
         }));
-        setUploadedFiles(prev => [...prev, ...newFiles]);
-        // Clear error when files are uploaded
-        if (errors.uploadedFiles) {
-          setErrors(prev => ({ ...prev, uploadedFiles: '' }));
-        }
+        enqueueCertFiles(newFiles);
       };
 
       const handleDragEnter = (e: DragEvent) => {
@@ -596,17 +680,15 @@ export default function TrainerRegistrationScreen() {
         element.removeEventListener('dragenter', handleDragEnter);
       };
     }
-  }, []);
+  }, [enqueueCertFiles]);
 
-  const removeFile = (index: number) => {
-    setUploadedFiles(prev => {
-      const newFiles = [...prev];
-      // Revoke object URL if it's a web blob URL
-      if (Platform.OS === 'web' && newFiles[index].uri.startsWith('blob:')) {
-        URL.revokeObjectURL(newFiles[index].uri);
+  const removeFile = (id: string) => {
+    setUploadedFiles((prev) => {
+      const file = prev.find((f) => f.id === id);
+      if (file && Platform.OS === 'web' && file.uri.startsWith('blob:')) {
+        URL.revokeObjectURL(file.uri);
       }
-      newFiles.splice(index, 1);
-      return newFiles;
+      return prev.filter((f) => f.id !== id);
     });
   };
 
@@ -1472,25 +1554,36 @@ export default function TrainerRegistrationScreen() {
                 {/* Uploaded Files List */}
                 {uploadedFiles.length > 0 && (
                   <View style={styles.uploadedFilesContainer}>
-                    {uploadedFiles.map((file, index) => (
-                      <View key={index} style={styles.uploadedFileItem}>
+                    {uploadedFiles.map((file) => (
+                      <View key={file.id} style={styles.uploadedFileItem}>
                         <Ionicons 
                           name={getFileIcon(file.type) as any} 
                           size={20} 
                           color="#07bbc0" 
                           style={{ marginRight: 12 } as any}
                         />
-                        <Text style={styles.fileName} numberOfLines={1}>
-                          {file.name}
-                        </Text>
+                        {file.uploading ? (
+                          <ActivityIndicator size="small" color="#07bbc0" style={{ marginRight: 8 } as any} />
+                        ) : null}
+                        <View style={{ flex: 1, minWidth: 0 } as any}>
+                          <Text style={styles.fileName} numberOfLines={1}>
+                            {file.name}
+                          </Text>
+                          {file.uploadError ? (
+                            <Text style={[styles.errorText, { marginTop: 4, fontSize: 12 }]} numberOfLines={2}>
+                              {file.uploadError}
+                            </Text>
+                          ) : null}
+                        </View>
                         <Text style={styles.fileSize}>
-                          {(file.size / 1024 / 1024).toFixed(2)} MB
+                          {file.size > 0 ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : '—'}
                         </Text>
                         <TouchableOpacity
-                          onPress={() => removeFile(index)}
+                          onPress={() => removeFile(file.id)}
                           style={styles.removeFileButton}
+                          disabled={file.uploading}
                         >
-                          <Ionicons name="close-circle" size={20} color="#ff4444" />
+                          <Ionicons name="close-circle" size={20} color={file.uploading ? '#666' : '#ff4444'} />
                         </TouchableOpacity>
                       </View>
                     ))}

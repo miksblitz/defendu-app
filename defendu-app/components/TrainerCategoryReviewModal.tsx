@@ -61,11 +61,11 @@ export default function TrainerCategoryReviewModal({
       <View style={styles.overlay}>
         <View style={styles.container}>
           <Text style={styles.title}>Rate your trainers</Text>
-          <View style={styles.subtitleRow}>
-            <Text style={styles.subtitlePrefix}>Rate each trainer (1-5 stars) for</Text>
+          <Text style={styles.subtitleRow}>
+            <Text style={styles.subtitlePrefix}>Rate each trainer (1-5 stars) for </Text>
             <Text style={styles.subtitleStrong}>{categoryLabel}.</Text>
-            <Text style={styles.subtitlePrefix}>Submit saves when everyone has a rating.</Text>
-          </View>
+            <Text style={styles.subtitlePrefix}> Submit saves when everyone has a rating.</Text>
+          </Text>
 
           <View style={styles.listWrap}>
             {trainers.map((trainer, index) => {

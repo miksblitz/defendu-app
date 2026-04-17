@@ -3,9 +3,12 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Animated,
     Image,
+    Linking,
     Modal,
+    Platform,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -25,6 +28,7 @@ import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { TrainerApplication } from '../_models/TrainerApplication';
 import { AuthController } from '../controllers/AuthController';
+import { isStableRemoteImageUri } from '../../utils/imageUri';
 
 type ExtendedTrainerApplication = TrainerApplication & { 
   firstName?: string; 
@@ -42,6 +46,38 @@ type ApprovedTrainerRow = {
   description?: string;
   application: TrainerApplication | null;
 };
+
+type TrainerUploadFile = TrainerApplication['uploadedFiles'][number];
+
+function isTrainerUploadImage(file: TrainerUploadFile): boolean {
+  const t = String(file.type || '').toLowerCase();
+  if (t === 'image' || t.startsWith('image/')) return true;
+  const n = String(file.name || '').toLowerCase();
+  return /\.(jpe?g|png|gif|webp|heic|bmp)$/.test(n);
+}
+
+function isTrainerUploadPdf(file: TrainerUploadFile): boolean {
+  const t = String(file.type || '').toLowerCase();
+  if (t.includes('pdf')) return true;
+  const n = String(file.name || '').toLowerCase();
+  return n.endsWith('.pdf');
+}
+
+/** Web-only: embed PDF in the page (native returns null). */
+function InlinePdfEmbedWeb({ uri, title }: { uri: string; title: string }) {
+  if (Platform.OS !== 'web') return null;
+  return React.createElement('iframe', {
+    src: uri,
+    title,
+    style: {
+      width: '100%',
+      height: 520,
+      border: 'none',
+      borderRadius: 8,
+      backgroundColor: '#e8eef3',
+    },
+  }) as React.ReactElement;
+}
 
 const PAGE_SIZE = 10;
 
@@ -292,6 +328,24 @@ export default function ManageTrainersPage() {
     setSelectedApplication(null);
   };
 
+  const openUploadUri = async (uri: string) => {
+    const trimmed = uri?.trim();
+    if (!trimmed) {
+      showToast('File link is not available.');
+      return;
+    }
+    try {
+      const supported = await Linking.canOpenURL(trimmed);
+      if (supported) {
+        await Linking.openURL(trimmed);
+      } else {
+        showToast('Cannot open this file on this device.');
+      }
+    } catch {
+      showToast('Could not open this file.');
+    }
+  };
+
   const handleViewTrainerApplication = (trainer: ApprovedTrainerRow) => {
     if (!trainer.application) {
       Alert.alert('No application found', 'This trainer does not have a stored application record.');
@@ -336,8 +390,8 @@ export default function ManageTrainersPage() {
       flex: 2,
       render: (application) => (
         <View style={styles.trainerCell}>
-          {application.profilePicture ? (
-            <Image source={{ uri: application.profilePicture }} style={styles.trainerAvatar} />
+          {isStableRemoteImageUri(application.profilePicture) ? (
+            <Image source={{ uri: application.profilePicture! }} style={styles.trainerAvatar} />
           ) : (
             <View style={styles.trainerAvatarFallback}>
               <Ionicons name="person" size={16} color="#6b8693" />
@@ -399,8 +453,8 @@ export default function ManageTrainersPage() {
       flex: 2,
       render: (trainer) => (
         <View style={styles.trainerCell}>
-          {trainer.profilePicture ? (
-            <Image source={{ uri: trainer.profilePicture }} style={styles.trainerAvatar} />
+          {isStableRemoteImageUri(trainer.profilePicture) ? (
+            <Image source={{ uri: trainer.profilePicture! }} style={styles.trainerAvatar} />
           ) : (
             <View style={styles.trainerAvatarFallback}>
               <Ionicons name="person" size={16} color="#6b8693" />
@@ -530,13 +584,14 @@ export default function ManageTrainersPage() {
           <View style={styles.mainContent}>
             <ScrollView 
               style={styles.detailContainer}
+              contentContainerStyle={styles.detailScrollContent}
               showsVerticalScrollIndicator={false}
             >
               {/* Applicant Summary */}
               <View style={styles.detailSummarySection}>
-              {selectedApplication.profilePicture ? (
+              {isStableRemoteImageUri(selectedApplication.profilePicture) ? (
                 <Image
-                  source={{ uri: selectedApplication.profilePicture }}
+                  source={{ uri: selectedApplication.profilePicture! }}
                   style={styles.detailProfilePicture}
                 />
               ) : (
@@ -690,46 +745,105 @@ export default function ManageTrainersPage() {
                 </View>
               )}
 
-              {/* Right Column - Uploaded Files & Background Questions */}
+              {/* Right Column - Uploaded Files */}
               <View style={styles.detailRightColumn}>
-                {/* Uploaded Files */}
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Uploaded Files</Text>
                   {selectedApplication.uploadedFiles && selectedApplication.uploadedFiles.length > 0 ? (
                     <View style={styles.detailInfoContainer}>
                       {selectedApplication.uploadedFiles.map((file, index) => (
-                        <TouchableOpacity key={index} style={styles.fileItem}>
-                          <Ionicons 
-                            name={file.type === 'pdf' ? 'document-text' : 'image'} 
-                            size={20} 
-                            color="#38a6de" 
-                            style={styles.fileIcon}
-                          />
-                          <Text style={styles.fileName}>{file.name}</Text>
-                        </TouchableOpacity>
+                        <View key={index} style={styles.inlineUploadBlock}>
+                          <View style={styles.inlineUploadHeader}>
+                            <Ionicons
+                              name={
+                                isTrainerUploadPdf(file)
+                                  ? 'document-text'
+                                  : isTrainerUploadImage(file)
+                                    ? 'image'
+                                    : 'document-attach'
+                              }
+                              size={20}
+                              color="#38a6de"
+                              style={styles.inlineUploadHeaderIcon}
+                            />
+                            <Text style={styles.inlineUploadName} numberOfLines={3}>
+                              {file.name}
+                            </Text>
+                          </View>
+                          {!file.uri?.trim() ? (
+                            <Text style={styles.inlineUploadMissing}>
+                              No file URL was stored for this upload.
+                            </Text>
+                          ) : isTrainerUploadImage(file) && isStableRemoteImageUri(file.uri) ? (
+                            <View style={styles.inlineImageWrap}>
+                              <Image
+                                source={{ uri: file.uri }}
+                                style={styles.inlineUploadImage}
+                                resizeMode="contain"
+                                onError={() =>
+                                  showToast(`Could not load image: ${file.name || 'file'}`)
+                                }
+                              />
+                            </View>
+                          ) : isTrainerUploadImage(file) && !isStableRemoteImageUri(file.uri) ? (
+                            <View style={styles.inlineGenericFile}>
+                              <Text style={styles.inlineUploadHintText}>
+                                This image was stored with a temporary link and can no longer be previewed. Ask the trainer to re-submit or replace the file.
+                              </Text>
+                              {file.uri?.trim() ? (
+                                <TouchableOpacity
+                                  style={styles.inlineOpenButton}
+                                  onPress={() => openUploadUri(file.uri)}
+                                >
+                                  <Text style={styles.inlineOpenButtonText}>Try open link</Text>
+                                </TouchableOpacity>
+                              ) : null}
+                            </View>
+                          ) : isTrainerUploadPdf(file) ? (
+                            Platform.OS === 'web' ? (
+                              <View style={styles.inlinePdfFrameWrap}>
+                                <InlinePdfEmbedWeb uri={file.uri} title={file.name} />
+                                <TouchableOpacity
+                                  style={styles.inlineOpenLinkRow}
+                                  onPress={() => openUploadUri(file.uri)}
+                                >
+                                  <Text style={styles.inlineOpenLinkText}>
+                                    Open PDF in new tab if it does not show above
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            ) : (
+                              <View style={styles.inlinePdfNativeHint}>
+                                <Text style={styles.inlineUploadHintText}>
+                                  Inline PDF preview is available on web admin. Open externally on this device.
+                                </Text>
+                                <TouchableOpacity
+                                  style={styles.inlineOpenButton}
+                                  onPress={() => openUploadUri(file.uri)}
+                                >
+                                  <Text style={styles.inlineOpenButtonText}>Open PDF</Text>
+                                </TouchableOpacity>
+                              </View>
+                            )
+                          ) : (
+                            <View style={styles.inlineGenericFile}>
+                              <Text style={styles.inlineUploadHintText}>
+                                Preview is not available for this file type.
+                              </Text>
+                              <TouchableOpacity
+                                style={styles.inlineOpenButton}
+                                onPress={() => openUploadUri(file.uri)}
+                              >
+                                <Text style={styles.inlineOpenButtonText}>Open file</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
                       ))}
                     </View>
                   ) : (
                     <Text style={styles.noFilesText}>No files uploaded</Text>
                   )}
-                </View>
-
-                {/* Background Questions */}
-                <View style={styles.detailSection}>
-                  <View style={styles.detailInfoContainer}>
-                    <View style={styles.questionRow}>
-                      <Text style={styles.detailLabel}>HAVE YOU EVER HAD CREDENTIALS REVOKED?</Text>
-                      <Text style={styles.detailValue}>
-                        {selectedApplication.credentialsRevoked ? 'Yes' : 'No'}
-                      </Text>
-                    </View>
-                    <View style={styles.questionRow}>
-                      <Text style={styles.detailLabel}>HAVE YOU BEEN CONVICTED OF A FELONY?</Text>
-                      <Text style={styles.detailValue}>
-                        {selectedApplication.felonyConviction ? 'Yes' : 'No'}
-                      </Text>
-                    </View>
-                  </View>
                 </View>
               </View>
 
@@ -1110,12 +1224,13 @@ const styles = StyleSheet.create({
   },
   mainContent: {
     flex: 1,
-    paddingLeft: 8,
+    // Inset past absolute leftNavBar (80) so table and application detail are not covered
+    paddingLeft: 100,
     paddingRight: 8,
     paddingTop: 20,
   },
   mainContentCompact: {
-    paddingLeft: 6,
+    paddingLeft: 92,
     paddingRight: 6,
     paddingTop: 14,
   },
@@ -1335,6 +1450,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
   },
+  detailScrollContent: {
+    paddingBottom: 40,
+  },
   detailSummarySection: {
     flexDirection: 'row',
     marginBottom: 24,
@@ -1410,31 +1528,96 @@ const styles = StyleSheet.create({
   detailRightColumn: {
     marginTop: 24,
   },
-  fileItem: {
+  inlineUploadBlock: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: 'rgba(4, 28, 45, 0.95)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.28)',
+  },
+  inlineUploadHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(56, 166, 222, 0.1)',
-    borderRadius: 8,
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 10,
   },
-  fileIcon: {
-    marginRight: 8,
+  inlineUploadHeaderIcon: {
+    marginTop: 2,
   },
-  fileName: {
-    color: '#38a6de',
+  inlineUploadName: {
+    flex: 1,
+    color: '#def2ff',
     fontSize: 14,
+    fontWeight: '600',
     fontFamily: 'system-ui',
+  },
+  inlineUploadMissing: {
+    color: '#97aeb9',
+    fontSize: 13,
+    fontFamily: 'system-ui',
+    fontStyle: 'italic',
+  },
+  inlineImageWrap: {
+    width: '100%',
+    minHeight: 180,
+    maxHeight: 480,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+  },
+  inlineUploadImage: {
+    width: '100%',
+    minHeight: 200,
+    maxHeight: 480,
+  },
+  inlinePdfFrameWrap: {
+    width: '100%',
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  inlinePdfNativeHint: {
+    gap: 10,
+  },
+  inlineGenericFile: {
+    gap: 10,
+  },
+  inlineUploadHintText: {
+    color: '#97aeb9',
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'system-ui',
+  },
+  inlineOpenButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: 'rgba(56, 166, 222, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.45)',
+  },
+  inlineOpenButtonText: {
+    color: '#9bd8ff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  inlineOpenLinkRow: {
+    marginTop: 10,
+    paddingVertical: 6,
+  },
+  inlineOpenLinkText: {
+    color: '#6bc4f0',
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   noFilesText: {
     color: '#6b8693',
     fontSize: 14,
     fontFamily: 'system-ui',
     fontStyle: 'italic',
-  },
-  questionRow: {
-    marginBottom: 12,
   },
   detailActions: {
     flexDirection: 'row',
