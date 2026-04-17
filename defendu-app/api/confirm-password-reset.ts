@@ -169,6 +169,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Mark token as used
     await db.ref(`passwordResetTokens/${token}`).update({ used: true });
 
+    const emailKey = String(tokenData.email || '')
+      .toLowerCase()
+      .trim()
+      .replace(/\./g, ',');
+    const idxSnap = await db.ref(`passwordResetEmailIndex/${emailKey}`).once('value');
+    const idx = idxSnap.val() as { token?: string } | null;
+    if (idx?.token === token) {
+      await db.ref(`passwordResetEmailIndex/${emailKey}`).remove();
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Password reset successfully',

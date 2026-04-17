@@ -1,7 +1,7 @@
 // app/(auth)/forgotpassword.tsx
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { AuthController } from '../controllers/AuthController';
@@ -58,13 +58,21 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
-      const message = await AuthController.forgotPassword({ email });
-      showToast('Password reset email sent successfully! Please check your inbox.');
-      
-      // Navigate after a short delay to allow toast to be visible
-      setTimeout(() => {
-        router.push('/login');
-      }, 2000);
+      await AuthController.forgotPassword({ email });
+      if (Platform.OS === 'web') {
+        showToast('Check your email for the 6-digit code.');
+        setTimeout(() => {
+          router.push({
+            pathname: '/forgotpassword-otp',
+            params: { email: email.trim().toLowerCase() },
+          });
+        }, 400);
+      } else {
+        showToast('Password reset email sent successfully! Please check your inbox.');
+        setTimeout(() => {
+          router.push('/login');
+        }, 2000);
+      }
     } catch (error: any) {
       showToast(error.message || 'Failed to send reset email. Please try again.');
       setLoading(false);
@@ -80,7 +88,11 @@ export default function ForgotPasswordScreen() {
       />
 
       <Text style={styles.title}>Forgot your password?</Text>
-      <Text style={styles.subtitle}>We'll send a reset link to your email</Text>
+      <Text style={styles.subtitle}>
+        {Platform.OS === 'web'
+          ? "We'll email you a 6-digit code to reset your password"
+          : "We'll send a reset link to your email"}
+      </Text>
 
       {/* Email Input */}
       <View style={styles.inputWrapper}>
@@ -121,7 +133,9 @@ export default function ForgotPasswordScreen() {
         {loading ? (
           <ActivityIndicator color="#FFF" />
         ) : (
-          <Text style={styles.buttonText}>Send Reset Link</Text>
+          <Text style={styles.buttonText}>
+            {Platform.OS === 'web' ? 'Send code' : 'Send Reset Link'}
+          </Text>
         )}
       </TouchableOpacity>
 

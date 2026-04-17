@@ -1,6 +1,5 @@
 // api/reset-redirect.ts
-// Web redirect page that opens the app via deep link
-// This works because email clients allow https:// links
+// Web-only redirect page for password reset links.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
@@ -43,25 +42,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Create deep link with custom token (not OOB code)
-  const deepLink = `defenduapp://resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`;
-  
-  // Optional hosted web app URL (set this only if you actually deploy the Expo web app).
-  // We intentionally DO NOT default this to the API domain because this Vercel project
-  // can be API-only, where /resetpassword would 404.
+  // Hosted web app URL (required for web reset flow).
   const webAppUrl = process.env.WEB_APP_URL;
   const webAppLink = webAppUrl
     ? `${webAppUrl.replace(/\/$/, '')}/resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`
     : '';
-  
-  // HTML page that tries to open the app and shows fallback
+
+  if (webAppLink) {
+    return res.redirect(302, webAppLink);
+  }
+
+  // WEB_APP_URL is not configured; show instructions.
   const html = `
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Opening Defendu App...</title>
+        <title>Reset Password</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta name="apple-mobile-web-app-capable" content="yes">
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -89,19 +86,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             color: #000C17;
             margin-bottom: 20px;
           }
-          .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #000C17;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-          }
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
           .button {
             background-color: #000C17;
             color: white;
@@ -116,134 +100,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .button:hover {
             background-color: #001a2e;
           }
-          .button:active {
-            background-color: #000a14;
-          }
-          .fallback {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-            font-size: 14px;
-            color: #666;
-          }
-          code {
-            font-size: 10px;
-            word-break: break-all;
-            background: #f5f5f5;
-            padding: 5px;
-            border-radius: 4px;
-            display: block;
-            margin-top: 10px;
-          }
         </style>
-        <script>
-          (function() {
-            const deepLink = "${deepLink}";
-            const webLink = '${webAppLink}';
-            const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-            const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
-            const isAndroid = /android/i.test(userAgent);
-            const isMobile = isIOS || isAndroid;
-            const hasWebFallback = !!webLink;
-            
-            console.log('Device detected:', { isIOS, isAndroid, isMobile, hasWebFallback });
-            
-            // Function to try opening the app
-            function tryOpenApp() {
-              console.log('Attempting to open app with:', deepLink);
-              
-              // For iOS, try multiple methods
-              if (isIOS) {
-                // Method 1: Direct location change
-                window.location.href = deepLink;
-                
-                // Method 2: Create hidden iframe (iOS sometimes blocks direct redirects)
-                setTimeout(function() {
-                  const iframe = document.createElement('iframe');
-                  iframe.style.display = 'none';
-                  iframe.src = deepLink;
-                  document.body.appendChild(iframe);
-                  
-                  // Remove iframe after a moment
-                  setTimeout(function() {
-                    document.body.removeChild(iframe);
-                  }, 2000);
-                }, 500);
-                
-                // Method 3: Fallback after delay
-                setTimeout(function() {
-                  showFallback();
-                }, 2500);
-              } 
-              // For Android
-              else if (isAndroid) {
-                // Try direct redirect
-                window.location.href = deepLink;
-                
-                // Fallback after delay
-                setTimeout(function() {
-                  showFallback();
-                }, 2000);
-              }
-            }
-            
-            function showFallback() {
-              const instructions = document.getElementById('instructions');
-              if (instructions) {
-                instructions.style.display = 'block';
-              }
-            }
-            
-            if (isMobile) {
-              tryOpenApp();
-            } else {
-              // Desktop / webmail: do not auto-redirect to avoid API-only 404s.
-              showFallback();
-            }
-            
-            // Also handle button click for mobile fallback
-            document.addEventListener('DOMContentLoaded', function() {
-              const button = document.querySelector('.button');
-              if (button) {
-                button.addEventListener('click', function(e) {
-                  e.preventDefault();
-                  if (isMobile) {
-                    window.location.href = deepLink;
-                    // Show instructions after click
-                    setTimeout(function() {
-                      showFallback();
-                    }, 1000);
-                  } else if (hasWebFallback) {
-                    window.location.href = webLink;
-                  } else {
-                    showFallback();
-                  }
-                });
-              }
-            });
-          })();
-        </script>
       </head>
       <body>
         <div class="container">
-          <h1>Defendu</h1>
-          <p>Opening the app...</p>
-          <div class="spinner"></div>
-          <p style="margin-top: 20px;">If the app doesn't open automatically, click the button below:</p>
-          <a href="${deepLink}" class="button" id="openButton">Open in Defendu App</a>
-          <div id="instructions" class="fallback" style="display: none;">
-            <p><strong>App didn't open?</strong></p>
-            <p>Try these steps:</p>
-            <ol style="text-align: left; max-width: 400px; margin: 10px auto;">
-              <li><strong>On Mobile:</strong> Make sure the Defendu app is installed, then click the button above</li>
-              <li><strong>On PC/Web:</strong> ${webAppLink ? `<a href="${webAppLink}" style="color: #000C17; text-decoration: underline;">Open reset page in web app</a>` : 'Open this link on your phone where the Defendu app is installed.'}</li>
-              <li>Deep link (copy and open on mobile):</li>
-            </ol>
-            <code id="linkToCopy">${deepLink}</code>
-            <p style="margin-top: 20px; font-size: 12px; color: #999;">
-              <strong>Note:</strong> Deep links work on mobile devices with the Defendu app installed.
-            </p>
-          </div>
+          <h1>Defendu Reset Password</h1>
+          <p>Web reset page is not configured yet.</p>
+          <p style="margin-top: 20px;">Set <strong>WEB_APP_URL</strong> in your Vercel environment to your deployed web app domain.</p>
+          <p style="margin-top: 24px;">Example:</p>
+          <a class="button" href="https://your-web-domain.com/resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}">
+            https://your-web-domain.com/resetpassword
+          </a>
         </div>
       </body>
     </html>

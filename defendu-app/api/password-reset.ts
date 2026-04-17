@@ -194,10 +194,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('✅ Confirmed user UID:', userRecord.uid);
 
     // Generate custom secure token (NOT using Firebase OOB codes)
-    // Create a cryptographically secure random token
     const crypto = require('crypto');
     const token = crypto.randomBytes(32).toString('hex'); // 64 character hex string
-    
+    const otp = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+
     // Store token with expiry timestamp (5 minutes from now)
     const tokenExpiry = Date.now() + 5 * 60 * 1000; // 5 minutes in milliseconds
     
@@ -210,29 +210,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
     
-    // Store token metadata in Realtime Database for validation
+    const emailNormalized = email.toLowerCase().trim();
+    const emailKey = emailNormalized.replace(/\./g, ',');
+
     const db = adminApp.database();
+    const indexSnap = await db.ref(`passwordResetEmailIndex/${emailKey}`).once('value');
+    const prev = indexSnap.val() as { token?: string } | null;
+    if (prev && typeof prev.token === 'string') {
+      await db.ref(`passwordResetTokens/${prev.token}`).remove();
+    }
+
     await db.ref(`passwordResetTokens/${token}`).set({
-      email,
+      email: emailNormalized,
       userId: userRecord.uid,
       createdAt: Date.now(),
       expiresAt: tokenExpiry,
       used: false,
+      otp,
     });
+
+    await db.ref(`passwordResetEmailIndex/${emailKey}`).set({ token });
 
     console.log('🔵 Custom token generated:', token.substring(0, 8) + '...');
     console.log('🔵 Token expires at:', new Date(tokenExpiry).toISOString());
 
-    // Create a web redirect URL that opens the app via deep link
-    // Email clients don't support custom schemes (defenduapp://), so we use a web redirect
+    // Prefer direct web reset link when WEB_APP_URL is configured.
+    // Otherwise use reset-redirect (which can still open the mobile app deep link).
     const apiBaseUrl = process.env.API_BASE_URL || 'https://defendu-app.vercel.app';
-    const redirectUrl = `${apiBaseUrl}/api/reset-redirect?token=${token}&expiresAt=${tokenExpiry}`;
-    
-    // Also create direct deep link for manual use
-    const deepLinkUrl = `defenduapp://resetpassword?token=${token}&expiresAt=${tokenExpiry}`;
+    const webAppUrl = process.env.WEB_APP_URL;
+    const redirectUrl = webAppUrl
+      ? `${webAppUrl.replace(/\/$/, '')}/resetpassword?token=${token}&expiresAt=${tokenExpiry}`
+      : `${apiBaseUrl}/api/reset-redirect?token=${token}&expiresAt=${tokenExpiry}`;
     
     console.log('🔵 Redirect URL (for email):', redirectUrl);
-    console.log('🔵 Deep link (manual):', deepLinkUrl);
 
     // Get Mailjet credentials from environment
     const mailjetApiKey = process.env.MAILJET_API_KEY;
@@ -278,7 +288,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
           ],
           Subject: 'Reset Your Password - Defendu',
-          TextPart: `You requested a password reset. Click the link below to reset your password. This link will expire in 5 minutes.\n\n${redirectUrl}\n\nIf you didn't request this, please ignore this email.`,
+          TextPart: `You requested a password reset.\n\nYour verification code: ${otp}\n\nThis code and the link below expire in 5 minutes.\n\n${redirectUrl}\n\nIf you didn't request this, please ignore this email.`,
           HTMLPart: `
             <!DOCTYPE html>
             <html>
@@ -292,7 +302,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 </div>
                 <div style="background-color: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
                   <h2 style="color: #041527;">Password Reset Request</h2>
-                  <p>You requested to reset your password. Click the button below to create a new password. This link will expire in <strong>5 minutes</strong>.</p>
+                  <p>Use this code in the app or website to continue:</p>
+                  <div style="text-align: center; margin: 24px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #000C17; font-family: 'Courier New', monospace;">${otp}</span>
+                  </div>
+                  <p style="font-size: 14px; color: #555;">This code expires in <strong>5 minutes</strong>.</p>
+                  <p style="margin-top: 24px;">Or tap the button below to reset from this email (mobile / desktop):</p>
                   <div style="text-align: center; margin: 30px 0;">
                     <a href="${redirectUrl}" 
                        style="background-color: #000C17; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; display: inline-block; font-weight: bold;">
