@@ -71,6 +71,13 @@ export default function PublishModulePage() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < MOBILE_BREAKPOINT;
+  const webVideoElementStyle: React.CSSProperties = {
+    width: '100%',
+    maxWidth: 700,
+    height: isMobile ? 240 : 320,
+    borderRadius: 12,
+    backgroundColor: '#000000',
+  };
   const [loading, setLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
@@ -144,8 +151,6 @@ export default function PublishModulePage() {
         }
         if (currentUser.role !== 'trainer' || !currentUser.trainerApproved) {
           showToast('Only certified trainers can publish modules');
-          router.push('/trainer');
-          return;
         }
       } catch (error) {
         console.error('Error checking trainer status:', error);
@@ -1399,7 +1404,7 @@ export default function PublishModulePage() {
                                 ref={(ref) => { introductionVideoPlayerRef.current = ref; }}
                                 src={introductionVideo.uri}
                                 controls
-                                style={styles.videoPlayer as any}
+                                style={webVideoElementStyle}
                                 playsInline
                               />
                             ) : (
@@ -1559,7 +1564,7 @@ export default function PublishModulePage() {
                           ref={(ref) => { videoPlayerRef.current = ref; }}
                           src={videoFile.uri}
                           controls
-                          style={styles.videoPlayer as any}
+                          style={webVideoElementStyle}
                           playsInline
                         />
                       ) : (
@@ -1647,13 +1652,13 @@ export default function PublishModulePage() {
                             sliderWidth > 0 ? {
                               left: Animated.add(thumbPosition, -11), // Center the 22px thumb
                               transform: [
-                                ...(isDraggingState ? [{ scale: 1.15 }] : []),
+                                { scale: isDraggingState ? 1.15 : 1 },
                               ],
                             } : {
                               left: `${((intensityLevel - 1) / 4) * 100}%`,
                               transform: [
                                 { translateX: -11 },
-                                ...(isDraggingState ? [{ scale: 1.15 }] : []),
+                                { scale: isDraggingState ? 1.15 : 1 },
                               ],
                             },
                             Platform.OS === 'web' ? { 

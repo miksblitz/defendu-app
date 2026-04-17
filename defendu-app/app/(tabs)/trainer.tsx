@@ -356,7 +356,7 @@ export default function TrainerPage() {
                 {isCurrentUserTrainer && (
                   <TouchableOpacity
                     style={styles.publishModuleButton}
-                    onPress={() => router.push('/publish-module' as any)}
+                    onPress={() => router.push('/(tabs)/publish-module' as any)}
                   >
                     <Ionicons
                       name="cloud-upload-outline"

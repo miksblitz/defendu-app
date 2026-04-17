@@ -1761,7 +1761,7 @@ export default function ManageModulesPage() {
                 <Text style={styles.modalTitle}>Assign Modules</Text>
                 <Text style={styles.modalSubtitle}>
                   Select existing modules to add to{' '}
-                  <Text style={{ color: '#38a6de', fontWeight: '700' }}>"{newCategoryName}"</Text>.
+                  <Text style={{ color: '#38a6de', fontWeight: '700' }}>"{newCategoryName}".</Text>
                   {' '}You can skip this step.
                 </Text>
                 {/* Search bar */}

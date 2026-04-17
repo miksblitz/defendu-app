@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -62,16 +61,20 @@ export default function TrainerCategoryReviewModal({
       <View style={styles.overlay}>
         <View style={styles.container}>
           <Text style={styles.title}>Rate your trainers</Text>
-          <Text style={styles.subtitle}>
-            Rate each trainer (1–5 stars) for{' '}
-            <Text style={styles.subtitleStrong}>{categoryLabel}</Text>. Submit saves when everyone has a rating.
-          </Text>
+          <View style={styles.subtitleRow}>
+            <Text style={styles.subtitlePrefix}>Rate each trainer (1-5 stars) for</Text>
+            <Text style={styles.subtitleStrong}>{categoryLabel}.</Text>
+            <Text style={styles.subtitlePrefix}>Submit saves when everyone has a rating.</Text>
+          </View>
 
           <View style={styles.listWrap}>
-            {trainers.map((trainer) => {
+            {trainers.map((trainer, index) => {
               const selected = ratingsByTrainer[trainer.trainerUid] || 0;
               return (
-                <View key={trainer.trainerUid} style={styles.row}>
+                <View
+                  key={trainer.trainerUid}
+                  style={StyleSheet.flatten([styles.row, index < trainers.length - 1 && styles.rowSpaced])}
+                >
                   {trainer.profilePicture ? (
                     <Image source={{ uri: trainer.profilePicture }} style={styles.avatar} />
                   ) : (
@@ -96,11 +99,14 @@ export default function TrainerCategoryReviewModal({
                           activeOpacity={0.8}
                           style={styles.starBtn}
                         >
-                          <Ionicons
-                            name={selected >= star ? 'star' : 'star-outline'}
-                            size={20}
-                            color={selected >= star ? '#f0c14b' : '#86a4b4'}
-                          />
+                          <Text
+                            style={StyleSheet.flatten([
+                              styles.starText,
+                              selected >= star ? styles.starTextActive : styles.starTextInactive,
+                            ])}
+                          >
+                            {selected >= star ? '★' : '☆'}
+                          </Text>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -115,9 +121,11 @@ export default function TrainerCategoryReviewModal({
               <Text style={styles.skipBtnText}>Skip</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
+              style={StyleSheet.flatten([styles.submitBtn, !canSubmit && styles.submitBtnDisabled])}
               disabled={!canSubmit}
-              onPress={() => onSubmit(trainers.map((t) => ({ trainerUid: t.trainerUid, rating: ratingsByTrainer[t.trainerUid]! })))}
+              onPress={() =>
+                onSubmit(trainers.map((t) => ({ trainerUid: t.trainerUid, rating: ratingsByTrainer[t.trainerUid]! })))
+              }
             >
               <Text style={styles.submitBtnText}>{submitting ? 'Submitting...' : 'Submit'}</Text>
             </TouchableOpacity>
@@ -146,19 +154,25 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   title: { color: '#ffffff', fontSize: 22, fontWeight: '800', marginBottom: 6 },
-  subtitle: { color: '#9bb8c7', fontSize: 13, lineHeight: 19, marginBottom: 14 },
-  subtitleStrong: { color: '#d9f5ff', fontWeight: '800' },
-  listWrap: { gap: 10, marginBottom: 14 },
+  subtitleRow: {
+    marginBottom: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  subtitlePrefix: { color: '#9bb8c7', fontSize: 13, lineHeight: 19, marginRight: 4, marginBottom: 2 },
+  subtitleStrong: { color: '#d9f5ff', fontWeight: '800', marginRight: 4, marginBottom: 2 },
+  listWrap: { marginBottom: 14 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     borderWidth: 1,
     borderColor: 'rgba(7, 187, 192, 0.2)',
     borderRadius: 12,
     backgroundColor: 'rgba(4, 32, 49, 0.9)',
     padding: 10,
   },
+  rowSpaced: { marginBottom: 10 },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#0b2f43' },
   avatarFallback: {
     width: 44,
@@ -169,11 +183,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#0b2f43',
   },
   avatarText: { color: '#d9f5ff', fontWeight: '800' },
-  rowMain: { flex: 1, minWidth: 0 },
+  rowMain: { flex: 1, minWidth: 0, marginLeft: 10 },
   name: { color: '#eaf7fc', fontWeight: '700', fontSize: 14, marginBottom: 4 },
   starsRow: { flexDirection: 'row', alignItems: 'center' },
   starBtn: { paddingVertical: 2, paddingRight: 3 },
-  actions: { flexDirection: 'row', gap: 10 },
+  starText: { fontSize: 22, lineHeight: 24, fontWeight: '700' },
+  starTextActive: { color: '#f0c14b' },
+  starTextInactive: { color: '#86a4b4' },
+  actions: { flexDirection: 'row', justifyContent: 'space-between' },
   skipBtn: {
     flex: 1,
     borderRadius: 10,
@@ -182,6 +199,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 11,
+    marginRight: 10,
   },
   skipBtnText: { color: '#b8cddb', fontWeight: '700' },
   submitBtn: {

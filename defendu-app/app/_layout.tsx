@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
-import { AppState, AppStateStatus, StyleSheet, Text, TextInput } from 'react-native';
+import { AppState, AppStateStatus, Platform, StyleSheet, Text, TextInput } from 'react-native';
 import {
   Poppins_300Light,
   Poppins_400Regular,
@@ -89,34 +89,40 @@ export default function RootLayout() {
         // If a component explicitly set another fontFamily, respect it.
         if (flat.fontFamily) return style;
 
-        return [style, { fontFamily: family }];
+        // Important for web: always return a plain style object, not an
+        // indexed style array, to avoid CSSStyleDeclaration index setter errors.
+        return { ...flat, fontFamily: family };
       };
 
-      (Text as any).render = function render(...args: any[]) {
-        const origin = baseTextRender.call(this, ...args);
-        const props = origin?.props || {};
-        const nextStyle = patchStyleWithPoppins(props.style);
-        return {
-          ...origin,
-          props: {
-            ...props,
-            style: nextStyle,
-          },
+      // React Native Web can crash if patched styles become index-based style
+      // values on DOM nodes, so keep this patch native-only.
+      if (Platform.OS !== 'web') {
+        (Text as any).render = function render(...args: any[]) {
+          const origin = baseTextRender.call(this, ...args);
+          const props = origin?.props || {};
+          const nextStyle = patchStyleWithPoppins(props.style);
+          return {
+            ...origin,
+            props: {
+              ...props,
+              style: nextStyle,
+            },
+          };
         };
-      };
 
-      (TextInput as any).render = function render(...args: any[]) {
-        const origin = baseInputRender.call(this, ...args);
-        const props = origin?.props || {};
-        const nextStyle = patchStyleWithPoppins(props.style);
-        return {
-          ...origin,
-          props: {
-            ...props,
-            style: nextStyle,
-          },
+        (TextInput as any).render = function render(...args: any[]) {
+          const origin = baseInputRender.call(this, ...args);
+          const props = origin?.props || {};
+          const nextStyle = patchStyleWithPoppins(props.style);
+          return {
+            ...origin,
+            props: {
+              ...props,
+              style: nextStyle,
+            },
+          };
         };
-      };
+      }
     }
 
     SplashScreen.hideAsync().catch(() => {});

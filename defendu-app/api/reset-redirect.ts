@@ -46,12 +46,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Create deep link with custom token (not OOB code)
   const deepLink = `defenduapp://resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`;
   
-  // Web app URL for desktop/PC - use WEB_APP_URL if set, otherwise use API_BASE_URL, or default to localhost for dev
-  const apiBaseUrl = process.env.API_BASE_URL || 'https://defendu-app.vercel.app';
-  // Remove /api from API_BASE_URL if present to get the base domain
-  const baseUrl = apiBaseUrl.replace(/\/api\/?$/, '');
-  const webAppUrl = process.env.WEB_APP_URL || baseUrl || 'http://localhost:8081';
-  const webAppLink = `${webAppUrl}/resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`;
+  // Optional hosted web app URL (set this only if you actually deploy the Expo web app).
+  // We intentionally DO NOT default this to the API domain because this Vercel project
+  // can be API-only, where /resetpassword would 404.
+  const webAppUrl = process.env.WEB_APP_URL;
+  const webAppLink = webAppUrl
+    ? `${webAppUrl.replace(/\/$/, '')}/resetpassword?token=${token}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`
+    : '';
   
   // HTML page that tries to open the app and shows fallback
   const html = `
@@ -61,35 +62,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <title>Opening Defendu App...</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta name="apple-mobile-web-app-capable" content="yes">
-        <script>
-          // Immediate redirect detection - run before DOM loads
-          (function() {
-            try {
-              const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-              const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
-              const isAndroid = /android/i.test(userAgent);
-              const isMobile = isIOS || isAndroid;
-              const isWeb = !isMobile;
-              
-              if (isWeb) {
-                // For web, redirect immediately
-                const webLink = '${webAppLink}';
-                console.log('Web detected, redirecting to:', webLink);
-                // Use replace to prevent back navigation
-                if (window.location.replace) {
-                  window.location.replace(webLink);
-                } else {
-                  window.location.href = webLink;
-                }
-              }
-            } catch (e) {
-              console.error('Redirect error:', e);
-            }
-          })();
-        </script>
-        <noscript>
-          <meta http-equiv="refresh" content="0;url=${webAppLink}">
-        </noscript>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -172,10 +144,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
             const isAndroid = /android/i.test(userAgent);
             const isMobile = isIOS || isAndroid;
-            // Check if it's a web browser (not mobile)
-            const isWeb = !isMobile;
+            const hasWebFallback = !!webLink;
             
-            console.log('Device detected:', { isIOS, isAndroid, isMobile, isWeb });
+            console.log('Device detected:', { isIOS, isAndroid, isMobile, hasWebFallback });
             
             // Function to try opening the app
             function tryOpenApp() {
@@ -223,14 +194,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               }
             }
             
-            // Handle web browsers - automatically redirect to web app
-            if (isWeb) {
-              console.log('Web browser detected - automatically redirecting to web app:', webLink);
-              // Use replace instead of href to prevent back navigation
-              window.location.replace(webLink);
-            } else {
-              // For mobile, try to open the app
+            if (isMobile) {
               tryOpenApp();
+            } else {
+              // Desktop / webmail: do not auto-redirect to avoid API-only 404s.
+              showFallback();
             }
             
             // Also handle button click for mobile fallback
@@ -245,9 +213,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     setTimeout(function() {
                       showFallback();
                     }, 1000);
-                  } else {
-                    // If somehow on web and button is clicked, redirect to web app
+                  } else if (hasWebFallback) {
                     window.location.href = webLink;
+                  } else {
+                    showFallback();
                   }
                 });
               }
@@ -267,12 +236,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             <p>Try these steps:</p>
             <ol style="text-align: left; max-width: 400px; margin: 10px auto;">
               <li><strong>On Mobile:</strong> Make sure the Defendu app is installed, then click the button above</li>
-              <li><strong>On PC/Web:</strong> <a href="${webAppLink}" style="color: #000C17; text-decoration: underline;">Click here to open in web browser</a></li>
-              <li>Or copy and paste this link in your browser:</li>
+              <li><strong>On PC/Web:</strong> ${webAppLink ? `<a href="${webAppLink}" style="color: #000C17; text-decoration: underline;">Open reset page in web app</a>` : 'Open this link on your phone where the Defendu app is installed.'}</li>
+              <li>Deep link (copy and open on mobile):</li>
             </ol>
-            <code id="linkToCopy">${webAppLink}</code>
+            <code id="linkToCopy">${deepLink}</code>
             <p style="margin-top: 20px; font-size: 12px; color: #999;">
-              <strong>Note:</strong> Deep links only work on mobile devices. On PC, use the web version link above.
+              <strong>Note:</strong> Deep links work on mobile devices with the Defendu app installed.
             </p>
           </div>
         </div>
