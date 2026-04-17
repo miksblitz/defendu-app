@@ -1040,7 +1040,7 @@ export default function TrainerRegistrationScreen() {
                         </ScrollView>
                       )}
                     </View>
-                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={styles.selectIcon} />
+                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={{ marginLeft: 8, marginTop: 4, flexShrink: 0 } as any} />
                   </TouchableOpacity>
                   {showMartialArtsDropdown && (
                     <>
@@ -1054,7 +1054,7 @@ export default function TrainerRegistrationScreen() {
                       />
                       <View style={styles.dropdown}>
                         <View style={styles.searchContainer}>
-                          <Ionicons name="search-outline" size={20} color="#6b8693" style={styles.searchIcon} />
+                          <Ionicons name="search-outline" size={20} color="#6b8693" style={{ marginRight: 8 } as any} />
                           <TextInput
                             style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
                             placeholder="Search martial arts..."
@@ -1118,7 +1118,7 @@ export default function TrainerRegistrationScreen() {
                     <Text style={yearsExperience ? styles.selectedText : styles.placeholderText}>
                       {yearsExperience ? `${yearsExperience} ${yearsExperience === '1' ? 'year' : 'years'}` : 'Tap to choose'}
                     </Text>
-                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={styles.selectIcon} />
+                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={{ marginLeft: 8, marginTop: 4, flexShrink: 0 } as any} />
                   </TouchableOpacity>
                   {showYearsExperienceDropdown && (
                     <>
@@ -1132,7 +1132,7 @@ export default function TrainerRegistrationScreen() {
                       />
                       <View style={styles.dropdown}>
                         <View style={styles.searchContainer}>
-                          <Ionicons name="search-outline" size={20} color="#6b8693" style={styles.searchIcon} />
+                          <Ionicons name="search-outline" size={20} color="#6b8693" style={{ marginRight: 8 } as any} />
                           <TextInput
                             style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
                             placeholder="Search years..."
@@ -1204,7 +1204,7 @@ export default function TrainerRegistrationScreen() {
                     <Text style={yearsTeaching ? styles.selectedText : styles.placeholderText}>
                       {yearsTeaching ? `${yearsTeaching} ${yearsTeaching === '1' ? 'year' : 'years'}` : 'Tap to choose'}
                     </Text>
-                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={styles.selectIcon} />
+                    <Ionicons name="chevron-down" size={20} color="#07bbc0" style={{ marginLeft: 8, marginTop: 4, flexShrink: 0 } as any} />
                   </TouchableOpacity>
                   {showYearsTeachingDropdown && (
                     <>
@@ -1218,7 +1218,7 @@ export default function TrainerRegistrationScreen() {
                       />
                       <View style={styles.dropdown}>
                         <View style={styles.searchContainer}>
-                          <Ionicons name="search-outline" size={20} color="#6b8693" style={styles.searchIcon} />
+                          <Ionicons name="search-outline" size={20} color="#6b8693" style={{ marginRight: 8 } as any} />
                           <TextInput
                             style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
                             placeholder="Search years..."
@@ -1291,7 +1291,7 @@ export default function TrainerRegistrationScreen() {
                       <Text style={currentRank ? styles.selectedText : styles.placeholderText}>
                         {currentRank || 'Select rank/belt...'}
                       </Text>
-                      <Ionicons name="chevron-down" size={20} color="#07bbc0" style={styles.selectIcon} />
+                      <Ionicons name="chevron-down" size={20} color="#07bbc0" style={{ marginLeft: 8, marginTop: 4, flexShrink: 0 } as any} />
                     </TouchableOpacity>
                     {showRankDropdown && (
                       <>
@@ -1305,7 +1305,7 @@ export default function TrainerRegistrationScreen() {
                         />
                         <View style={styles.dropdown}>
                           <View style={styles.searchContainer}>
-                            <Ionicons name="search-outline" size={20} color="#6b8693" style={styles.searchIcon} />
+                            <Ionicons name="search-outline" size={20} color="#6b8693" style={{ marginRight: 8 } as any} />
                             <TextInput
                               style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
                               placeholder="Search rank/belt..."
@@ -1369,7 +1369,7 @@ export default function TrainerRegistrationScreen() {
                       value={facebookLink}
                       onChangeText={setFacebookLink}
                     />
-                    <Ionicons name="logo-facebook" size={20} color="#07bbc0" style={styles.socialIcon} />
+                    <Ionicons name="logo-facebook" size={20} color="#07bbc0" style={{ marginLeft: 8 } as any} />
                   </View>
                   <View style={[styles.socialInputWrapper, isMobile && styles.socialInputWrapperMobile]}>
                     <TextInput
@@ -1379,7 +1379,7 @@ export default function TrainerRegistrationScreen() {
                       value={instagramLink}
                       onChangeText={setInstagramLink}
                     />
-                    <Ionicons name="logo-instagram" size={20} color="#07bbc0" style={styles.socialIcon} />
+                    <Ionicons name="logo-instagram" size={20} color="#07bbc0" style={{ marginLeft: 8 } as any} />
                   </View>
                   <View style={[styles.socialInputWrapper, isMobile && styles.socialInputWrapperMobile]}>
                     <TextInput
@@ -1389,7 +1389,7 @@ export default function TrainerRegistrationScreen() {
                       value={otherLink}
                       onChangeText={setOtherLink}
                     />
-                    <Ionicons name="link" size={20} color="#07bbc0" style={styles.socialIcon} />
+                    <Ionicons name="link" size={20} color="#07bbc0" style={{ marginLeft: 8 } as any} />
                   </View>
                 </View>
               </View>
@@ -1423,12 +1423,10 @@ export default function TrainerRegistrationScreen() {
                     onClick={handleFileSelect}
                   >
                     <div style={{ textAlign: 'center', padding: 20 }}>
-                      <Ionicons 
-                        name="cloud-upload-outline" 
-                        size={48} 
-                        color="#07bbc0" 
-                      />
-                      <div style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 500, marginTop: 12 }}>
+                      <div style={{ color: '#07bbc0', fontSize: 40, lineHeight: 1 }}>
+                        ↑
+                      </div>
+                      <div style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '500', marginTop: 12 }}>
                         {isDragging ? 'Drop files here' : 'Click to upload or drag files here'}
                       </div>
                       <div style={{ color: '#6b8693', fontSize: 12, marginTop: 8 }}>
@@ -1480,7 +1478,7 @@ export default function TrainerRegistrationScreen() {
                           name={getFileIcon(file.type) as any} 
                           size={20} 
                           color="#07bbc0" 
-                          style={styles.fileIcon}
+                          style={{ marginRight: 12 } as any}
                         />
                         <Text style={styles.fileName} numberOfLines={1}>
                           {file.name}
@@ -2145,11 +2143,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
   },
-  selectIcon: {
-    marginLeft: 8,
-    marginTop: 4,
-    flexShrink: 0,
-  },
   dropdownOverlay: {
     position: 'fixed',
     top: 0,
@@ -2186,9 +2179,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#0a3645',
-  },
-  searchIcon: {
-    marginRight: 8,
   },
   searchInput: {
     flex: 1,
@@ -2242,9 +2232,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 0,
     textAlignVertical: 'center',
-  },
-  socialIcon: {
-    marginLeft: 8,
   },
   socialInputWrapperMobile: {
     minHeight: 48,
@@ -2310,9 +2297,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: '#0a3645',
-  },
-  fileIcon: {
-    marginRight: 12,
   },
   fileName: {
     flex: 1,

@@ -5,6 +5,12 @@
   "main": "index.js",
   "devDependencies": {},
   "scripts": {
+    "install:app": "npm install --prefix defendu-app",
+    "start": "npm --prefix defendu-app run start",
+    "web": "npm --prefix defendu-app run web",
+    "android": "npm --prefix defendu-app run android",
+    "ios": "npm --prefix defendu-app run ios",
+    "lint": "npm --prefix defendu-app run lint",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
