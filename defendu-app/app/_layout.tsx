@@ -89,7 +89,9 @@ export default function RootLayout() {
         // If a component explicitly set another fontFamily, respect it.
         if (flat.fontFamily) return style;
 
-        return [style, { fontFamily: family }];
+        // Always return a flattened object to avoid style arrays leaking into
+        // raw DOM nodes on web (which can crash with indexed CSS properties).
+        return StyleSheet.flatten([style, { fontFamily: family }]);
       };
 
       (Text as any).render = function render(...args: any[]) {

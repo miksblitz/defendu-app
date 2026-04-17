@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -28,6 +27,11 @@ import { TrainerRatingController, TrainerRatingSummary } from '../controllers/Tr
 interface TrainerWithData extends User {
   applicationData?: TrainerApplication | null;
   ratingSummary?: TrainerRatingSummary;
+}
+
+function SimpleIcon({ label, style }: { label: string; style?: any }) {
+  const flattenedStyle = StyleSheet.flatten([styles.simpleIcon, style]);
+  return <Text style={flattenedStyle}>{label}</Text>;
 }
 
 const getTrainerDisplayName = (trainer: TrainerWithData): string => {
@@ -310,6 +314,7 @@ export default function TrainerPage() {
               <Image
                 source={require('../../assets/images/blueprofileicon.png')}
                 style={styles.iconImage}
+                tintColor="#07bbc0"
               />
             </TouchableOpacity>
 
@@ -317,6 +322,7 @@ export default function TrainerPage() {
               <Image
                 source={require('../../assets/images/trainericon.png')}
                 style={styles.iconImage}
+                tintColor="#07bbc0"
               />
             </TouchableOpacity>
 
@@ -327,6 +333,7 @@ export default function TrainerPage() {
               <Image
                 source={require('../../assets/images/homeicon.png')}
                 style={styles.iconImage}
+                tintColor="#07bbc0"
               />
             </TouchableOpacity>
           </View>
@@ -358,12 +365,7 @@ export default function TrainerPage() {
                     style={styles.publishModuleButton}
                     onPress={() => router.push('/publish-module' as any)}
                   >
-                    <Ionicons
-                      name="cloud-upload-outline"
-                      size={18}
-                      color="#FFFFFF"
-                      style={{ marginRight: 6 }}
-                    />
+                    <SimpleIcon label="⬆" style={{ marginRight: 6 }} />
                     <Text style={styles.publishModuleButtonText}>
                       Publish Module
                     </Text>
@@ -374,12 +376,7 @@ export default function TrainerPage() {
                     style={styles.registerButton}
                     onPress={handleRegisterTrainer}
                   >
-                    <Ionicons
-                      name="person-add-outline"
-                      size={18}
-                      color="#FFFFFF"
-                      style={{ marginRight: 6 }}
-                    />
+                    <SimpleIcon label="+" style={{ marginRight: 6 }} />
                     <Text style={styles.registerButtonText}>
                       Register as a certified Trainer
                     </Text>
@@ -400,7 +397,7 @@ export default function TrainerPage() {
             {/* Compact controls so trainers stay the focus */}
             <View style={styles.topControlsRow}>
               <View style={styles.searchContainer}>
-                <Ionicons name="search-outline" size={18} color="#6b8693" style={styles.searchIcon} />
+                <SimpleIcon label="🔎" style={styles.searchIcon} />
                 <TextInput
                   style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
                   placeholder="Search trainers..."
@@ -410,7 +407,7 @@ export default function TrainerPage() {
                 />
                 {searchQuery.length > 0 ? (
                   <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <Ionicons name="close-circle" size={18} color="#6b8693" />
+                    <SimpleIcon label="✕" />
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -459,11 +456,11 @@ export default function TrainerPage() {
                           />
                         ) : (
                           <View style={styles.avatar}>
-                            <Ionicons name="person" size={40} color="#FFFFFF" />
+                            <SimpleIcon label="👤" style={styles.avatarFallbackIcon} />
                           </View>
                         )}
                         <View style={styles.checkmarkContainer}>
-                          <Ionicons name="checkmark-circle" size={24} color="#07bbc0" />
+                          <SimpleIcon label="✓" style={styles.checkmarkText} />
                         </View>
                       </View>
 
@@ -473,7 +470,7 @@ export default function TrainerPage() {
                           {displayName}
                         </Text>
                         <View style={styles.ratingPill}>
-                          <Ionicons name="star" size={13} color="#f0c14b" />
+                          <SimpleIcon label="★" style={styles.starText} />
                           <Text style={styles.ratingPillText}>
                             {totalReviews > 0 ? avgRating.toFixed(1) : '0.0'}
                           </Text>
@@ -483,20 +480,20 @@ export default function TrainerPage() {
                         <View style={styles.trainerDetails}>
                           {academyName && (
                             <View style={styles.detailRow}>
-                              <Ionicons name="school-outline" size={14} color="#6b8693" />
+                              <SimpleIcon label="🏫" />
                               <Text style={styles.detailText}>{academyName}</Text>
                             </View>
                           )}
                           <View style={styles.detailRow}>
-                            <Ionicons name="location-outline" size={14} color="#6b8693" />
+                            <SimpleIcon label="📍" />
                             <Text style={styles.detailText}>{location}</Text>
                           </View>
                           <View style={styles.detailRow}>
-                            <Ionicons name="call-outline" size={14} color="#6b8693" />
+                            <SimpleIcon label="📞" />
                             <Text style={styles.detailText}>{phone}</Text>
                           </View>
                           <View style={styles.detailRow}>
-                            <Ionicons name="mail-outline" size={14} color="#6b8693" />
+                            <SimpleIcon label="✉" />
                             <Text style={styles.detailText}>{email}</Text>
                           </View>
                         </View>
@@ -507,7 +504,7 @@ export default function TrainerPage() {
                         style={styles.viewButton}
                         onPress={() => handleViewCredentials(trainer)}
                       >
-                        <Ionicons name="eye-outline" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                        <SimpleIcon label="👁" style={{ marginRight: 4 }} />
                         <Text style={styles.viewButtonText}>View</Text>
                       </TouchableOpacity>
                     </View>
@@ -515,7 +512,7 @@ export default function TrainerPage() {
                 })
             ) : (
               <View style={styles.emptyState}>
-                <Ionicons name="search-outline" size={48} color="#6b8693" />
+                <SimpleIcon label="🔎" style={styles.emptyIcon} />
                 <Text style={styles.emptyStateText}>No trainers found</Text>
                 <Text style={styles.emptyStateSubtext}>
                   {searchQuery ? 'Try adjusting your search criteria' : 'No approved trainers available yet'}
@@ -547,7 +544,7 @@ export default function TrainerPage() {
             ]}
           >
             <View style={[styles.searchContainer, styles.floatingSearchContainer]}>
-              <Ionicons name="search-outline" size={18} color="#6b8693" style={styles.searchIcon} />
+              <SimpleIcon label="🔎" style={styles.searchIcon} />
               <TextInput
                 style={[styles.searchInput, { outlineStyle: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
                 placeholder="Search trainers..."
@@ -557,7 +554,7 @@ export default function TrainerPage() {
               />
               {searchQuery.length > 0 ? (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={18} color="#6b8693" />
+                  <SimpleIcon label="✕" />
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -581,7 +578,7 @@ export default function TrainerPage() {
                   onPress={() => setShowCredentialsModal(false)}
                   style={styles.closeButton}
                 >
-                  <Ionicons name="close" size={24} color="#FFFFFF" />
+                  <SimpleIcon label="✕" />
                 </TouchableOpacity>
               </View>
 
@@ -597,7 +594,7 @@ export default function TrainerPage() {
                     </TouchableOpacity>
                   ) : (
                     <View style={styles.modalHeroPlaceholder}>
-                      <Ionicons name="images-outline" size={26} color="#87a4b3" />
+                      <SimpleIcon label="🖼" />
                       <Text style={styles.modalHeroPlaceholderText}>No cover photo yet</Text>
                     </View>
                   )}
@@ -622,7 +619,7 @@ export default function TrainerPage() {
                           </TouchableOpacity>
                         ) : (
                           <View style={styles.credentialAvatar}>
-                            <Ionicons name="person" size={40} color="#FFFFFF" />
+                            <SimpleIcon label="👤" style={styles.avatarFallbackIcon} />
                           </View>
                         )}
                         <View style={styles.credentialHeaderInfo}>
@@ -638,12 +635,7 @@ export default function TrainerPage() {
                           onPress={handleTrainerPrimaryAction}
                           activeOpacity={0.8}
                         >
-                          <Ionicons
-                            name={isSelectedTrainerCurrentUser ? 'create-outline' : 'chatbubble-outline'}
-                            size={18}
-                            color="#FFFFFF"
-                            style={{ marginRight: 6 }}
-                          />
+                          <SimpleIcon label={isSelectedTrainerCurrentUser ? "✎" : "💬"} style={{ marginRight: 6 }} />
                           <Text style={styles.contactTrainerButtonText}>
                             {isSelectedTrainerCurrentUser ? 'Edit Trainer Profile' : 'Contact Trainer'}
                           </Text>
@@ -791,12 +783,7 @@ export default function TrainerPage() {
                         onPress={handleTrainerPrimaryAction}
                         activeOpacity={0.8}
                       >
-                        <Ionicons
-                          name={isSelectedTrainerCurrentUser ? 'create-outline' : 'chatbubble-outline'}
-                          size={18}
-                          color="#FFFFFF"
-                          style={{ marginRight: 6 }}
-                        />
+                        <SimpleIcon label={isSelectedTrainerCurrentUser ? "✎" : "💬"} style={{ marginRight: 6 }} />
                         <Text style={styles.contactTrainerButtonText}>
                           {isSelectedTrainerCurrentUser ? 'Edit Trainer Profile' : 'Contact Trainer'}
                         </Text>
@@ -821,7 +808,7 @@ export default function TrainerPage() {
           <View style={styles.imagePreviewHeader}>
             <Text style={styles.imagePreviewTitle}>{imagePreviewTitle}</Text>
             <TouchableOpacity style={styles.imagePreviewClose} onPress={() => setImagePreviewVisible(false)}>
-              <Ionicons name="close" size={24} color="#FFFFFF" />
+              <SimpleIcon label="✕" />
             </TouchableOpacity>
           </View>
           {imagePreviewUri ? (
@@ -845,6 +832,7 @@ export default function TrainerPage() {
               <Image
                 source={require('../../assets/images/messageicon.png')}
                 style={styles.menuIcon}
+                tintColor="#07bbc0"
               />
               <Text style={styles.menuText}>Messages</Text>
               {unreadCount > 0 && (
@@ -861,6 +849,7 @@ export default function TrainerPage() {
               <Image
                 source={require('../../assets/images/logouticon.png')}
                 style={styles.menuIcon}
+                tintColor="#07bbc0"
               />
               <Text style={styles.menuText}>Logout</Text>
             </TouchableOpacity>
@@ -948,7 +937,6 @@ const styles = StyleSheet.create({
   iconImage: {
     width: 28,
     height: 28,
-    tintColor: '#07bbc0',
     resizeMode: 'contain',
   },
   threeDotIcon: {
@@ -1462,7 +1450,6 @@ const styles = StyleSheet.create({
     height: 22,
     marginRight: 12,
     resizeMode: 'contain',
-    tintColor: '#07bbc0',
   },
   menuText: {
     color: '#FFFFFF',
@@ -1503,5 +1490,29 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 1080,
     flex: 1,
+  },
+  simpleIcon: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 16,
+  },
+  avatarFallbackIcon: {
+    fontSize: 28,
+    lineHeight: 30,
+  },
+  checkmarkText: {
+    color: '#07bbc0',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  starText: {
+    color: '#f0c14b',
+    fontSize: 12,
+    lineHeight: 14,
+  },
+  emptyIcon: {
+    fontSize: 36,
+    lineHeight: 40,
   },
 });

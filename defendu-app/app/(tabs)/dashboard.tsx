@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { ModuleGridSkeleton, Skeleton } from '../../components/SkeletonLoader';
-import TrainerCategoryReviewModal, { TrainerReviewRow } from '../../components/TrainerCategoryReviewModal';
 import Toast from '../../components/Toast';
 import { getModuleColumns, getSidebarWidth, Breakpoints } from '../../constants/layout';
 import { useLogout } from '../../hooks/useLogout';
@@ -24,7 +23,6 @@ import { useToast } from '../../hooks/useToast';
 import { Module } from '../_models/Module';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController, CategorySegmentProgramRecord } from '../controllers/AuthController';
-import { TrainerRatingController } from '../controllers/TrainerRatingController';
 
 const circleSize = 40;
 const strokeWidth = 4;
@@ -91,8 +89,15 @@ function normalizeCategory(cat: string | undefined): string {
   return (cat ?? '').trim().toLowerCase();
 }
 
-/** Program phases for web “track” layout (warm-up → training → cooldown). */
-type WebProgramPhase = 'warmup' | 'basic' | 'intermediate' | 'advanced' | 'cooldown' | 'other';
+/** Program phases for web “track” layout (warm-up → introduction → training → cooldown). */
+type WebProgramPhase =
+  | 'warmup'
+  | 'introduction'
+  | 'basic'
+  | 'intermediate'
+  | 'advanced'
+  | 'cooldown'
+  | 'other';
 
 function sortModulesProgramOrder(items: Module[]): Module[] {
   return [...items].sort((a, b) => {
@@ -109,6 +114,7 @@ function sortModulesProgramOrder(items: Module[]): Module[] {
  */
 function classifyModuleProgramPhase(m: Module): WebProgramPhase {
   if (m.moduleSegment === 'warmup') return 'warmup';
+  if (m.moduleSegment === 'introduction') return 'introduction';
   if (m.moduleSegment === 'cooldown') return 'cooldown';
   const title = (m.moduleTitle || '').toLowerCase();
   const desc = (m.description || '').toLowerCase();
@@ -118,11 +124,13 @@ function classifyModuleProgramPhase(m: Module): WebProgramPhase {
   const blob = `${title} ${desc} ${cat} ${intro} ${tags}`;
 
   if (/\bwarm[\s_-]?up\b/.test(blob) || /\bwarmup\b/.test(blob)) return 'warmup';
+  if (/\bintro(duction)?\b/.test(blob)) return 'introduction';
   if (/\b(cool|cool-)[\s_-]?down\b/.test(blob) || /\bcooldown\b/.test(blob)) return 'cooldown';
   if (/(^|\s)(arm|hip)\s+circles?(\s|$)/.test(title) || /jumping\s+jacks?/.test(title) || /\bhigh\s+knees\b/.test(title)) {
     return 'warmup';
   }
   if (cat === 'warmup' || cat === 'warm-up' || cat === 'warm up') return 'warmup';
+  if (cat === 'introduction' || cat === 'intro') return 'introduction';
   if (cat === 'cooldown' || cat === 'cool down' || cat === 'cool-down') return 'cooldown';
   if (/\bstretch(ing)?\b/.test(blob) && (m.intensityLevel ?? 4) <= 2) return 'cooldown';
 
@@ -144,6 +152,12 @@ const WEB_PROGRAM_SECTION_META: {
     title: 'Warm-up',
     subtitle: 'Mobility and light activation before you train.',
     badge: 'Warm-up',
+  },
+  {
+    phase: 'introduction',
+    title: 'Introduction',
+    subtitle: 'Overview and orientation before the core training.',
+    badge: 'Intro',
   },
   {
     phase: 'basic',
@@ -189,6 +203,7 @@ type WebProgramSection = {
 function buildProgramSectionsFromModules(modulesInCategory: Module[]): WebProgramSection[] {
   const buckets: Record<WebProgramPhase, Module[]> = {
     warmup: [],
+    introduction: [],
     basic: [],
     intermediate: [],
     advanced: [],
@@ -233,6 +248,9 @@ function buildProgramSectionsWithAdminAssignments(
   assignment: CategorySegmentProgramRecord | null | undefined
 ): WebProgramSection[] {
   const technique = modulesInCategory.filter((m) => !m.moduleSegment);
+  const introductionsInCategory = sortModulesProgramOrder(
+    modulesInCategory.filter((m) => m.moduleSegment === 'introduction')
+  );
   const byId = new Map(allApprovedModules.map((m) => [m.moduleId, m]));
 
   const warmupFromAdmin = resolveAdminPickIdsToModules(
@@ -254,6 +272,10 @@ function buildProgramSectionsWithAdminAssignments(
 
   const warmupItems =
     warmupFromAdmin.length > 0 ? warmupFromAdmin : (byPhase.warmup?.items ?? []);
+  const introductionItems =
+    introductionsInCategory.length > 0
+      ? introductionsInCategory
+      : (byPhase.introduction?.items ?? []);
   const cooldownItems =
     cooldownFromAdmin.length > 0 ? cooldownFromAdmin : (byPhase.cooldown?.items ?? []);
 
@@ -261,6 +283,8 @@ function buildProgramSectionsWithAdminAssignments(
   for (const meta of WEB_PROGRAM_SECTION_META) {
     if (meta.phase === 'warmup') {
       if (warmupItems.length > 0) out.push({ ...meta, items: warmupItems });
+    } else if (meta.phase === 'introduction') {
+      if (introductionItems.length > 0) out.push({ ...meta, items: introductionItems });
     } else if (meta.phase === 'cooldown') {
       if (cooldownItems.length > 0) out.push({ ...meta, items: cooldownItems });
     } else {
@@ -302,22 +326,7 @@ export default function DashboardScreen() {
   const [categorySegmentPrograms, setCategorySegmentPrograms] = useState<
     Record<string, CategorySegmentProgramRecord>
   >({});
-  const [showTrainerReviewModal, setShowTrainerReviewModal] = useState(false);
-  const [trainerReviewRows, setTrainerReviewRows] = useState<TrainerReviewRow[]>([]);
-  const [trainerReviewContext, setTrainerReviewContext] = useState<{
-    categoryKey: string;
-    categoryLabel: string;
-  } | null>(null);
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [trainerReviewInitialRatings, setTrainerReviewInitialRatings] = useState<Record<string, number>>({});
-  const [reviewPromptHandledKey, setReviewPromptHandledKey] = useState<string | null>(null);
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
-  const reviewParams = useLocalSearchParams<{
-    reviewPrompt?: string;
-    reviewCategoryKey?: string;
-    reviewCategory?: string;
-    reviewTs?: string;
-  }>();
   const router = useRouter();
   const handleLogout = useLogout();
   const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
@@ -433,99 +442,6 @@ export default function DashboardScreen() {
     });
   }, [modulesLoading, moduleCategories]);
 
-  useEffect(() => {
-    const promptFlag = String(reviewParams.reviewPrompt || '') === '1';
-    const categoryKey = String(reviewParams.reviewCategoryKey || '').trim().toLowerCase();
-    const routeCategoryLabel = String(reviewParams.reviewCategory || '').trim();
-    const triggerKey = `${reviewParams.reviewTs || '0'}:${categoryKey}`;
-    if (!promptFlag || !categoryKey || modulesLoading) return;
-    if (reviewPromptHandledKey === triggerKey) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const modulesForCategory = modules.filter(
-          (m) => normalizeCategory(m.category) === categoryKey
-        );
-        if (!modulesForCategory.length) {
-          setReviewPromptHandledKey(triggerKey);
-          return;
-        }
-
-        const assignment = categorySegmentPrograms[categoryKey];
-        const sections = buildProgramSectionsWithAdminAssignments(
-          modulesForCategory,
-          modules,
-          assignment
-        );
-        const byTrainer = new Map<string, string>();
-        for (const section of sections) {
-          for (const m of section.items) {
-            const uid = (m.trainerId || '').trim();
-            if (!uid) continue;
-            if (!byTrainer.has(uid)) {
-              byTrainer.set(uid, (m.trainerName || '').trim());
-            }
-          }
-        }
-        if (!byTrainer.size) {
-          for (const m of modulesForCategory) {
-            const uid = (m.trainerId || '').trim();
-            if (!uid) continue;
-            if (!byTrainer.has(uid)) byTrainer.set(uid, (m.trainerName || '').trim());
-          }
-        }
-        const trainerUids = Array.from(byTrainer.keys());
-        if (!trainerUids.length) {
-          setReviewPromptHandledKey(triggerKey);
-          return;
-        }
-
-        const fullyRated = await TrainerRatingController.hasRatedAllCategoryTrainers(categoryKey, trainerUids);
-        if (cancelled || fullyRated) {
-          if (!cancelled) setReviewPromptHandledKey(triggerKey);
-          return;
-        }
-
-        const savedRatings = await TrainerRatingController.getCategoryReviewRatingsMap(categoryKey);
-        if (cancelled) return;
-        setTrainerReviewInitialRatings(savedRatings);
-
-        const profiles = await TrainerRatingController.getTrainerProfiles(trainerUids);
-        if (cancelled) return;
-        const rows: TrainerReviewRow[] = trainerUids.map((uid) => ({
-          trainerUid: uid,
-          trainerName: profiles[uid]?.fullName || byTrainer.get(uid) || 'Trainer',
-          profilePicture: profiles[uid]?.profilePicture,
-        }));
-        const categoryLabel =
-          routeCategoryLabel ||
-          assignment?.category ||
-          modulesForCategory[0]?.category ||
-          'Category';
-
-        setTrainerReviewRows(rows);
-        setTrainerReviewContext({ categoryKey, categoryLabel });
-        setShowTrainerReviewModal(true);
-        setReviewPromptHandledKey(triggerKey);
-      } catch {
-        if (!cancelled) setReviewPromptHandledKey(triggerKey);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    reviewParams.reviewPrompt,
-    reviewParams.reviewCategoryKey,
-    reviewParams.reviewCategory,
-    reviewParams.reviewTs,
-    reviewPromptHandledKey,
-    modulesLoading,
-    modules,
-    categorySegmentPrograms,
-  ]);
 
   // Pulse animation for weekly goal
   useEffect(() => {
@@ -560,28 +476,6 @@ export default function DashboardScreen() {
     setShowMenu(false);
     router.push('/messages');
   };
-
-  const handleSubmitTrainerCategoryReview = useCallback(
-    async (ratings: { trainerUid: string; rating: number }[]) => {
-      if (!trainerReviewContext || ratings.length === 0) return;
-      try {
-        setReviewSubmitting(true);
-        await TrainerRatingController.submitCategoryTrainerRatings({
-          category: trainerReviewContext.categoryLabel,
-          categoryKey: trainerReviewContext.categoryKey,
-          ratings,
-        });
-        setShowTrainerReviewModal(false);
-        setTrainerReviewInitialRatings({});
-        showToast('Review submitted. Thank you!');
-      } catch (error: any) {
-        showToast(error?.message || 'Unable to submit review right now.');
-      } finally {
-        setReviewSubmitting(false);
-      }
-    },
-    [trainerReviewContext, showToast]
-  );
 
   // Overall weekly progress: total modules this week vs weekly target from skill profile
   const totalModulesThisWeek = dayCounts.reduce((a, b) => a + b, 0);
@@ -933,7 +827,7 @@ export default function DashboardScreen() {
                 {modulesLoading
                   ? 'Loading all modules…'
                   : showWebProgramTrack
-                    ? `Step-by-step path for ${selectedCategory}. Warm-up and cool-down follow the program your admin set for this category. Tap a module to open it.`
+                    ? `Step-by-step path for ${selectedCategory}. Warm-up, introduction, and cool-down follow the program for this category. Tap a module to open it.`
                     : selectedCategory
                       ? 'Tap a module to open it and begin.'
                       : 'Loading your program…'}
@@ -1070,7 +964,9 @@ export default function DashboardScreen() {
                             ? { uri: module.thumbnailUrl }
                             : require('../../assets/images/managemodulepic.png');
                           const useGiPlaceholder =
-                            (section.phase === 'warmup' || section.phase === 'cooldown') &&
+                            (section.phase === 'warmup' ||
+                              section.phase === 'introduction' ||
+                              section.phase === 'cooldown') &&
                             !module.thumbnailUrl;
                           return (
                             <TouchableOpacity
@@ -1119,10 +1015,21 @@ export default function DashboardScreen() {
                 </View>
               ) : (
                 <>
-                {isMobile && programSectionList.some((s) => s.phase === 'warmup' || s.phase === 'cooldown') ? (
+                {isMobile &&
+                programSectionList.some(
+                  (s) =>
+                    s.phase === 'warmup' ||
+                    s.phase === 'introduction' ||
+                    s.phase === 'cooldown'
+                ) ? (
                   <View style={styles.mobileLinkedProgramWrap}>
                     {programSectionList
-                      .filter((s) => s.phase === 'warmup' || s.phase === 'cooldown')
+                      .filter(
+                        (s) =>
+                          s.phase === 'warmup' ||
+                          s.phase === 'introduction' ||
+                          s.phase === 'cooldown'
+                      )
                       .map((section) => (
                         <View key={section.phase} style={styles.mobileLinkedBlock}>
                           <View style={styles.mobileLinkedBlockHead}>
@@ -1320,18 +1227,6 @@ export default function DashboardScreen() {
           </View>
         </TouchableOpacity>
       )}
-      <TrainerCategoryReviewModal
-        visible={showTrainerReviewModal}
-        categoryLabel={trainerReviewContext?.categoryLabel || 'Category'}
-        trainers={trainerReviewRows}
-        initialRatings={trainerReviewInitialRatings}
-        submitting={reviewSubmitting}
-        onClose={() => {
-          setShowTrainerReviewModal(false);
-          setTrainerReviewInitialRatings({});
-        }}
-        onSubmit={handleSubmitTrainerCategoryReview}
-      />
       <Toast message={toastMessage} visible={toastVisible} onHide={hideToast} duration={3200} />
     </SafeAreaView>
   );

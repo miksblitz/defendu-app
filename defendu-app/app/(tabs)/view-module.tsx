@@ -49,8 +49,27 @@ function isWarmupOrCooldownModule(m: Module | null | undefined): boolean {
 function moduleHasIntroductionContent(m: Module | null): boolean {
   if (!m) return false;
   if (m.introductionType === 'video' && (m.introductionVideoUrl ?? '').trim().length > 0) return true;
+  // Introduction-segment modules often store the playable media as technique video.
+  if (m.moduleSegment === 'introduction' && getTechniqueVideoUrl(m).trim().length > 0) return true;
   if (typeof m.introduction === 'string' && m.introduction.trim().length > 0) return true;
   return false;
+}
+
+function getIntroductionVideoUrl(module: Module | null): string {
+  if (!module) return '';
+  if (module.introductionType === 'video') {
+    const introVideo = getPlayableVideoUrl(module.introductionVideoUrl);
+    if (introVideo) return introVideo;
+  }
+  if (module.moduleSegment === 'introduction') {
+    const techniqueVideo = getTechniqueVideoUrl(module);
+    if (techniqueVideo) return techniqueVideo;
+  }
+  return '';
+}
+
+function isIntroductionSegmentModule(module: Module | null): boolean {
+  return module?.moduleSegment === 'introduction';
 }
 
 /**
@@ -252,8 +271,12 @@ export default function ViewModulePage() {
       setModule(data);
       setIntroVideoError(false);
       setIntroVideoWatched(false);
+      const hasIntroContent = moduleHasIntroductionContent(data);
+      const isIntroductionSegment = isIntroductionSegmentModule(data);
       if (shouldShowTrainingSafetyFirst()) {
         setStep('safety');
+      } else if (isIntroductionSegment && hasIntroContent) {
+        setStep('video');
       } else {
         beginTryItPractice(data, false);
       }
@@ -277,12 +300,20 @@ export default function ViewModulePage() {
     } catch {
       /* ignore */
     }
+    if (isIntroductionSegmentModule(module)) {
+      setStep('complete');
+      return;
+    }
     beginTryItPractice(undefined, false);
   };
 
   const handleSafetyConfirm = () => {
     if (!module) return;
     markTrainingSafetyAcknowledged();
+    if (isIntroductionSegmentModule(module) && moduleHasIntroductionContent(module)) {
+      setStep('video');
+      return;
+    }
     beginTryItPractice(undefined, true);
   };
 
@@ -539,7 +570,7 @@ export default function ViewModulePage() {
             {step === 'video' && (
               <View style={styles.card}>
                 <Text style={styles.sectionLabel}>Module Introduction</Text>
-                {module.introductionType === 'video' && module.introductionVideoUrl ? (
+                {getIntroductionVideoUrl(module) ? (
                   <>
                     {Platform.OS === 'web' ? (
                       introVideoError ? (
@@ -548,7 +579,7 @@ export default function ViewModulePage() {
                           <Text style={styles.videoErrorText}>This video couldn't be played here.</Text>
                           <TouchableOpacity
                             style={styles.videoErrorButton}
-                            onPress={() => openVideoInBrowser(module.introductionVideoUrl)}
+                            onPress={() => openVideoInBrowser(getIntroductionVideoUrl(module))}
                             activeOpacity={0.8}
                           >
                             <Ionicons name="open-outline" size={20} color="#07bbc0" style={{ marginRight: 8 }} />
@@ -567,7 +598,7 @@ export default function ViewModulePage() {
                         </View>
                       ) : (
                         <video
-                          src={getPlayableVideoUrl(module.introductionVideoUrl)}
+                          src={getIntroductionVideoUrl(module)}
                           controls
                           style={styles.videoPlayer as any}
                           playsInline
@@ -582,7 +613,7 @@ export default function ViewModulePage() {
                         <Text style={styles.videoPlaceholderText}>Video: {module.moduleTitle}</Text>
                         <TouchableOpacity
                           style={styles.videoErrorButton}
-                          onPress={() => openVideoInBrowser(module.introductionVideoUrl)}
+                          onPress={() => openVideoInBrowser(getIntroductionVideoUrl(module))}
                           activeOpacity={0.8}
                         >
                           <Text style={styles.videoErrorButtonText}>Open video in browser</Text>
@@ -615,10 +646,6 @@ export default function ViewModulePage() {
                   <View style={styles.tryItHeroColumn}>
                     <View style={styles.tryItHero}>
                       <View style={styles.tryItHeroAccentBar} />
-                      <View style={styles.tryItHeroKickerRow}>
-                        <Ionicons name="radio-button-on" size={12} color="#07bbc0" style={styles.tryItHeroLiveIcon} />
-                        <Text style={styles.tryItHeroKicker}>LIVE PRACTICE</Text>
-                      </View>
                       <Text style={styles.tryItHeroTitle} numberOfLines={4}>
                         {module.moduleTitle?.trim() || 'Training module'}
                       </Text>
@@ -1176,21 +1203,6 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#07bbc0',
     marginBottom: 14,
-  },
-  tryItHeroKickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  tryItHeroLiveIcon: {
-    marginRight: 8,
-    opacity: 0.95,
-  },
-  tryItHeroKicker: {
-    color: '#07bbc0',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 2.4,
   },
   tryItHeroTitle: {
     color: '#FFFFFF',

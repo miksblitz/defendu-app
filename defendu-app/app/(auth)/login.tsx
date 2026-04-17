@@ -1,7 +1,7 @@
 // app/(auth)/login.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -14,6 +14,24 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const styleId = 'defendu-login-password-eye-style';
+    if (document.getElementById(styleId)) return;
+    const el = document.createElement('style');
+    el.id = styleId;
+    el.textContent = `
+      input::-ms-reveal,
+      input::-ms-clear {
+        display: none !important;
+      }
+    `;
+    document.head.appendChild(el);
+    return () => {
+      document.getElementById(styleId)?.remove();
+    };
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -48,22 +66,28 @@ export default function LoginScreen() {
         router.replace('/(tabs)/dashboard');
       }
     } catch (error: any) {
-      // Provide specific error messages for different login failures
-      let errorMessage = 'Login failed. Please try again.';
+      // Show specific toasts for common login issues.
+      let errorMessage = 'Unable to sign in right now. Please try again.';
       
       if (error.message) {
-        if (error.message.includes('blocked')) {
+        const msg = String(error.message).toLowerCase();
+        if (msg.includes('blocked')) {
           errorMessage = 'This account has been blocked. Please contact support for details.';
-        } else if (error.message.includes('user-not-found') || error.message.includes('No account found')) {
-          errorMessage = 'Invalid credentials. No account found with this email.';
-        } else if (error.message.includes('wrong-password') || error.message.includes('Incorrect password')) {
-          errorMessage = 'Invalid credentials. Incorrect password.';
-        } else if (error.message.includes('invalid-email')) {
+        } else if (msg.includes('network') || msg.includes('internet') || msg.includes('wifi') || msg.includes('connection')) {
+          errorMessage = 'No internet connection. Please check your Wi-Fi or mobile data and try again.';
+        } else if (
+          msg.includes('user-not-found') ||
+          msg.includes('wrong-password') ||
+          msg.includes('incorrect password') ||
+          msg.includes('no account found') ||
+          msg.includes('invalid credentials') ||
+          msg.includes('invalid-credential')
+        ) {
+          errorMessage = 'Incorrect email or password. Please check your credentials and try again.';
+        } else if (msg.includes('invalid-email')) {
           errorMessage = 'Invalid email format. Please check your email address.';
-        } else if (error.message.includes('too-many-requests')) {
+        } else if (msg.includes('too-many-requests')) {
           errorMessage = 'Too many login attempts. Please try again later.';
-        } else if (error.message.includes('network') || error.message.includes('Network')) {
-          errorMessage = 'Network error. Please check your internet connection.';
         } else {
           errorMessage = error.message;
         }
@@ -129,7 +153,7 @@ export default function LoginScreen() {
           <Ionicons
             name={showPassword ? 'eye-off-outline' : 'eye-outline'}
             size={20}
-            color="rgba(255,255,255,0.55)"
+            color="#FFFFFF"
           />
         </TouchableOpacity>
       </View>
