@@ -29,6 +29,8 @@ export interface User {
   /** From skill profile (preferences step); used for dashboard weekly goal. */
   dailyModuleTarget?: number;
   weeklyModuleTarget?: number;
+  trainingDaysPerWeek?: number;
+  trainingProgramWeeks?: number;
   // Past Experience
   experienceLevel?: string;
   martialArtsBackground?: string[]; // Multiple selections allowed

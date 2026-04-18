@@ -18,6 +18,12 @@ import Svg, { Circle } from 'react-native-svg';
 import { ModuleGridSkeleton, Skeleton } from '../../components/SkeletonLoader';
 import Toast from '../../components/Toast';
 import { getModuleColumns, getSidebarWidth, Breakpoints } from '../../constants/layout';
+import {
+  clampDailyModuleTarget,
+  clampWeeklyModuleTarget,
+  DEFAULT_DAILY_MODULE_GOAL,
+  DEFAULT_WEEKLY_MODULE_GOAL,
+} from '../_utils/moduleTargets';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { Module } from '../_models/Module';
@@ -30,20 +36,6 @@ const radius = (circleSize - strokeWidth) / 2;
 const circumference = 2 * Math.PI * radius;
 
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-/** Fallbacks when skill profile has no module targets (e.g. legacy accounts). */
-const DEFAULT_DAILY_MODULE_GOAL = 5;
-const DEFAULT_WEEKLY_MODULE_GOAL = 7;
-
-function clampDailyModuleTarget(n: number): number {
-  if (!Number.isFinite(n)) return DEFAULT_DAILY_MODULE_GOAL;
-  return Math.max(1, Math.min(10, Math.round(n)));
-}
-
-function clampWeeklyModuleTarget(n: number): number {
-  if (!Number.isFinite(n)) return DEFAULT_WEEKLY_MODULE_GOAL;
-  return Math.max(3, Math.min(20, Math.round(n)));
-}
 
 /** Start of current week (Monday 00:00) and end (Sunday 23:59:59.999) in local time. */
 function getCurrentWeekRange(): { start: number; end: number } {

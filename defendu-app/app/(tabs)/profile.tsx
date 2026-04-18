@@ -43,13 +43,7 @@ export default function ProfilePage() {
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
-
-  // Height & weight editing
-  const [height, setHeight] = useState<string>('');
-  const [weight, setWeight] = useState<string>('');
-  const [heightInput, setHeightInput] = useState('');
-  const [weightInput, setWeightInput] = useState('');
-  const [savingStats, setSavingStats] = useState(false);
+  const [isApprovedTrainer, setIsApprovedTrainer] = useState(false);
 
   // Edit profile modal (name + password change)
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -103,10 +97,7 @@ export default function ProfilePage() {
   // Load user data on mount and when screen comes into focus
   const loadUserData = useCallback(async () => {
     try {
-      const [user, skillProfile] = await Promise.all([
-        AuthController.getCurrentUser(),
-        AuthController.getSkillProfileHeightWeight(),
-      ]);
+      const user = await AuthController.getCurrentUser();
       if (!user) {
         router.replace('/(auth)/login');
         return;
@@ -115,13 +106,7 @@ export default function ProfilePage() {
       setLastName(user.lastName || '');
       setProfilePicture(user.profilePicture || null);
       setCoverPhoto(user.coverPhoto || null);
-
-      const h = user.height ?? skillProfile?.height;
-      const w = user.weight ?? skillProfile?.weight;
-      setHeight(h != null ? String(h) : '');
-      setWeight(w != null ? String(w) : '');
-      setHeightInput(h != null ? String(h) : '');
-      setWeightInput(w != null ? String(w) : '');
+      setIsApprovedTrainer(user.role === 'trainer' && user.trainerApproved === true);
 
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -143,40 +128,12 @@ export default function ProfilePage() {
   };
 
   const fullName = `${firstName} ${lastName}`.trim() || 'User';
-  const hasHeightWeightChanges = heightInput !== height || weightInput !== weight;
   const hasEditProfileChanges =
     editFirstName !== firstName ||
     editLastName !== lastName ||
     currentPassword.length > 0 ||
     newPassword.length > 0 ||
     confirmPassword.length > 0;
-
-  const handleSaveHeightWeight = async () => {
-    const h = heightInput.trim() ? Number(heightInput.trim()) : undefined;
-    const w = weightInput.trim() ? Number(weightInput.trim()) : undefined;
-    if (h !== undefined && (isNaN(h) || h < 50 || h > 250)) {
-      Alert.alert('Invalid height', 'Please enter a height between 50 and 250 cm.');
-      return;
-    }
-    if (w !== undefined && (isNaN(w) || w < 20 || w > 300)) {
-      Alert.alert('Invalid weight', 'Please enter a weight between 20 and 300 kg.');
-      return;
-    }
-    setSavingStats(true);
-    try {
-      await AuthController.updateUserProfile({
-        ...(h !== undefined && { height: h }),
-        ...(w !== undefined && { weight: w }),
-      });
-      if (h !== undefined) setHeight(String(h));
-      if (w !== undefined) setWeight(String(w));
-    } catch (e) {
-      console.error('updateUserProfile:', e);
-      Alert.alert('Error', 'Could not save. Please try again.');
-    } finally {
-      setSavingStats(false);
-    }
-  };
 
   const openEditModal = () => {
     setEditFirstName(firstName);
@@ -797,43 +754,27 @@ export default function ProfilePage() {
               <Text style={styles.editButtonText}>Edit Profile</Text>
             </TouchableOpacity>
             <Text style={styles.editHint}>Change your name and password</Text>
-          </View>
 
-          {/* Height & Weight Section */}
-          <View style={styles.heightWeightSection}>
-            <Text style={styles.sectionTitle}>Height & Weight</Text>
-            <Text style={styles.sectionHint}>From your skill profile; you can update them here.</Text>
-            <View style={styles.hwRow}>
-              <View style={styles.hwField}>
-                <Text style={styles.hwLabel}>Height (cm)</Text>
-                <TextInput
-                  style={styles.hwInput}
-                  value={heightInput}
-                  onChangeText={setHeightInput}
-                  placeholder="e.g. 170"
-                  placeholderTextColor="#6b8693"
-                  keyboardType="numeric"
-                />
+            {isApprovedTrainer ? (
+              <View style={styles.trainerActions}>
+                <TouchableOpacity
+                  style={styles.trainerPrimaryBtn}
+                  onPress={() => router.push('/published-modules')}
+                  activeOpacity={0.88}
+                >
+                  <Ionicons name="library-outline" size={20} color="#041527" style={styles.trainerPrimaryIcon} />
+                  <Text style={styles.trainerPrimaryBtnText}>Published modules</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.trainerSecondaryBtn}
+                  onPress={() => router.push('/trainer-insights')}
+                  activeOpacity={0.88}
+                >
+                  <Ionicons name="stats-chart-outline" size={20} color="#07bbc0" style={styles.trainerSecondaryIcon} />
+                  <Text style={styles.trainerSecondaryBtnText}>Trainer insights</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.hwField}>
-                <Text style={styles.hwLabel}>Weight (kg)</Text>
-                <TextInput
-                  style={styles.hwInput}
-                  value={weightInput}
-                  onChangeText={setWeightInput}
-                  placeholder="e.g. 70"
-                  placeholderTextColor="#6b8693"
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-            <TouchableOpacity
-              style={[styles.saveStatsBtn, (savingStats || !hasHeightWeightChanges) && styles.buttonDisabled]}
-              onPress={handleSaveHeightWeight}
-              disabled={savingStats || !hasHeightWeightChanges}
-            >
-              <Text style={styles.saveStatsBtnText}>{savingStats ? 'Saving...' : 'Save'}</Text>
-            </TouchableOpacity>
+            ) : null}
           </View>
 
           {/* Menu Options Section */}
@@ -1443,66 +1384,47 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
-  heightWeightSection: {
-    backgroundColor: 'rgba(7, 187, 192, 0.05)',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    marginHorizontal: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(7,187,192,0.1)',
+  trainerActions: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    marginTop: 20,
   },
-  sectionTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-    letterSpacing: 0,
-  },
-  sectionHint: {
-    color: 'rgba(107,134,147,0.8)',
-    fontSize: 12,
-    marginBottom: 14,
-  },
-  hwRow: {
+  trainerPrimaryIcon: { marginRight: 10 },
+  trainerPrimaryBtn: {
     flexDirection: 'row',
-    gap: 14,
-  },
-  hwField: {
-    flex: 1,
-  },
-  hwLabel: {
-    color: 'rgba(107,134,147,0.9)',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  hwInput: {
-    backgroundColor: '#021422',
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: 'rgba(7,187,192,0.2)',
-    color: '#FFFFFF',
-    fontSize: 15,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  saveStatsBtn: {
-    backgroundColor: '#07bbc0',
-    borderRadius: 10,
-    paddingVertical: 11,
     alignItems: 'center',
-    marginTop: 14,
+    justifyContent: 'center',
+    backgroundColor: '#07bbc0',
+    paddingVertical: 14,
+    borderRadius: 12,
     shadowColor: '#07bbc0',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 4,
   },
-  saveStatsBtnText: {
+  trainerPrimaryBtnText: {
     color: '#041527',
-    fontWeight: '600',
-    fontSize: 14,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  trainerSecondaryIcon: { marginRight: 10 },
+  trainerSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(7, 187, 192, 0.12)',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(7, 187, 192, 0.35)',
+    marginTop: 12,
+  },
+  trainerSecondaryBtnText: {
+    color: '#07bbc0',
+    fontWeight: '700',
+    fontSize: 15,
   },
   buttonDisabled: {
     opacity: 0.4,

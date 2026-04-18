@@ -14,7 +14,11 @@ export interface Preferences {
   preferredTechnique: string[]; // Multiple selections allowed
   trainingGoal: string[]; // Multiple selections allowed
   dailyModuleTarget?: number; // 1–10 modules per day
-  weeklyModuleTarget?: number; // 3–20 modules per week
+  weeklyModuleTarget?: number; // 3–20 modules per week (derived from daily × training days in settings)
+  /** Training days per week (1–7); with dailyModuleTarget sets weeklyModuleTarget. */
+  trainingDaysPerWeek?: number;
+  /** Planned program length in weeks (1–52); stored for your plan, not used in weekly progress math. */
+  trainingProgramWeeks?: number;
 }
 
 // Past Experience

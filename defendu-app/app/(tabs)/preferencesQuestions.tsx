@@ -201,11 +201,17 @@ export default function SelfDefensePreferencesScreen() {
             return;
           }
 
+          const inferredDays = Math.min(
+            7,
+            Math.max(1, Math.round(weeklyTarget / Math.max(1, dailyTarget)))
+          );
           setPreferences({
             preferredTechnique: selectedTechniques,
             trainingGoal: selectedGoals,
             dailyModuleTarget: dailyTarget,
             weeklyModuleTarget: weeklyTarget,
+            trainingDaysPerWeek: inferredDays,
+            trainingProgramWeeks: 8,
           });
           router.push('/(tabs)/pastexperienceQuestion');
         }}

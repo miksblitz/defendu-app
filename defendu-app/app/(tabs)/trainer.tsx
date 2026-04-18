@@ -368,11 +368,11 @@ export default function TrainerPage() {
                 {isCurrentUserTrainer && (
                   <TouchableOpacity
                     style={styles.publishModuleButton}
-                    onPress={() => router.push('/(tabs)/publish-module' as any)}
+                    onPress={() => router.push('/published-modules')}
                   >
                     <SimpleIcon label="⬆" style={{ marginRight: 6 }} />
                     <Text style={styles.publishModuleButtonText}>
-                      Publish Module
+                      Published modules
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -485,20 +485,20 @@ export default function TrainerPage() {
                         <View style={styles.trainerDetails}>
                           {academyName && (
                             <View style={styles.detailRow}>
-                              <SimpleIcon label="🏫" />
+                              <SimpleIcon label="🏫" style={styles.detailRowIcon} />
                               <Text style={styles.detailText}>{academyName}</Text>
                             </View>
                           )}
                           <View style={styles.detailRow}>
-                            <SimpleIcon label="📍" />
+                            <SimpleIcon label="📍" style={styles.detailRowIcon} />
                             <Text style={styles.detailText}>{location}</Text>
                           </View>
                           <View style={styles.detailRow}>
-                            <SimpleIcon label="📞" />
+                            <SimpleIcon label="📞" style={styles.detailRowIcon} />
                             <Text style={styles.detailText}>{phone}</Text>
                           </View>
                           <View style={styles.detailRow}>
-                            <SimpleIcon label="✉" />
+                            <SimpleIcon label="✉" style={styles.detailRowIcon} />
                             <Text style={styles.detailText}>{email}</Text>
                           </View>
                         </View>
@@ -976,7 +976,6 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   logoImage: {
     width: 180,
@@ -1013,7 +1012,6 @@ const styles = StyleSheet.create({
   topControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     marginBottom: 10,
   },
   registerButton: {
@@ -1054,6 +1052,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1fd5de',
     flex: 1,
+    marginRight: 10,
   },
   searchIcon: {
     marginRight: 10,
@@ -1168,7 +1167,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: 'rgba(7, 187, 192, 0.12)',
     borderWidth: 1,
     borderColor: 'rgba(7, 187, 192, 0.24)',
@@ -1181,19 +1179,21 @@ const styles = StyleSheet.create({
     color: '#e9f8fd',
     fontSize: 12,
     fontWeight: '800',
+    marginRight: 4,
   },
   ratingPillCount: {
     color: '#90b1c0',
     fontSize: 11,
     fontWeight: '600',
   },
-  trainerDetails: {
-    gap: 8,
-  },
+  trainerDetails: {},
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    marginBottom: 8,
+  },
+  detailRowIcon: {
+    marginRight: 8,
   },
   detailText: {
     fontSize: 14,
@@ -1526,6 +1526,7 @@ const styles = StyleSheet.create({
     color: '#f0c14b',
     fontSize: 12,
     lineHeight: 14,
+    marginRight: 4,
   },
   emptyIcon: {
     fontSize: 36,

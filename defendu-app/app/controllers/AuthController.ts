@@ -16,6 +16,12 @@ import { SkillProfile } from '../_models/SkillProfile';
 import { TrainerApplication } from '../_models/TrainerApplication';
 import { ForgotPasswordData, LoginData, RegisterData, User } from '../_models/User';
 import { SEED_TEST_MODULES } from '../_seed/testModules';
+import {
+  clampDailyModuleTarget,
+  clampTrainingDaysPerWeek,
+  clampTrainingProgramWeeks,
+  computeWeeklyModuleTargetFromSchedule,
+} from '../_utils/moduleTargets';
 import { getExpoApiBaseUrl } from '../../constants/apiBaseUrl';
 import { auth, cloudinaryConfig, db } from '../config/firebaseConfig';
 import { MessageController } from './MessageController';
@@ -175,6 +181,8 @@ export class AuthController {
         trainingGoal: this.normalizeArray(userDataRaw.trainingGoal),
         dailyModuleTarget: userDataRaw.dailyModuleTarget,
         weeklyModuleTarget: userDataRaw.weeklyModuleTarget,
+        trainingDaysPerWeek: userDataRaw.trainingDaysPerWeek,
+        trainingProgramWeeks: userDataRaw.trainingProgramWeeks,
         experienceLevel: userDataRaw.experienceLevel,
         martialArtsBackground: this.normalizeArray(userDataRaw.martialArtsBackground),
         previousTrainingDetails: userDataRaw.previousTrainingDetails,
@@ -444,6 +452,8 @@ export class AuthController {
         trainingGoal: this.normalizeArray(userDataRaw.trainingGoal),
         dailyModuleTarget: userDataRaw.dailyModuleTarget,
         weeklyModuleTarget: userDataRaw.weeklyModuleTarget,
+        trainingDaysPerWeek: userDataRaw.trainingDaysPerWeek,
+        trainingProgramWeeks: userDataRaw.trainingProgramWeeks,
         experienceLevel: userDataRaw.experienceLevel,
         martialArtsBackground: this.normalizeArray(userDataRaw.martialArtsBackground),
         previousTrainingDetails: userDataRaw.previousTrainingDetails,
@@ -586,6 +596,12 @@ export class AuthController {
           ...(typeof profile.preferences.weeklyModuleTarget === 'number'
             ? { weeklyModuleTarget: profile.preferences.weeklyModuleTarget }
             : {}),
+          ...(typeof profile.preferences.trainingDaysPerWeek === 'number'
+            ? { trainingDaysPerWeek: profile.preferences.trainingDaysPerWeek }
+            : {}),
+          ...(typeof profile.preferences.trainingProgramWeeks === 'number'
+            ? { trainingProgramWeeks: profile.preferences.trainingProgramWeeks }
+            : {}),
         },
         pastExperience: {
           experienceLevel: profile.pastExperience.experienceLevel,
@@ -649,6 +665,12 @@ export class AuthController {
       }
       if (typeof profile.preferences.weeklyModuleTarget === 'number') {
         userUpdates.weeklyModuleTarget = profile.preferences.weeklyModuleTarget;
+      }
+      if (typeof profile.preferences.trainingDaysPerWeek === 'number') {
+        userUpdates.trainingDaysPerWeek = profile.preferences.trainingDaysPerWeek;
+      }
+      if (typeof profile.preferences.trainingProgramWeeks === 'number') {
+        userUpdates.trainingProgramWeeks = profile.preferences.trainingProgramWeeks;
       }
 
       console.log('🔵 Saving skill profile data to user record:', JSON.stringify(userUpdates, null, 2));
@@ -1061,6 +1083,66 @@ export class AuthController {
     }
     const updatedUser = { ...currentUser, ...userUpdates };
     await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+  }
+
+  /**
+   * Settings: height/weight plus training schedule. Weekly module target is computed as
+   * clamp(daily × training days) to match the dashboard weekly goal.
+   */
+  static async updateSettingsBodyAndTrainingGoals(updates: {
+    height?: number;
+    weight?: number;
+    dailyModuleTarget: number;
+    trainingDaysPerWeek: number;
+    trainingProgramWeeks: number;
+  }): Promise<void> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) throw new Error('User not authenticated');
+
+    const daily = clampDailyModuleTarget(updates.dailyModuleTarget);
+    const days = clampTrainingDaysPerWeek(updates.trainingDaysPerWeek);
+    const weeks = clampTrainingProgramWeeks(updates.trainingProgramWeeks);
+    const weekly = computeWeeklyModuleTargetFromSchedule(daily, days);
+
+    const profileSnap = await get(ref(db, `skillProfiles/${currentUser.uid}`));
+    if (!profileSnap.exists()) {
+      throw new Error('Skill profile not found. Complete onboarding first.');
+    }
+
+    if (updates.height !== undefined || updates.weight !== undefined) {
+      await this.updateUserProfile({
+        ...(updates.height !== undefined && { height: updates.height }),
+        ...(updates.weight !== undefined && { weight: updates.weight }),
+      });
+    }
+
+    await update(ref(db, `skillProfiles/${currentUser.uid}/preferences`), {
+      dailyModuleTarget: daily,
+      weeklyModuleTarget: weekly,
+      trainingDaysPerWeek: days,
+      trainingProgramWeeks: weeks,
+    });
+
+    await update(ref(db, `users/${currentUser.uid}`), {
+      dailyModuleTarget: daily,
+      weeklyModuleTarget: weekly,
+      trainingDaysPerWeek: days,
+      trainingProgramWeeks: weeks,
+    });
+
+    const after = await this.getCurrentUser();
+    if (after) {
+      await AsyncStorage.setItem(
+        'user',
+        JSON.stringify({
+          ...after,
+          dailyModuleTarget: daily,
+          weeklyModuleTarget: weekly,
+          trainingDaysPerWeek: days,
+          trainingProgramWeeks: weeks,
+        })
+      );
+    }
   }
 
   /** Fetch skill profile height/weight for current user. */
@@ -2387,6 +2469,84 @@ export class AuthController {
       console.error('Error fetching approved modules:', error);
       throw new Error(error.message || 'Failed to fetch modules');
     }
+  }
+
+  /**
+   * Trainer's own modules: reads `trainerModules/{uid}` then enriches from `modules/{id}` when allowed.
+   */
+  static async getMyTrainerPublishedModulesList(): Promise<
+    Array<{
+      moduleId: string;
+      moduleTitle: string;
+      status: string;
+      category?: string;
+      thumbnailUrl?: string;
+      updatedAt?: number;
+      createdAt?: number;
+      submittedAt?: number;
+    }>
+  > {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser) throw new Error('User not authenticated');
+
+    const idxSnap = await get(ref(db, `trainerModules/${currentUser.uid}`));
+    if (!idxSnap.exists()) return [];
+
+    const idxVal = idxSnap.val() as Record<string, Record<string, unknown>>;
+    const out: Array<{
+      moduleId: string;
+      moduleTitle: string;
+      status: string;
+      category?: string;
+      thumbnailUrl?: string;
+      updatedAt?: number;
+      createdAt?: number;
+      submittedAt?: number;
+    }> = [];
+
+    for (const moduleId of Object.keys(idxVal)) {
+      const meta = idxVal[moduleId] || {};
+      let moduleTitle = typeof meta.moduleTitle === 'string' ? meta.moduleTitle : moduleId;
+      let status = typeof meta.status === 'string' ? meta.status : 'draft';
+      let category: string | undefined;
+      let thumbnailUrl: string | undefined;
+      let updatedAt: number | undefined = typeof meta.updatedAt === 'number' ? meta.updatedAt : undefined;
+      let createdAt: number | undefined = typeof meta.createdAt === 'number' ? meta.createdAt : undefined;
+      let submittedAt: number | undefined = typeof meta.submittedAt === 'number' ? meta.submittedAt : undefined;
+
+      try {
+        const modSnap = await get(ref(db, `modules/${moduleId}`));
+        if (modSnap.exists()) {
+          const raw = modSnap.val();
+          if (raw && typeof raw === 'object') {
+            const m = this.moduleFromDbSnapshot(moduleId, raw as Record<string, any>);
+            moduleTitle = m.moduleTitle || moduleTitle;
+            status = typeof m.status === 'string' ? m.status : status;
+            category = m.category;
+            thumbnailUrl = m.thumbnailUrl;
+            updatedAt = m.updatedAt?.getTime?.() ?? updatedAt;
+            createdAt = m.createdAt?.getTime?.() ?? createdAt;
+            submittedAt = m.submittedAt?.getTime?.() ?? submittedAt;
+          }
+        }
+      } catch (e) {
+        console.warn('getMyTrainerPublishedModulesList: module fetch', moduleId, e);
+      }
+
+      out.push({
+        moduleId,
+        moduleTitle,
+        status,
+        category,
+        thumbnailUrl,
+        updatedAt,
+        createdAt,
+        submittedAt,
+      });
+    }
+
+    out.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    return out;
   }
 
   // Get a single module by ID for user viewing (returns only if approved)
