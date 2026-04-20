@@ -27,6 +27,13 @@ const MOBILE_BREAKPOINT = 768;
 
 const MAX_CERT_FILE_BYTES = 10 * 1024 * 1024;
 
+function isAllowedCertificationImage(p: { type: string; name: string }): boolean {
+  const t = String(p.type || '').toLowerCase();
+  if (t.startsWith('image/')) return true;
+  const lower = String(p.name || '').toLowerCase();
+  return /\.(jpe?g|png|gif|webp|heic|bmp)$/.test(lower);
+}
+
 type CertFileRow = {
   id: string;
   name: string;
@@ -44,12 +51,7 @@ function newCertFileId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }
 
-async function uploadCertToCloudinary(localUri: string, fileName: string, mimeType: string): Promise<string> {
-  const lower = fileName.toLowerCase();
-  const isPdf = mimeType === 'application/pdf' || lower.endsWith('.pdf');
-  if (isPdf) {
-    return AuthController.uploadDocumentToCloudinary(localUri, fileName);
-  }
+async function uploadTrainerCertImageToCloudinary(localUri: string, fileName: string): Promise<string> {
   return AuthController.uploadFileToCloudinary(localUri, 'image', fileName);
 }
 
@@ -168,6 +170,10 @@ export default function TrainerRegistrationScreen() {
     (picks: Array<{ name: string; uri: string; type: string; size: number }>) => {
       const accepted: CertFileRow[] = [];
       for (const p of picks) {
+        if (!isAllowedCertificationImage(p)) {
+          showToast(`${p.name} is not an image. Only image files are allowed.`);
+          continue;
+        }
         if (p.size > MAX_CERT_FILE_BYTES) {
           showToast(`${p.name} exceeds 10MB and was skipped`);
           continue;
@@ -189,7 +195,7 @@ export default function TrainerRegistrationScreen() {
         const localUri = row.uri;
         void (async () => {
           try {
-            const secureUrl = await uploadCertToCloudinary(localUri, row.name, row.type);
+            const secureUrl = await uploadTrainerCertImageToCloudinary(localUri, row.name);
             setUploadedFiles((prev) => {
               if (!prev.some((f) => f.id === row.id)) return prev;
               return prev.map((f) =>
@@ -447,7 +453,7 @@ export default function TrainerRegistrationScreen() {
     const yearsTeachingError = !yearsTeaching ? 'Years of teaching experience is required' : '';
     let uploadedFilesError = '';
     if (uploadedFiles.length === 0) {
-      uploadedFilesError = 'Please upload at least one certification file';
+      uploadedFilesError = 'Please upload at least one certification image';
     } else if (uploadedFiles.some((f) => f.uploading)) {
       uploadedFilesError = 'Please wait for all files to finish uploading';
     } else if (uploadedFiles.some((f) => f.uploadError)) {
@@ -459,7 +465,7 @@ export default function TrainerRegistrationScreen() {
         (f) => !f.uploading && !f.uploadError && (f.uri.startsWith('http://') || f.uri.startsWith('https://'))
       );
       if (ready.length === 0) {
-        uploadedFilesError = 'Please upload at least one valid certification file';
+        uploadedFilesError = 'Please upload at least one valid certification image';
       }
     }
     const certifyAccurateError = !certifyAccurate ? 'You must certify that all information is accurate' : '';
@@ -572,7 +578,7 @@ export default function TrainerRegistrationScreen() {
       } else {
         // For native, use expo-document-picker
         const result = await DocumentPicker.getDocumentAsync({
-          type: ['application/pdf', 'image/*'],
+          type: ['image/*'],
           multiple: true,
           copyToCacheDirectory: true,
         });
@@ -593,13 +599,21 @@ export default function TrainerRegistrationScreen() {
   };
 
   const handleWebFileChange = (event: any) => {
-    const files = Array.from(event.target.files || []);
-    const newFiles = files.map((file: any) => ({
-      name: file.name,
-      uri: URL.createObjectURL(file),
-      type: file.type,
-      size: file.size,
-    }));
+    const files = Array.from(event.target.files || []) as { name: string; type: string; size: number }[];
+    const newFiles = files
+      .filter((file: any) => {
+        if (!file.type?.startsWith?.('image/')) {
+          showToast(`${file.name} is not an image. Only image files are allowed.`);
+          return false;
+        }
+        return true;
+      })
+      .map((file: any) => ({
+        name: file.name,
+        uri: URL.createObjectURL(file),
+        type: file.type,
+        size: file.size,
+      }));
     enqueueCertFiles(newFiles);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -650,7 +664,10 @@ export default function TrainerRegistrationScreen() {
         const files = Array.from(e.dataTransfer?.files || []);
         const validFiles = files.filter((file: File) => {
           const type = file.type || '';
-          return type.startsWith('image/') || type === 'application/pdf';
+          if (!type.startsWith('image/')) {
+            return false;
+          }
+          return true;
         });
 
         const newFiles = validFiles.map((file: File) => ({
@@ -692,14 +709,7 @@ export default function TrainerRegistrationScreen() {
     });
   };
 
-  const getFileIcon = (type: string) => {
-    if (type === 'application/pdf' || type.includes('pdf')) {
-      return 'document-text';
-    } else if (type.startsWith('image/')) {
-      return 'image';
-    }
-    return 'document';
-  };
+  const getFileIcon = (_type: string) => 'image';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1484,8 +1494,8 @@ export default function TrainerRegistrationScreen() {
                   </View>
                   {isMobile && <Text style={styles.stepOfTotal}>Step 3 of 5</Text>}
                 </View>
-                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Certification documents</Text>
-                <Text style={[styles.sectionHint, isMobile && styles.sectionHintMobile]}>Upload at least one file (PDF or image) that shows your credentials. Max 10MB per file.</Text>
+                <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Certification images</Text>
+                <Text style={[styles.sectionHint, isMobile && styles.sectionHintMobile]}>Upload at least one image (JPEG, PNG, etc.) that shows your credentials. Files upload to Cloudinary. Max 10MB per image.</Text>
                 {Platform.OS === 'web' ? (
                   <div
                     ref={uploadAreaRef}
@@ -1512,14 +1522,14 @@ export default function TrainerRegistrationScreen() {
                         {isDragging ? 'Drop files here' : 'Click to upload or drag files here'}
                       </div>
                       <div style={{ color: '#6b8693', fontSize: 12, marginTop: 8 }}>
-                        PDF or image. Max 10MB each.
+                        Images only. Max 10MB each.
                       </div>
                     </div>
                     <input
                       ref={fileInputRef}
                       type="file"
                       multiple
-                      accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*"
+                      accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.heic"
                       style={{ display: 'none' }}
                       onChange={handleWebFileChange}
                     />
@@ -1545,7 +1555,7 @@ export default function TrainerRegistrationScreen() {
                         {isMobile ? 'Tap to add files' : 'Tap to upload files'}
                       </Text>
                       <Text style={styles.uploadSubtext}>
-                        PDF or image, max 10MB each
+                        Images only, max 10MB each
                       </Text>
                     </View>
                   </TouchableOpacity>

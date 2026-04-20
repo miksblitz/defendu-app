@@ -27,8 +27,10 @@ import Toast from '../../components/Toast';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { TrainerApplication } from '../_models/TrainerApplication';
+import { Module } from '../_models/Module';
 import { AuthController } from '../controllers/AuthController';
 import { isStableRemoteImageUri } from '../../utils/imageUri';
+import * as DocumentPicker from 'expo-document-picker';
 
 type ExtendedTrainerApplication = TrainerApplication & { 
   firstName?: string; 
@@ -80,6 +82,17 @@ function InlinePdfEmbedWeb({ uri, title }: { uri: string; title: string }) {
 }
 
 const PAGE_SIZE = 10;
+const MAX_TRAINER_CERT_IMAGE_BYTES = 10 * 1024 * 1024;
+
+function formatMartialArtsFromApplication(
+  app: Pick<TrainerApplication, 'defenseStyles'> & { specialty?: string }
+): string {
+  if (app.defenseStyles && app.defenseStyles.length > 0) {
+    return app.defenseStyles.join(', ');
+  }
+  const s = (app.specialty || '').trim();
+  return s || 'N/A';
+}
 
 export default function ManageTrainersPage() {
   const { width } = useWindowDimensions();
@@ -103,6 +116,11 @@ export default function ManageTrainersPage() {
   });
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
+  const adminReplaceInputRef = useRef<any>(null);
+  const replaceIndexRef = useRef<number | null>(null);
+  const [replacingFileIndex, setReplacingFileIndex] = useState<number | null>(null);
+  const [detailTrainerModules, setDetailTrainerModules] = useState<Module[]>([]);
+  const [detailModulesLoading, setDetailModulesLoading] = useState(false);
   
   // Animation refs
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -111,6 +129,30 @@ export default function ManageTrainersPage() {
   useEffect(() => {
     loadAllData();
   }, []);
+
+  useEffect(() => {
+    const uid = selectedApplication?.uid;
+    if (!uid) {
+      setDetailTrainerModules([]);
+      setDetailModulesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDetailModulesLoading(true);
+    AuthController.getModulesForTrainerAdmin(uid)
+      .then((mods) => {
+        if (!cancelled) setDetailTrainerModules(mods);
+      })
+      .catch(() => {
+        if (!cancelled) setDetailTrainerModules([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailModulesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedApplication?.uid]);
   
   useEffect(() => {
     if (!loading) {
@@ -140,7 +182,13 @@ export default function ManageTrainersPage() {
       const fullName = `${app.firstName} ${app.lastName}`.toLowerCase();
       const email = (app.email ?? '').toLowerCase();
       const specialty = (app.specialty || '').toLowerCase();
-      return fullName.includes(query) || email.includes(query) || specialty.includes(query);
+      const martial = (app.defenseStyles || []).join(' ').toLowerCase();
+      return (
+        fullName.includes(query) ||
+        email.includes(query) ||
+        specialty.includes(query) ||
+        martial.includes(query)
+      );
     });
   }, [applications, searchQuery]);
   const filteredApprovedTrainers = useMemo(() => {
@@ -151,7 +199,14 @@ export default function ManageTrainersPage() {
       const email = trainer.email.toLowerCase();
       const specialty = (trainer.specialty || '').toLowerCase();
       const description = (trainer.description || '').toLowerCase();
-      return fullName.includes(query) || email.includes(query) || specialty.includes(query) || description.includes(query);
+      const martial = (trainer.application?.defenseStyles || []).join(' ').toLowerCase();
+      return (
+        fullName.includes(query) ||
+        email.includes(query) ||
+        specialty.includes(query) ||
+        description.includes(query) ||
+        martial.includes(query)
+      );
     });
   }, [approvedTrainers, searchQuery]);
 
@@ -346,6 +401,117 @@ export default function ManageTrainersPage() {
     }
   };
 
+  const runTrainerCertReplacement = async (
+    index: number,
+    local: { name: string; uri: string; type: string; size: number }
+  ) => {
+    const app = selectedApplication;
+    if (!app?.uid || !app.uploadedFiles?.[index]) return;
+    setReplacingFileIndex(index);
+    try {
+      const secureUrl = await AuthController.uploadFileToCloudinary(local.uri, 'image', local.name);
+      if (Platform.OS === 'web' && local.uri.startsWith('blob:')) {
+        URL.revokeObjectURL(local.uri);
+      }
+      const stored: TrainerUploadFile = {
+        name: local.name,
+        uri: secureUrl,
+        type: local.type.startsWith('image/') ? local.type : 'image/jpeg',
+        size: local.size,
+      };
+      await AuthController.adminReplaceTrainerApplicationUpload(app.uid, index, stored);
+      const prevFiles = app.uploadedFiles || [];
+      const nextFiles = [...prevFiles];
+      nextFiles[index] = stored;
+      setSelectedApplication({ ...app, uploadedFiles: nextFiles });
+      setApplications((prev) =>
+        prev.map((a) => (a.uid === app.uid ? { ...a, uploadedFiles: nextFiles } : a))
+      );
+      setApprovedTrainers((prev) =>
+        prev.map((t) =>
+          t.uid === app.uid && t.application
+            ? { ...t, application: { ...t.application, uploadedFiles: nextFiles } }
+            : t
+        )
+      );
+      showToast('Certification image updated');
+    } catch (e: any) {
+      showToast(e?.message || 'Failed to update image');
+    } finally {
+      setReplacingFileIndex(null);
+    }
+  };
+
+  const handleReplaceTrainerCertNative = async (index: number) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const name = asset.name || 'certification.jpg';
+      const type = asset.mimeType || 'image/jpeg';
+      const size = asset.size ?? 0;
+      if (!String(type).toLowerCase().startsWith('image/')) {
+        showToast('Please choose an image file');
+        return;
+      }
+      if (size > MAX_TRAINER_CERT_IMAGE_BYTES) {
+        showToast('Image must be 10MB or smaller');
+        return;
+      }
+      await runTrainerCertReplacement(index, {
+        name,
+        uri: asset.uri,
+        type,
+        size,
+      });
+    } catch (e: any) {
+      showToast(e?.message || 'Could not select image');
+    }
+  };
+
+  const handleAdminReplaceWebChange = (event: any) => {
+    const index = replaceIndexRef.current;
+    const files = Array.from(event.target?.files || []) as File[];
+    if (event.target) event.target.value = '';
+    if (index === null || !files.length) {
+      replaceIndexRef.current = null;
+      return;
+    }
+    const file = files[0];
+    if (!file.type.startsWith('image/')) {
+      showToast('Please choose an image file');
+      replaceIndexRef.current = null;
+      return;
+    }
+    if (file.size > MAX_TRAINER_CERT_IMAGE_BYTES) {
+      showToast('Image must be 10MB or smaller');
+      replaceIndexRef.current = null;
+      return;
+    }
+    replaceIndexRef.current = null;
+    const uri = URL.createObjectURL(file);
+    void runTrainerCertReplacement(index, {
+      name: file.name,
+      uri,
+      type: file.type,
+      size: file.size,
+    });
+  };
+
+  const startReplaceTrainerUpload = (index: number) => {
+    if (!selectedApplication?.uploadedFiles?.[index] || replacingFileIndex !== null) return;
+    replaceIndexRef.current = index;
+    if (Platform.OS === 'web') {
+      adminReplaceInputRef.current?.click?.();
+    } else {
+      replaceIndexRef.current = null;
+      void handleReplaceTrainerCertNative(index);
+    }
+  };
+
   const handleViewTrainerApplication = (trainer: ApprovedTrainerRow) => {
     if (!trainer.application) {
       Alert.alert('No application found', 'This trainer does not have a stored application record.');
@@ -406,9 +572,13 @@ export default function ManageTrainersPage() {
     },
     {
       key: 'specialty',
-      title: 'Specialty',
-      minWidth: 150,
-      render: (application) => <Text style={styles.cellText}>{application.specialty || 'N/A'}</Text>,
+      title: 'Martial arts',
+      minWidth: 220,
+      render: (application) => (
+        <Text style={styles.cellText} numberOfLines={3}>
+          {formatMartialArtsFromApplication(application)}
+        </Text>
+      ),
     },
     {
       key: 'status',
@@ -474,7 +644,11 @@ export default function ManageTrainersPage() {
       flex: 2,
       render: (trainer) => (
         <View>
-          <Text style={styles.cellText}>{trainer.specialty || 'N/A'}</Text>
+          <Text style={styles.cellText} numberOfLines={2}>
+            {trainer.application
+              ? formatMartialArtsFromApplication(trainer.application)
+              : trainer.specialty || 'N/A'}
+          </Text>
           <Text style={styles.cellSubtleText} numberOfLines={2}>
             {trainer.description?.trim() || 'No trainer description provided.'}
           </Text>
@@ -607,12 +781,52 @@ export default function ManageTrainersPage() {
                     Applied: <Text style={styles.detailHighlight}>{formatDate(selectedApplication.appliedDate)}</Text>
                   </Text>
                   <Text style={styles.detailInfoLine}>
-                    Specialty: <Text style={styles.detailHighlight}>{selectedApplication.specialty || 'N/A'}</Text>
-                  </Text>
-                  <Text style={styles.detailInfoLine}>
-                    Status: <Text style={styles.detailHighlight}>{selectedApplication.status}</Text>
+                    Martial arts:{' '}
+                    <Text style={styles.detailHighlight}>
+                      {formatMartialArtsFromApplication(selectedApplication)}
+                    </Text>
                   </Text>
                 </View>
+              </View>
+
+              {/* Modules uploaded by this trainer (any status) */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Modules from this trainer</Text>
+                {detailModulesLoading ? (
+                  <View style={styles.detailModulesLoadingRow}>
+                    <ActivityIndicator size="small" color="#38a6de" />
+                    <Text style={styles.detailModulesLoadingText}>Loading modules…</Text>
+                  </View>
+                ) : detailTrainerModules.length === 0 ? (
+                  <Text style={styles.detailModulesEmpty}>No modules linked to this trainer yet.</Text>
+                ) : (
+                  <View style={styles.detailModulesList}>
+                    {detailTrainerModules.map((m) => (
+                      <TouchableOpacity
+                        key={m.moduleId}
+                        style={styles.detailModuleRow}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/(admin)/module-detail',
+                            params: { moduleId: m.moduleId },
+                          })
+                        }
+                        activeOpacity={0.75}
+                      >
+                        <View style={styles.detailModuleRowText}>
+                          <Text style={styles.detailModuleTitle} numberOfLines={2}>
+                            {m.moduleTitle || m.moduleId}
+                          </Text>
+                          <Text style={styles.detailModuleMeta} numberOfLines={1}>
+                            {m.category ? `${m.category} · ` : ''}
+                            {m.status}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color="#6b8693" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
 
               {/* Personal Information */}
@@ -769,6 +983,24 @@ export default function ManageTrainersPage() {
                             <Text style={styles.inlineUploadName} numberOfLines={3}>
                               {file.name}
                             </Text>
+                            <TouchableOpacity
+                              style={[
+                                styles.inlineEditUploadButton,
+                                replacingFileIndex !== null && styles.inlineEditUploadButtonDisabled,
+                              ]}
+                              onPress={() => startReplaceTrainerUpload(index)}
+                              disabled={replacingFileIndex !== null}
+                              accessibilityLabel="Replace certification image"
+                            >
+                              {replacingFileIndex === index ? (
+                                <ActivityIndicator size="small" color="#9bd8ff" />
+                              ) : (
+                                <>
+                                  <Ionicons name="create-outline" size={16} color="#9bd8ff" />
+                                  <Text style={styles.inlineEditUploadButtonText}>Edit</Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
                           </View>
                           {!file.uri?.trim() ? (
                             <Text style={styles.inlineUploadMissing}>
@@ -880,6 +1112,15 @@ export default function ManageTrainersPage() {
           onHide={hideToast}
           duration={3000}
         />
+        {Platform.OS === 'web' ? (
+          <input
+            ref={adminReplaceInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleAdminReplaceWebChange}
+          />
+        ) : null}
         <Modal visible={showRevokeModal} transparent animationType="fade" onRequestClose={() => setShowRevokeModal(false)}>
           <View style={styles.confirmOverlay}>
             <View style={styles.confirmCard}>
@@ -1025,8 +1266,8 @@ export default function ManageTrainersPage() {
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder={viewMode === 'applications'
-                ? 'Search applications by name, email, or specialty'
-                : 'Search trainers by name, email, specialty, or description'}
+                ? 'Search applications by name, email, or martial arts'
+                : 'Search trainers by name, email, martial arts, or description'}
             />
           </Animated.View>
 
@@ -1501,6 +1742,50 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textTransform: 'uppercase',
   },
+  detailModulesLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  detailModulesLoadingText: {
+    color: '#97aeb9',
+    fontSize: 14,
+    fontFamily: 'system-ui',
+  },
+  detailModulesEmpty: {
+    color: '#97aeb9',
+    fontSize: 14,
+    fontStyle: 'italic',
+    fontFamily: 'system-ui',
+  },
+  detailModulesList: {
+    gap: 8,
+  },
+  detailModuleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(4, 28, 45, 0.95)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.28)',
+  },
+  detailModuleRowText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  detailModuleTitle: {
+    color: '#def2ff',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'system-ui',
+  },
+  detailModuleMeta: {
+    color: '#97aeb9',
+    fontSize: 12,
+    marginTop: 4,
+    fontFamily: 'system-ui',
+  },
   detailInfoContainer: {
     gap: 8,
   },
@@ -1550,6 +1835,26 @@ const styles = StyleSheet.create({
     color: '#def2ff',
     fontSize: 14,
     fontWeight: '600',
+    fontFamily: 'system-ui',
+  },
+  inlineEditUploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(56, 166, 222, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 166, 222, 0.4)',
+  },
+  inlineEditUploadButtonDisabled: {
+    opacity: 0.55,
+  },
+  inlineEditUploadButtonText: {
+    color: '#9bd8ff',
+    fontSize: 12,
+    fontWeight: '700',
     fontFamily: 'system-ui',
   },
   inlineUploadMissing: {

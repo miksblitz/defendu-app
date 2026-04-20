@@ -1802,6 +1802,54 @@ export class AuthController {
     }
   }
 
+  /**
+   * Admin-only: replace one entry in a trainer application's `uploadedFiles` (e.g. certification image URL).
+   * Expects `file.uri` to already be a Cloudinary HTTPS URL from the client upload flow.
+   */
+  static async adminReplaceTrainerApplicationUpload(
+    applicantUid: string,
+    fileIndex: number,
+    file: TrainerApplication['uploadedFiles'][number]
+  ): Promise<void> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser || currentUser.role !== 'admin') {
+        throw new Error('Permission denied. Admin access required.');
+      }
+
+      const uri = String(file.uri || '').trim();
+      if (!uri.startsWith('http://') && !uri.startsWith('https://')) {
+        throw new Error('Invalid file URL');
+      }
+      const mime = String(file.type || '').toLowerCase();
+      if (!mime.startsWith('image/')) {
+        throw new Error('Only image files are allowed');
+      }
+
+      const app = await this.getTrainerApplicationData(applicantUid);
+      if (!app || !Array.isArray(app.uploadedFiles)) {
+        throw new Error('Trainer application not found');
+      }
+      if (fileIndex < 0 || fileIndex >= app.uploadedFiles.length) {
+        throw new Error('Invalid file index');
+      }
+
+      const next = [...app.uploadedFiles];
+      next[fileIndex] = {
+        name: file.name,
+        uri,
+        type: file.type,
+        size: file.size,
+      };
+
+      await update(ref(db, `TrainerApplication/${applicantUid}`), { uploadedFiles: next });
+      console.log('✅ Admin updated trainer application upload for:', applicantUid, 'index:', fileIndex);
+    } catch (error: any) {
+      console.error('❌ Error admin-replacing trainer upload:', error);
+      throw new Error(error.message || 'Failed to update certification file');
+    }
+  }
+
   // Block user (admin only)
   static async blockUser(uid: string): Promise<void> {
     try {
@@ -2230,6 +2278,59 @@ export class AuthController {
       }
       
       throw new Error(error.message || 'Failed to fetch modules');
+    }
+  }
+
+  /**
+   * Admin: all modules linked to a trainer via `trainerModules/{uid}` (any status).
+   */
+  static async getModulesForTrainerAdmin(trainerUid: string): Promise<Module[]> {
+    try {
+      let currentUser = auth.currentUser;
+      if (!currentUser) {
+        currentUser = await this.waitForAuth();
+      }
+      if (!currentUser) {
+        throw new Error('Permission denied. User must be authenticated.');
+      }
+
+      const currentUserRef = ref(db, `users/${currentUser.uid}`);
+      const currentUserSnapshot = await get(currentUserRef);
+      if (!currentUserSnapshot.exists()) {
+        throw new Error('Permission denied. User data not found.');
+      }
+      const userRole = currentUserSnapshot.val()?.role || 'individual';
+      if (userRole !== 'admin') {
+        throw new Error('Permission denied. Admin access required.');
+      }
+
+      const idxSnap = await get(ref(db, `trainerModules/${trainerUid}`));
+      if (!idxSnap.exists()) {
+        return [];
+      }
+
+      const ids = Object.keys(idxSnap.val() as Record<string, unknown>);
+      const modules: Module[] = [];
+
+      for (const moduleId of ids) {
+        try {
+          const modSnap = await get(ref(db, `modules/${moduleId}`));
+          if (modSnap.exists()) {
+            const raw = modSnap.val();
+            if (raw && typeof raw === 'object') {
+              modules.push(this.moduleFromDbSnapshot(moduleId, raw as Record<string, any>));
+            }
+          }
+        } catch (e) {
+          console.warn('getModulesForTrainerAdmin: skip', moduleId, e);
+        }
+      }
+
+      modules.sort((a, b) => (b.updatedAt?.getTime?.() ?? 0) - (a.updatedAt?.getTime?.() ?? 0));
+      return modules;
+    } catch (error: any) {
+      console.error('❌ Error getModulesForTrainerAdmin:', error);
+      throw new Error(error.message || 'Failed to fetch trainer modules');
     }
   }
 

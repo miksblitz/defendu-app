@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
-import { AuthController } from '../controllers/AuthController';
+import { getExpoApiBaseUrl } from '../../constants/apiBaseUrl';
 
 const INPUT_BG = '#031220';
 
@@ -183,7 +183,6 @@ export default function SignUpScreen() {
     setErrors(prev => ({ ...prev, confirmPassword: error }));
   };
 
-  // TEMPORARY: create account immediately (OTP / email verification disabled). Re-enable OTP by restoring register-send-otp + verificationcode flow.
   const handleCreateAccount = async () => {
     const firstNameError = validateName(form.firstName, 'First name');
     const lastNameError = validateName(form.lastName, 'Last name');
@@ -211,21 +210,30 @@ export default function SignUpScreen() {
 
     setLoading(true);
     try {
-      await AuthController.register({
-        email: form.email.trim(),
-        password: form.password,
-        firstName: form.firstName.trim(),
-        lastName: form.lastName.trim(),
+      const email = form.email.trim().toLowerCase();
+      const firstName = form.firstName.trim();
+      const lastName = form.lastName.trim();
+      const password = form.password;
+
+      const apiBaseUrl = getExpoApiBaseUrl();
+      const otpRes = await fetch(`${apiBaseUrl}/api/register-send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       });
-      try {
-        await AuthController.logout();
-      } catch (signOutErr) {
-        console.error('Post-registration sign-out failed:', signOutErr);
+      const otpData = await otpRes.json();
+      if (!otpRes.ok) {
+        showToast(otpData.error || 'Failed to send verification code. Please try again.');
+        return;
       }
-      showToast('Account created. Please sign in.');
-      router.replace('/(auth)/login');
+
+      showToast('Verification code sent to your email.');
+      router.push({
+        pathname: '/(auth)/verificationcode',
+        params: { email, firstName, lastName, password },
+      });
     } catch (error: any) {
-      showToast(error?.message || 'Could not create account. Please try again.');
+      showToast(error?.message || 'Could not send verification code. Please try again.');
     } finally {
       setLoading(false);
     }

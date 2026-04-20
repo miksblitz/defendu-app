@@ -19,6 +19,7 @@ import Toast from '../../components/Toast';
 import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { TrainerApplication } from '../_models/TrainerApplication';
+import { Module } from '../_models/Module';
 import { User } from '../_models/User';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { AuthController } from '../controllers/AuthController';
@@ -71,6 +72,7 @@ export default function TrainerPage() {
   const [showFloatingSearch, setShowFloatingSearch] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isCurrentUserTrainer, setIsCurrentUserTrainer] = useState(false);
+  const [approvedModules, setApprovedModules] = useState<Module[]>([]);
   const scrollY = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -119,6 +121,14 @@ export default function TrainerPage() {
 
       const uids = approvedTrainers.map((t) => t.uid);
       const ratingsMap = await TrainerRatingController.getTrainerRatingSummariesForTrainers(uids);
+
+      let modulesApproved: Module[] = [];
+      try {
+        modulesApproved = await AuthController.getApprovedModules();
+      } catch (e) {
+        console.warn('Trainer page: could not load approved modules list', e);
+      }
+      setApprovedModules(modulesApproved);
 
       const trainersWithData: TrainerWithData[] = await Promise.all(
         approvedTrainers.map(async (trainer) => {
@@ -272,6 +282,11 @@ export default function TrainerPage() {
   };
 
   const isSelectedTrainerCurrentUser = !!selectedTrainer && currentUser?.uid === selectedTrainer.uid;
+
+  const publishedModulesForSelected = useMemo(() => {
+    if (!selectedTrainer) return [];
+    return approvedModules.filter((m) => m.trainerId === selectedTrainer.uid);
+  }, [approvedModules, selectedTrainer]);
 
   const handleTrainerPrimaryAction = () => {
     if (!selectedTrainer) return;
@@ -501,6 +516,14 @@ export default function TrainerPage() {
                             <SimpleIcon label="✉" style={styles.detailRowIcon} />
                             <Text style={styles.detailText}>{email}</Text>
                           </View>
+                          {appData?.defenseStyles && appData.defenseStyles.length > 0 ? (
+                            <View style={styles.detailRow}>
+                              <SimpleIcon label="🥋" style={styles.detailRowIcon} />
+                              <Text style={styles.detailText} numberOfLines={4}>
+                                {appData.defenseStyles.join(', ')}
+                              </Text>
+                            </View>
+                          ) : null}
                         </View>
                       </View>
 
@@ -723,6 +746,41 @@ export default function TrainerPage() {
                         </View>
                       )}
                     </View>
+
+                    {publishedModulesForSelected.length > 0 ? (
+                      <View style={styles.credentialSection}>
+                        <Text style={styles.credentialSectionTitle}>Published training modules</Text>
+                        <Text style={styles.credentialSectionHint}>
+                          Approved modules this trainer has published on Defendu.
+                        </Text>
+                        {publishedModulesForSelected.map((m) => (
+                          <TouchableOpacity
+                            key={m.moduleId}
+                            style={styles.trainerModuleRow}
+                            onPress={() => {
+                              setShowCredentialsModal(false);
+                              router.push({
+                                pathname: '/view-module',
+                                params: { moduleId: m.moduleId },
+                              });
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <View style={styles.trainerModuleRowText}>
+                              <Text style={styles.trainerModuleTitle} numberOfLines={2}>
+                                {m.moduleTitle}
+                              </Text>
+                              {m.category ? (
+                                <Text style={styles.trainerModuleCategory} numberOfLines={1}>
+                                  {m.category}
+                                </Text>
+                              ) : null}
+                            </View>
+                            <SimpleIcon label="›" style={styles.trainerModuleChevron} />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null}
 
                     {/* Social Media Links */}
                     {(selectedTrainer.applicationData.facebookLink || 
@@ -1373,6 +1431,42 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 12,
     textTransform: 'uppercase',
+  },
+  credentialSectionHint: {
+    color: '#6b8693',
+    fontSize: 13,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  trainerModuleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    backgroundColor: 'rgba(7, 187, 192, 0.08)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 187, 192, 0.22)',
+  },
+  trainerModuleRowText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  trainerModuleTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  trainerModuleCategory: {
+    color: '#6b8693',
+    fontSize: 13,
+    marginTop: 4,
+  },
+  trainerModuleChevron: {
+    fontSize: 22,
+    color: '#07bbc0',
+    marginLeft: 8,
   },
   credentialInfoRow: {
     flexDirection: 'row',
