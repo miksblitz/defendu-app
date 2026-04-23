@@ -5,6 +5,7 @@
   "scripts": {
     "start": "expo start",
     "start:web:clear": "expo start --web --clear",
+    "vercel-build": "expo export --platform web",
     "check:api": "node ./scripts/verify-vercel-api.mjs",
     "reset-project": "node ./scripts/reset-project.js",
     "create-admin": "node ./scripts/create-admin.js",

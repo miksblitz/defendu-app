@@ -1,12 +1,17 @@
 {
   "version": 2,
-  "buildCommand": "echo 'No build needed for API routes'",
-  "outputDirectory": ".",
+  "buildCommand": "npm run vercel-build",
+  "outputDirectory": "dist",
   "functions": {
     "api/**/*.ts": {
       "maxDuration": 60
     }
   },
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
