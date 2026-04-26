@@ -463,15 +463,6 @@ export default function ViewModulePage() {
             {step === 'intro' && (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>{module.moduleTitle}</Text>
-                <View style={styles.thumbnailContainer}>
-                  {module.thumbnailUrl ? (
-                    <Image source={{ uri: module.thumbnailUrl }} style={styles.thumbnailImage} resizeMode="cover" />
-                  ) : (
-                    <View style={styles.thumbnailPlaceholder}>
-                      <Ionicons name="fitness" size={64} color="#07bbc0" />
-                    </View>
-                  )}
-                </View>
                 {/* Rating summary - Amazon style */}
                 <View style={styles.ratingRow}>
                   <View style={styles.starsRow}>
@@ -915,15 +906,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 16,
   },
-  thumbnailContainer: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    backgroundColor: '#0a3645',
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  thumbnailImage: { width: '100%', height: '100%' },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1070,12 +1052,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   thankYouText: { color: '#07bbc0', fontSize: 16, fontWeight: '600' },
-  thumbnailPlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   cardDescription: {
     color: '#FFFFFF',
     fontSize: 14,

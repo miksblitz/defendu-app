@@ -765,10 +765,6 @@ export default function DashboardScreen() {
               <View style={styles.weeklyGoalHeader}>
                 <View>
                   <Text style={styles.weeklyGoalTitle}>Weekly Goal</Text>
-                  <Text style={styles.weeklyGoalSubtitle}>
-                    {dailyModuleGoal} module{dailyModuleGoal !== 1 ? 's' : ''} per day • {weeklyModuleGoal} per week •
-                    Resets every Monday
-                  </Text>
                 </View>
                 <View style={styles.weeklyGoalStats}>
                   <Text style={styles.weeklyGoalPercentage}>
@@ -960,6 +956,7 @@ export default function DashboardScreen() {
                               section.phase === 'introduction' ||
                               section.phase === 'cooldown') &&
                             !module.thumbnailUrl;
+                          const hideThumbnailForIntroduction = section.phase === 'introduction';
                           return (
                             <TouchableOpacity
                               key={module.moduleId}
@@ -986,7 +983,11 @@ export default function DashboardScreen() {
                                 </View>
                               </View>
                               <View style={styles.webModuleRowThumbWrap}>
-                                {useGiPlaceholder ? (
+                                {hideThumbnailForIntroduction ? (
+                                  <View style={styles.webModuleThumbGi}>
+                                    <Ionicons name="videocam-outline" size={36} color="#07bbc0" />
+                                  </View>
+                                ) : useGiPlaceholder ? (
                                   <View style={styles.webModuleThumbGi}>
                                     <Ionicons name="body-outline" size={36} color="#07bbc0" />
                                   </View>
@@ -1037,6 +1038,7 @@ export default function DashboardScreen() {
                               const imageSource = module.thumbnailUrl
                                 ? { uri: module.thumbnailUrl }
                                 : require('../../assets/images/managemodulepic.png');
+                              const hideThumbnailForIntroduction = section.phase === 'introduction';
                               return (
                                 <TouchableOpacity
                                   key={module.moduleId}
@@ -1047,20 +1049,33 @@ export default function DashboardScreen() {
                                   onPress={() => selectDashboardModule(module)}
                                   activeOpacity={0.88}
                                 >
-                                  <ImageBackground
-                                    source={imageSource}
-                                    style={styles.mobileLinkedCardBg}
-                                    imageStyle={styles.mobileLinkedCardBgImage}
-                                  >
-                                    <View style={styles.mobileLinkedCardOverlay}>
-                                      <Text style={styles.mobileLinkedCardBadge}>
-                                        {section.badge}
-                                      </Text>
-                                      <Text style={styles.mobileLinkedCardTitle} numberOfLines={2}>
-                                        {module.moduleTitle}
-                                      </Text>
+                                  {hideThumbnailForIntroduction ? (
+                                    <View style={[styles.mobileLinkedCardBg, styles.mobileLinkedCardBgNoImage]}>
+                                      <View style={styles.mobileLinkedCardOverlay}>
+                                        <Text style={styles.mobileLinkedCardBadge}>
+                                          {section.badge}
+                                        </Text>
+                                        <Text style={styles.mobileLinkedCardTitle} numberOfLines={2}>
+                                          {module.moduleTitle}
+                                        </Text>
+                                      </View>
                                     </View>
-                                  </ImageBackground>
+                                  ) : (
+                                    <ImageBackground
+                                      source={imageSource}
+                                      style={styles.mobileLinkedCardBg}
+                                      imageStyle={styles.mobileLinkedCardBgImage}
+                                    >
+                                      <View style={styles.mobileLinkedCardOverlay}>
+                                        <Text style={styles.mobileLinkedCardBadge}>
+                                          {section.badge}
+                                        </Text>
+                                        <Text style={styles.mobileLinkedCardTitle} numberOfLines={2}>
+                                          {module.moduleTitle}
+                                        </Text>
+                                      </View>
+                                    </ImageBackground>
+                                  )}
                                 </TouchableOpacity>
                               );
                             })}
@@ -1371,16 +1386,12 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   weeklyGoalTitle: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '600',
     color: '#FFFFFF',
-    marginBottom: 4,
+    marginBottom: 0,
     letterSpacing: 0.3,
     textTransform: 'uppercase',
-  },
-  weeklyGoalSubtitle: {
-    fontSize: 12,
-    color: 'rgba(107,134,147,0.8)',
   },
   weeklyGoalStats: {
     alignItems: 'flex-end',
@@ -1555,6 +1566,9 @@ const styles = StyleSheet.create({
     width: '100%',
     minHeight: 118,
     justifyContent: 'flex-end',
+  },
+  mobileLinkedCardBgNoImage: {
+    backgroundColor: '#0a3645',
   },
   mobileLinkedCardBgImage: {
     borderRadius: 12,
