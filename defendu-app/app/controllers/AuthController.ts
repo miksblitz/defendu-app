@@ -34,7 +34,25 @@ export interface CategorySegmentProgramRecord {
   updatedAt?: number;
 }
 
+export interface ModuleCategoryMetaRecord {
+  name?: string;
+  thumbnailUrl?: string | null;
+  updatedAt?: number;
+}
+
+export interface ModuleCategoryWithMeta {
+  name: string;
+  thumbnailUrl: string | null;
+}
+
 export class AuthController {
+  private static isPermissionDeniedError(error: unknown): boolean {
+    const e = error as { code?: string; message?: string } | null;
+    const code = String(e?.code || '').toLowerCase();
+    const message = String(e?.message || '').toLowerCase();
+    return code.includes('permission_denied') || message.includes('permission_denied');
+  }
+
   // Register new user
   static async register(data: RegisterData): Promise<User> {
     try {
@@ -1476,6 +1494,7 @@ export class AuthController {
     updates: {
       moduleTitle?: string;
       difficultyLevel?: Module['difficultyLevel'];
+      status?: string;
       thumbnailUrl?: string;
       referenceGuideUrl?: string;
       sortOrder?: number;
@@ -1519,6 +1538,7 @@ export class AuthController {
       const patch: Record<string, unknown> = {};
       if (updates.moduleTitle !== undefined) patch.moduleTitle = updates.moduleTitle;
       if (updates.difficultyLevel !== undefined) patch.difficultyLevel = updates.difficultyLevel;
+      if (updates.status !== undefined) patch.status = updates.status;
       if (updates.thumbnailUrl !== undefined) patch.thumbnailUrl = updates.thumbnailUrl || null;
       if (updates.referenceGuideUrl !== undefined) patch.referenceGuideUrl = updates.referenceGuideUrl || null;
       if (updates.sortOrder !== undefined) patch.sortOrder = updates.sortOrder ?? null;
@@ -2344,9 +2364,35 @@ export class AuthController {
     'Defensive Moves',
   ];
 
+  private static normalizeCategoryName(value: unknown): string {
+    if (typeof value !== 'string') return '';
+    return value
+      .replace(/[\u200B-\u200D\uFEFF]/g, '') // strip zero-width chars
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private static canonicalCategoryKey(value: unknown): string {
+    return this.normalizeCategoryName(value).toLowerCase();
+  }
+
+  private static dedupeCategoryList(list: string[]): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const item of list) {
+      const normalized = this.normalizeCategoryName(item);
+      if (!normalized) continue;
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(normalized);
+    }
+    return out;
+  }
+
   /** Append any default category missing from the stored list (case-insensitive). */
   private static mergeMissingDefaultCategories(list: string[]): string[] {
-    const result = [...list];
+    const result = this.dedupeCategoryList(list);
     const lower = new Set(result.map((c) => (typeof c === 'string' ? c : '').trim().toLowerCase()).filter(Boolean));
     for (const d of this.DEFAULT_CATEGORIES) {
       const k = d.trim().toLowerCase();
@@ -2430,14 +2476,21 @@ export class AuthController {
     }
 
     const existing = await this.getModuleCategories();
-    const trimmed = category.trim();
+    const trimmed = this.normalizeCategoryName(category);
     if (!trimmed) throw new Error('Category name cannot be empty');
-    if (existing.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
-      throw new Error('Category already exists');
-    }
 
-    const updated = [...existing, trimmed];
+    const updated = this.dedupeCategoryList([...existing, trimmed]);
     await set(ref(db, 'moduleCategories'), updated);
+    try {
+      await set(ref(db, `moduleCategoryMeta/${this.categorySegmentProgramKey(trimmed)}`), {
+        name: trimmed,
+        thumbnailUrl: null,
+        updatedAt: Date.now(),
+      } satisfies ModuleCategoryMetaRecord);
+    } catch (error) {
+      if (!this.isPermissionDeniedError(error)) throw error;
+      console.warn('⚠️ Category created without metadata (moduleCategoryMeta write denied).');
+    }
     return updated;
   }
 
@@ -2453,13 +2506,92 @@ export class AuthController {
     }
 
     const existing = await this.getModuleCategories();
-    const updated = existing.filter((c) => c !== category);
+    const targetKey = this.canonicalCategoryKey(category);
+    const updated = this.dedupeCategoryList(
+      existing.filter((c) => this.canonicalCategoryKey(c) !== targetKey)
+    );
     if (updated.length === existing.length) {
       throw new Error('Category not found');
     }
 
     await set(ref(db, 'moduleCategories'), updated);
+    try {
+      await remove(ref(db, `moduleCategoryMeta/${this.categorySegmentProgramKey(category)}`));
+    } catch (error) {
+      if (!this.isPermissionDeniedError(error)) throw error;
+      console.warn('⚠️ Category removed but metadata delete was denied.');
+    }
     return updated;
+  }
+
+  /** Get per-category metadata map keyed by normalized category key. */
+  static async getModuleCategoryMetaMap(): Promise<Record<string, ModuleCategoryMetaRecord>> {
+    try {
+      const currentUser = auth.currentUser ?? (await this.waitForAuth());
+      if (!currentUser) throw new Error('User not authenticated');
+
+      const snap = await get(ref(db, 'moduleCategoryMeta'));
+      if (!snap.exists()) return {};
+      const raw = snap.val();
+      if (!raw || typeof raw !== 'object') return {};
+
+      const out: Record<string, ModuleCategoryMetaRecord> = {};
+      for (const [key, value] of Object.entries(raw)) {
+        if (!value || typeof value !== 'object') continue;
+        const v = value as Record<string, unknown>;
+        out[key] = {
+          name: typeof v.name === 'string' ? v.name : undefined,
+          thumbnailUrl: typeof v.thumbnailUrl === 'string' ? v.thumbnailUrl : null,
+          updatedAt: typeof v.updatedAt === 'number' ? v.updatedAt : undefined,
+        };
+      }
+      return out;
+    } catch (error: any) {
+      // Metadata is optional in UI; do not fail category flows when rules deny this path.
+      console.warn('⚠️ Unable to read moduleCategoryMeta, continuing without meta:', error?.message || error);
+      return {};
+    }
+  }
+
+  /** Convenience reader for mobile UI: categories merged with thumbnail metadata. */
+  static async getModuleCategoriesWithMeta(): Promise<ModuleCategoryWithMeta[]> {
+    const [categories, metaMap] = await Promise.all([
+      this.getModuleCategories(),
+      this.getModuleCategoryMetaMap(),
+    ]);
+    return categories.map((name) => {
+      const key = this.categorySegmentProgramKey(name);
+      const meta = metaMap[key];
+      return {
+        name,
+        thumbnailUrl: typeof meta?.thumbnailUrl === 'string' ? meta.thumbnailUrl : null,
+      };
+    });
+  }
+
+  /** Admin-only: upsert category metadata (thumbnail, display name mirror). */
+  static async setModuleCategoryMeta(
+    categoryName: string,
+    updates: { thumbnailUrl?: string | null; name?: string }
+  ): Promise<void> {
+    const currentUser = auth.currentUser ?? (await this.waitForAuth());
+    if (!currentUser) throw new Error('User not authenticated');
+
+    const userSnap = await get(ref(db, `users/${currentUser.uid}`));
+    if (!userSnap.exists() || userSnap.val()?.role !== 'admin') {
+      throw new Error('Permission denied. Admin access required.');
+    }
+
+    const key = this.categorySegmentProgramKey(categoryName);
+    const patch: ModuleCategoryMetaRecord = { updatedAt: Date.now() };
+    if (updates.name !== undefined) patch.name = updates.name.trim();
+    if (updates.thumbnailUrl !== undefined) patch.thumbnailUrl = updates.thumbnailUrl?.trim() || null;
+    try {
+      await update(ref(db, `moduleCategoryMeta/${key}`), patch);
+    } catch (error) {
+      if (!this.isPermissionDeniedError(error)) throw error;
+      console.warn('⚠️ Skipping category metadata update (permission denied).');
+    }
   }
 
   /** RTDB key for a category name; keep in sync with dashboard `normalizeCategory` + safe path chars. */

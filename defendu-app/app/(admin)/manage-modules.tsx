@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -99,8 +100,16 @@ export default function ManageModulesPage() {
   // Dynamic categories from Firebase
   const [categories, setCategories] = useState<string[]>([]);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryMetaByKey, setCategoryMetaByKey] = useState<Record<string, { name?: string; thumbnailUrl?: string | null }>>({});
+  const [editCategoryOriginalName, setEditCategoryOriginalName] = useState('');
+  const [editCategoryName, setEditCategoryName] = useState('');
+  const [editCategoryThumbnailUrl, setEditCategoryThumbnailUrl] = useState<string | null>(null);
+  const [editCategoryThumbnailLocalUri, setEditCategoryThumbnailLocalUri] = useState<string | null>(null);
   const [addingCategory, setAddingCategory] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(false);
+  const [uploadingCategoryThumbnail, setUploadingCategoryThumbnail] = useState(false);
   const [showRemoveCategoryModal, setShowRemoveCategoryModal] = useState(false);
   const [categoryToRemove, setCategoryToRemove] = useState<string | null>(null);
   const [removingCategory, setRemovingCategory] = useState(false);
@@ -109,7 +118,12 @@ export default function ManageModulesPage() {
   const [addCategoryStep, setAddCategoryStep] = useState<1 | 2>(1);
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
   const [assignSearchQuery, setAssignSearchQuery] = useState('');
-  const [assignCategoryFilter, setAssignCategoryFilter] = useState<string>('All');
+  const [assignCategoryFilter, setAssignCategoryFilter] = useState<string>('');
+  const [assignStatusFilter, setAssignStatusFilter] = useState<'approved' | 'pending'>('approved');
+  const [editSelectedModuleIds, setEditSelectedModuleIds] = useState<string[]>([]);
+  const [editSearchQuery, setEditSearchQuery] = useState('');
+  const [editModuleCategoryFilter, setEditModuleCategoryFilter] = useState<string>('');
+  const [editStatusFilter, setEditStatusFilter] = useState<'approved' | 'pending'>('approved');
   const [moduleTableSegment, setModuleTableSegment] = useState<ModuleTableSegment>('technique');
   const [approvedTrainerNames, setApprovedTrainerNames] = useState<string[]>([]);
   const [showAssignSegmentModal, setShowAssignSegmentModal] = useState(false);
@@ -119,23 +133,15 @@ export default function ManageModulesPage() {
   const [assignSegmentLoading, setAssignSegmentLoading] = useState(false);
   const [savingAssignSegment, setSavingAssignSegment] = useState(false);
 
-  /** Firebase list + any category strings used on technique modules (covers bad/missing `moduleCategories` data). */
+  /** Category list from Firebase only (single source of truth for admin category buttons/filters). */
   const displayCategories = useMemo(() => {
     const byLower = new Map<string, string>();
     for (const c of categories) {
       const t = (c || '').trim();
       if (t) byLower.set(t.toLowerCase(), t);
     }
-    for (const m of modules) {
-      if (m.moduleSegment) continue;
-      const t = m.category?.trim();
-      if (t) {
-        const k = t.toLowerCase();
-        if (!byLower.has(k)) byLower.set(k, t);
-      }
-    }
     return Array.from(byLower.values()).sort((a, b) => a.localeCompare(b));
-  }, [categories, modules]);
+  }, [categories]);
 
   const categoryFilterOptions = useMemo(
     () => [{ label: 'All', value: 'All' }, ...displayCategories.map((c) => ({ label: c, value: c }))],
@@ -203,6 +209,12 @@ export default function ManageModulesPage() {
       console.error('Error loading categories:', error);
       setCategories(AuthController.getFallbackModuleCategories());
     }
+    try {
+      const metaMap = await AuthController.getModuleCategoryMetaMap();
+      setCategoryMetaByKey(metaMap);
+    } catch {
+      setCategoryMetaByKey({});
+    }
   };
 
   const loadApprovedTrainerNames = async () => {
@@ -228,7 +240,7 @@ export default function ManageModulesPage() {
       if (selectedModuleIds.length > 0) {
         await Promise.all(
           selectedModuleIds.map((id) =>
-            AuthController.updateModuleMetadata(id, { category: trimmed })
+            AuthController.updateModuleMetadata(id, { category: trimmed, status: 'approved' })
           )
         );
         await loadModules();
@@ -242,6 +254,123 @@ export default function ManageModulesPage() {
       showToast(error.message || 'Failed to add category');
     } finally {
       setAddingCategory(false);
+    }
+  };
+
+  const openEditCategoryModal = useCallback(() => {
+    if (categoryFilter === 'All') {
+      showToast('Select a category first (not "All")');
+      return;
+    }
+    const original = categoryFilter;
+    const originalKey = AuthController.categorySegmentProgramKey(original);
+    const currentMeta = categoryMetaByKey[originalKey];
+    setEditCategoryOriginalName(original);
+    setEditCategoryName(original);
+    setEditCategoryThumbnailUrl(currentMeta?.thumbnailUrl || null);
+    setEditCategoryThumbnailLocalUri(null);
+    setEditSearchQuery('');
+    setEditModuleCategoryFilter('');
+    setEditStatusFilter('approved');
+    const existingIds = modules
+      .filter((m) => !m.moduleSegment && (m.category || '').trim().toLowerCase() === original.trim().toLowerCase())
+      .map((m) => m.moduleId);
+    setEditSelectedModuleIds(existingIds);
+    setShowEditCategoryModal(true);
+  }, [categoryFilter, modules, showToast, categoryMetaByKey]);
+
+  const handlePickEditCategoryThumbnail = useCallback(async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== 'granted') {
+        showToast('Gallery permission is required to select an image');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.9,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      const picked = result.assets[0];
+      if (!picked?.uri) return;
+      setEditCategoryThumbnailLocalUri(picked.uri);
+    } catch (error: any) {
+      showToast(error.message || 'Failed to pick image');
+    }
+  }, [showToast]);
+
+  const handleEditCategory = async () => {
+    const original = editCategoryOriginalName.trim();
+    const target = editCategoryName.trim();
+    if (!original) return;
+    if (!target) {
+      showToast('Category name cannot be empty');
+      return;
+    }
+
+    try {
+      setEditingCategory(true);
+
+      if (target.toLowerCase() !== original.toLowerCase()) {
+        const existing = await AuthController.getModuleCategories();
+        const alreadyExists = existing.some((c) => c.trim().toLowerCase() === target.toLowerCase());
+        if (!alreadyExists) {
+          const updated = await AuthController.addModuleCategory(target);
+          setCategories(updated);
+        }
+
+        const modulesToRename = modules.filter(
+          (m) => !m.moduleSegment && (m.category || '').trim().toLowerCase() === original.toLowerCase()
+        );
+        if (modulesToRename.length > 0) {
+          await Promise.all(
+            modulesToRename.map((m) =>
+              AuthController.updateModuleMetadata(m.moduleId, { category: target })
+            )
+          );
+        }
+
+        const updatedAfterRemove = await AuthController.removeModuleCategory(original);
+        setCategories(updatedAfterRemove);
+      }
+
+      let finalThumbnailUrl = editCategoryThumbnailUrl;
+      if (editCategoryThumbnailLocalUri) {
+        setUploadingCategoryThumbnail(true);
+        const fileName = `category_${target}_${Date.now()}.png`;
+        finalThumbnailUrl = await AuthController.uploadFileToCloudinary(
+          editCategoryThumbnailLocalUri,
+          'image',
+          fileName
+        );
+      }
+
+      await AuthController.setModuleCategoryMeta(target, {
+        name: target,
+        thumbnailUrl: finalThumbnailUrl,
+      });
+
+      if (editSelectedModuleIds.length > 0) {
+        await Promise.all(
+          editSelectedModuleIds.map((id) =>
+            AuthController.updateModuleMetadata(id, { category: target, status: 'approved' })
+          )
+        );
+      }
+
+      await loadModules();
+      await loadCategories();
+      setCategoryFilter(target);
+      setShowEditCategoryModal(false);
+      showToast(`Category "${target}" updated successfully`);
+    } catch (error: any) {
+      showToast(error.message || 'Failed to edit category');
+    } finally {
+      setEditingCategory(false);
+      setUploadingCategoryThumbnail(false);
     }
   };
 
@@ -1225,6 +1354,28 @@ export default function ManageModulesPage() {
                           <Text style={styles.addCategoryButtonText}>Add</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
+                          style={[
+                            styles.editCategoryButton,
+                            categoryFilter !== 'All' && styles.editCategoryButtonActive,
+                          ]}
+                          onPress={openEditCategoryModal}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons
+                            name="create-outline"
+                            size={15}
+                            color={categoryFilter !== 'All' ? '#ffca28' : '#9b8c5f'}
+                          />
+                          <Text
+                            style={[
+                              styles.editCategoryButtonText,
+                              categoryFilter !== 'All' && styles.editCategoryButtonTextActive,
+                            ]}
+                          >
+                            Edit
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
                           style={styles.removeCategoryButton}
                           onPress={() => { setConfirmRemoveStep(false); setShowRemoveCategoryModal(true); }}
                           activeOpacity={0.7}
@@ -1714,7 +1865,8 @@ export default function ManageModulesPage() {
           setSelectedModuleIds([]);
           setAddCategoryStep(1);
           setAssignSearchQuery('');
-          setAssignCategoryFilter('All');
+          setAssignCategoryFilter('');
+          setAssignStatusFilter('approved');
         }}
       >
         <View style={styles.modalOverlay}>
@@ -1742,10 +1894,22 @@ export default function ManageModulesPage() {
                       setSelectedModuleIds([]);
                       setAddCategoryStep(1);
                       setAssignSearchQuery('');
-                      setAssignCategoryFilter('All');
+                      setAssignCategoryFilter('');
+                      setAssignStatusFilter('approved');
                     }}
                   >
                     <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.addCategoryConfirmButton]}
+                    onPress={handleAddCategory}
+                    disabled={!newCategoryName.trim() || addingCategory}
+                  >
+                    {addingCategory ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.confirmDeleteButtonText}>Add Category Only</Text>
+                    )}
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.modalButton, styles.addCategoryConfirmButton]}
@@ -1772,9 +1936,32 @@ export default function ManageModulesPage() {
                   value={assignSearchQuery}
                   onChangeText={setAssignSearchQuery}
                 />
+                <View style={styles.assignStatusRow}>
+                  <TouchableOpacity
+                    style={[styles.assignStatusPill, assignStatusFilter === 'approved' && styles.assignStatusPillActive]}
+                    onPress={() => setAssignStatusFilter('approved')}
+                  >
+                    <Text style={[styles.assignStatusPillText, assignStatusFilter === 'approved' && styles.assignStatusPillTextActive]}>
+                      Approved
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.assignStatusPill, assignStatusFilter === 'pending' && styles.assignStatusPillActive]}
+                    onPress={() => setAssignStatusFilter('pending')}
+                  >
+                    <Text style={[styles.assignStatusPillText, assignStatusFilter === 'pending' && styles.assignStatusPillTextActive]}>
+                      Pending
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 {/* Category filter pills */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.assignCategoryRow}>
-                  {['All', ...displayCategories].map((cat) => (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.assignCategoryRow}
+                  contentContainerStyle={styles.assignCategoryRowContent}
+                >
+                  {displayCategories.map((cat) => (
                     <TouchableOpacity
                       key={cat}
                       style={[styles.assignCategoryPill, assignCategoryFilter === cat && styles.assignCategoryPillActive]}
@@ -1787,8 +1974,9 @@ export default function ManageModulesPage() {
                 <ScrollView style={styles.moduleSelectList} nestedScrollEnabled>
                   {modules.filter((m) => {
                     if (m.moduleSegment) return false;
-                    if (m.status !== 'approved') return false;
-                    if (assignCategoryFilter !== 'All' && m.category !== assignCategoryFilter) return false;
+                    if (assignStatusFilter === 'approved' && !isApprovedModuleStatus(m.status)) return false;
+                    if (assignStatusFilter === 'pending' && !isPendingReviewModuleStatus(m.status)) return false;
+                    if (assignCategoryFilter && m.category !== assignCategoryFilter) return false;
                     if (assignSearchQuery.trim()) {
                       const q = assignSearchQuery.trim().toLowerCase();
                       return m.moduleTitle.toLowerCase().includes(q) || (m.trainerName || '').toLowerCase().includes(q);
@@ -1848,6 +2036,181 @@ export default function ManageModulesPage() {
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showEditCategoryModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowEditCategoryModal(false);
+          setEditCategoryOriginalName('');
+          setEditCategoryName('');
+          setEditCategoryThumbnailUrl(null);
+          setEditCategoryThumbnailLocalUri(null);
+          setEditSelectedModuleIds([]);
+          setEditSearchQuery('');
+          setEditModuleCategoryFilter('');
+          setEditStatusFilter('approved');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, styles.modalContainerLarge]}>
+            <Text style={styles.modalTitle}>Edit Category</Text>
+            <Text style={styles.modalSubtitle}>
+              Update name and assign modules for{' '}
+              <Text style={{ color: '#ffca28', fontWeight: '700' }}>"{editCategoryOriginalName}".</Text>
+            </Text>
+            <TextInput
+              style={styles.customReasonInput}
+              placeholder="Category name"
+              placeholderTextColor="#6b8693"
+              value={editCategoryName}
+              onChangeText={setEditCategoryName}
+            />
+            <View style={styles.categoryImagePickerRow}>
+              <TouchableOpacity
+                style={styles.categoryImagePickerButton}
+                onPress={handlePickEditCategoryThumbnail}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="image-outline" size={16} color="#ffca28" />
+                <Text style={styles.categoryImagePickerButtonText}>
+                  {editCategoryThumbnailLocalUri ? 'Change Image' : 'Select PNG/Image'}
+                </Text>
+              </TouchableOpacity>
+              {(editCategoryThumbnailLocalUri || editCategoryThumbnailUrl) ? (
+                <Image
+                  source={{ uri: editCategoryThumbnailLocalUri || editCategoryThumbnailUrl || '' }}
+                  style={styles.categoryImagePreview}
+                />
+              ) : (
+                <View style={[styles.categoryImagePreview, styles.categoryImagePreviewFallback]}>
+                  <Ionicons name="image-outline" size={18} color="#6b8693" />
+                </View>
+              )}
+            </View>
+
+            <TextInput
+              style={styles.assignSearchInput}
+              placeholder="Search modules..."
+              placeholderTextColor="#6b8693"
+              value={editSearchQuery}
+              onChangeText={setEditSearchQuery}
+            />
+
+            <View style={styles.assignStatusRow}>
+              <TouchableOpacity
+                style={[styles.assignStatusPill, editStatusFilter === 'approved' && styles.assignStatusPillActive]}
+                onPress={() => setEditStatusFilter('approved')}
+              >
+                <Text style={[styles.assignStatusPillText, editStatusFilter === 'approved' && styles.assignStatusPillTextActive]}>
+                  Approved
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.assignStatusPill, editStatusFilter === 'pending' && styles.assignStatusPillActive]}
+                onPress={() => setEditStatusFilter('pending')}
+              >
+                <Text style={[styles.assignStatusPillText, editStatusFilter === 'pending' && styles.assignStatusPillTextActive]}>
+                  Pending
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.assignCategoryRow}
+              contentContainerStyle={styles.assignCategoryRowContent}
+            >
+              {displayCategories.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.assignCategoryPill, editModuleCategoryFilter === cat && styles.assignCategoryPillActive]}
+                  onPress={() => setEditModuleCategoryFilter(cat)}
+                >
+                  <Text style={[styles.assignCategoryPillText, editModuleCategoryFilter === cat && styles.assignCategoryPillTextActive]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <ScrollView style={styles.moduleSelectList} nestedScrollEnabled>
+              {modules.filter((m) => {
+                if (m.moduleSegment) return false;
+                if (editStatusFilter === 'approved' && !isApprovedModuleStatus(m.status)) return false;
+                if (editStatusFilter === 'pending' && !isPendingReviewModuleStatus(m.status)) return false;
+                if (editModuleCategoryFilter && m.category !== editModuleCategoryFilter) return false;
+                if (editSearchQuery.trim()) {
+                  const q = editSearchQuery.trim().toLowerCase();
+                  return m.moduleTitle.toLowerCase().includes(q) || (m.trainerName || '').toLowerCase().includes(q);
+                }
+                return true;
+              }).map((m) => {
+                const isSelected = editSelectedModuleIds.includes(m.moduleId);
+                return (
+                  <TouchableOpacity
+                    key={m.moduleId}
+                    style={[styles.moduleSelectItem, isSelected && styles.moduleSelectItemSelected]}
+                    onPress={() =>
+                      setEditSelectedModuleIds((prev) =>
+                        isSelected ? prev.filter((id) => id !== m.moduleId) : [...prev, m.moduleId]
+                      )
+                    }
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.moduleSelectCheckbox, isSelected && styles.moduleSelectCheckboxChecked]}>
+                      {isSelected && <Ionicons name="checkmark" size={12} color="#FFFFFF" />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.moduleSelectTitle} numberOfLines={1}>{m.moduleTitle}</Text>
+                      <Text style={styles.moduleSelectMeta} numberOfLines={1}>
+                        {m.trainerName || m.trainerId || 'Unknown trainer'} · {m.category}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            {editSelectedModuleIds.length > 0 && (
+              <Text style={styles.moduleSelectCount}>
+                {editSelectedModuleIds.length} module{editSelectedModuleIds.length !== 1 ? 's' : ''} selected
+              </Text>
+            )}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowEditCategoryModal(false);
+                  setEditCategoryOriginalName('');
+                  setEditCategoryName('');
+                  setEditCategoryThumbnailUrl(null);
+                  setEditCategoryThumbnailLocalUri(null);
+                  setEditSelectedModuleIds([]);
+                  setEditSearchQuery('');
+                  setEditModuleCategoryFilter('');
+                  setEditStatusFilter('approved');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.editCategoryConfirmButton]}
+                onPress={handleEditCategory}
+                disabled={editingCategory || uploadingCategoryThumbnail}
+              >
+                {(editingCategory || uploadingCategoryThumbnail) ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmDeleteButtonText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -2505,12 +2868,15 @@ const styles = StyleSheet.create({
   addCategoryConfirmButton: {
     backgroundColor: '#07bbc0',
   },
+  editCategoryConfirmButton: {
+    backgroundColor: '#ffb300',
+  },
   modalContainerLarge: {
     maxHeight: '80%',
   },
   moduleSelectList: {
     maxHeight: 320,
-    marginTop: 8,
+    marginTop: 14,
     marginBottom: 4,
   },
   moduleSelectItem: {
@@ -2569,11 +2935,77 @@ const styles = StyleSheet.create({
     fontSize: 14,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    marginBottom: 8,
+    marginBottom: 10,
+  },
+  assignStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  assignStatusPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#0a1e30',
+    borderWidth: 1,
+    borderColor: '#1a3a4a',
+  },
+  assignStatusPillActive: {
+    backgroundColor: '#38a6de',
+    borderColor: '#38a6de',
+  },
+  assignStatusPillText: {
+    color: '#9db3be',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  assignStatusPillTextActive: {
+    color: '#FFFFFF',
+  },
+  categoryImagePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  categoryImagePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 202, 40, 0.12)',
+    borderWidth: 1,
+    borderColor: '#ffca28',
+  },
+  categoryImagePickerButtonText: {
+    color: '#ffca28',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  categoryImagePreview: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1a3a4a',
+  },
+  categoryImagePreviewFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0a1e30',
   },
   assignCategoryRow: {
+    minHeight: 44,
+    marginBottom: 14,
+    zIndex: 3,
+  },
+  assignCategoryRowContent: {
     flexDirection: 'row',
-    marginBottom: 8,
+    alignItems: 'center',
+    paddingRight: 8,
   },
   assignCategoryPill: {
     paddingHorizontal: 12,
@@ -2627,6 +3059,34 @@ const styles = StyleSheet.create({
     color: '#38a6de',
     fontSize: 13,
     fontWeight: '700',
+  },
+  editCategoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 18,
+    backgroundColor: 'rgba(155, 140, 95, 0.18)',
+    borderWidth: 1.5,
+    borderColor: '#9b8c5f',
+  },
+  editCategoryButtonActive: {
+    backgroundColor: 'rgba(255, 202, 40, 0.22)',
+    borderColor: '#ffca28',
+    shadowColor: '#ffca28',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  editCategoryButtonText: {
+    color: '#9b8c5f',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  editCategoryButtonTextActive: {
+    color: '#ffca28',
   },
   categoryActions: {
     flexDirection: 'row',
