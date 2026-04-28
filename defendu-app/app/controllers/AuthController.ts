@@ -2809,6 +2809,127 @@ export class AuthController {
     }
   }
 
+  /**
+   * Trainer/Admin: get module by ID for editing.
+   * Trainers can only read their own modules; admins can read any module.
+   */
+  static async getTrainerEditableModuleById(moduleId: string): Promise<Module | null> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      const moduleRef = ref(db, `modules/${moduleId}`);
+      const moduleSnapshot = await get(moduleRef);
+      if (!moduleSnapshot.exists()) return null;
+
+      const moduleDataRaw = moduleSnapshot.val();
+      const module = this.moduleFromDbSnapshot(moduleId, moduleDataRaw);
+
+      const isAdmin = currentUser.role === 'admin';
+      const isOwnerTrainer =
+        currentUser.role === 'trainer' &&
+        currentUser.trainerApproved === true &&
+        module.trainerId === currentUser.uid;
+
+      if (!isAdmin && !isOwnerTrainer) {
+        throw new Error('Permission denied. You can only edit your own modules.');
+      }
+
+      return module;
+    } catch (error: any) {
+      console.error('Error fetching editable trainer module:', error);
+      throw new Error(error.message || 'Failed to fetch module');
+    }
+  }
+
+  /**
+   * Trainer/Admin: update trainer-owned module metadata.
+   * Trainers can update their own modules similar to admin edit controls.
+   */
+  static async updateTrainerOwnedModuleMetadata(
+    moduleId: string,
+    updates: {
+      moduleTitle?: string;
+      difficultyLevel?: Module['difficultyLevel'];
+      thumbnailUrl?: string | null;
+      referenceGuideUrl?: string | null;
+      description?: string;
+      introductionType?: Module['introductionType'];
+      introduction?: string | null;
+      introductionVideoUrl?: string | null;
+      category?: string;
+      intensityLevel?: number;
+      spaceRequirements?: string[];
+      physicalDemandTags?: string[];
+      repRange?: string | null;
+      trainingDurationSeconds?: number | null;
+      techniqueVideoUrl?: string | null;
+      techniqueVideoLink?: string | null;
+      techniqueVideoUrl2?: string | null;
+      videoDuration?: number | null;
+      certificationChecked?: boolean;
+    }
+  ): Promise<void> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) throw new Error('User not authenticated');
+
+      const existing = await this.getTrainerEditableModuleById(moduleId);
+      if (!existing) throw new Error('Module not found');
+
+      const isAdmin = currentUser.role === 'admin';
+      const isOwnerTrainer = existing.trainerId === currentUser.uid;
+      if (!isAdmin && !isOwnerTrainer) {
+        throw new Error('Permission denied. You can only edit your own modules.');
+      }
+
+      const patch: Record<string, unknown> = {};
+      if (updates.moduleTitle !== undefined) patch.moduleTitle = updates.moduleTitle;
+      if (updates.difficultyLevel !== undefined) patch.difficultyLevel = updates.difficultyLevel ?? null;
+      if (updates.thumbnailUrl !== undefined) patch.thumbnailUrl = updates.thumbnailUrl?.trim() || null;
+      if (updates.referenceGuideUrl !== undefined) patch.referenceGuideUrl = updates.referenceGuideUrl?.trim() || null;
+      if (updates.description !== undefined) patch.description = updates.description;
+      if (updates.introductionType !== undefined) patch.introductionType = updates.introductionType;
+      if (updates.introduction !== undefined) patch.introduction = updates.introduction?.trim() || null;
+      if (updates.introductionVideoUrl !== undefined) {
+        patch.introductionVideoUrl = updates.introductionVideoUrl?.trim() || null;
+      }
+      if (updates.category !== undefined) patch.category = updates.category;
+      if (updates.intensityLevel !== undefined) patch.intensityLevel = updates.intensityLevel;
+      if (updates.spaceRequirements !== undefined) patch.spaceRequirements = updates.spaceRequirements || [];
+      if (updates.physicalDemandTags !== undefined) patch.physicalDemandTags = updates.physicalDemandTags || [];
+      if (updates.repRange !== undefined) patch.repRange = updates.repRange || null;
+      if (updates.trainingDurationSeconds !== undefined) {
+        patch.trainingDurationSeconds = updates.trainingDurationSeconds ?? null;
+      }
+      if (updates.techniqueVideoUrl !== undefined) patch.techniqueVideoUrl = updates.techniqueVideoUrl?.trim() || null;
+      if (updates.techniqueVideoLink !== undefined) {
+        patch.techniqueVideoLink = updates.techniqueVideoLink?.trim() || null;
+      }
+      if (updates.techniqueVideoUrl2 !== undefined) {
+        patch.techniqueVideoUrl2 = updates.techniqueVideoUrl2?.trim() || null;
+      }
+      if (updates.videoDuration !== undefined) patch.videoDuration = updates.videoDuration ?? null;
+      if (updates.certificationChecked !== undefined) patch.certificationChecked = updates.certificationChecked;
+      if (Object.keys(patch).length === 0) return;
+
+      const now = Date.now();
+      patch.updatedAt = now;
+
+      await update(ref(db, `modules/${moduleId}`), patch);
+
+      await update(ref(db, `trainerModules/${existing.trainerId}/${moduleId}`), {
+        moduleTitle: updates.moduleTitle ?? existing.moduleTitle,
+        updatedAt: now,
+      });
+    } catch (error: any) {
+      console.error('Error updating trainer-owned module metadata:', error);
+      throw new Error(error.message || 'Failed to update module');
+    }
+  }
+
   // Get a single module by ID (admin only)
   static async getModuleById(moduleId: string): Promise<Module | null> {
     try {

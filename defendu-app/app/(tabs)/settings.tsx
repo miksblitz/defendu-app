@@ -17,7 +17,6 @@ import { useLogout } from '../../hooks/useLogout';
 import {
   clampDailyModuleTarget,
   clampTrainingDaysPerWeek,
-  clampTrainingProgramWeeks,
   computeWeeklyModuleTargetFromSchedule,
 } from '../_utils/moduleTargets';
 import { AuthController } from '../controllers/AuthController';
@@ -33,7 +32,6 @@ export default function SettingsPage() {
   const [weightInput, setWeightInput] = useState('');
   const [dailyTarget, setDailyTarget] = useState(3);
   const [daysPerWeek, setDaysPerWeek] = useState(3);
-  const [programWeeks, setProgramWeeks] = useState(8);
   const [saving, setSaving] = useState(false);
 
   const [baseline, setBaseline] = useState({
@@ -41,7 +39,6 @@ export default function SettingsPage() {
     weight: '',
     daily: 3,
     days: 3,
-    weeks: 8,
   });
 
   const load = useCallback(async () => {
@@ -65,17 +62,11 @@ export default function SettingsPage() {
         typeof prefs?.trainingDaysPerWeek === 'number'
           ? clampTrainingDaysPerWeek(prefs.trainingDaysPerWeek)
           : Math.min(7, Math.max(1, Math.round(weeklyStored / Math.max(1, daily))));
-      const weeks =
-        typeof prefs?.trainingProgramWeeks === 'number'
-          ? clampTrainingProgramWeeks(prefs.trainingProgramWeeks)
-          : clampTrainingProgramWeeks(user?.trainingProgramWeeks ?? 8);
-
       setHeightInput(hs);
       setWeightInput(ws);
       setDailyTarget(daily);
       setDaysPerWeek(days);
-      setProgramWeeks(weeks);
-      setBaseline({ height: hs, weight: ws, daily, days, weeks });
+      setBaseline({ height: hs, weight: ws, daily, days });
     } catch (e) {
       console.error('Error loading user:', e);
     }
@@ -92,8 +83,7 @@ export default function SettingsPage() {
     heightInput !== baseline.height ||
     weightInput !== baseline.weight ||
     dailyTarget !== baseline.daily ||
-    daysPerWeek !== baseline.days ||
-    programWeeks !== baseline.weeks;
+    daysPerWeek !== baseline.days;
 
   const handleSaveBodyAndTraining = async () => {
     const h = heightInput.trim() ? Number(heightInput.trim()) : undefined;
@@ -113,14 +103,12 @@ export default function SettingsPage() {
         ...(w !== undefined && { weight: w }),
         dailyModuleTarget: dailyTarget,
         trainingDaysPerWeek: daysPerWeek,
-        trainingProgramWeeks: programWeeks,
       });
       setBaseline({
         height: heightInput,
         weight: weightInput,
         daily: dailyTarget,
         days: daysPerWeek,
-        weeks: programWeeks,
       });
       if (Platform.OS === 'web') {
         window.alert('Saved. Your weekly goal on the dashboard will use the new totals.');
@@ -270,17 +258,6 @@ export default function SettingsPage() {
               </TouchableOpacity>
               <Text style={styles.stepValue}>{daysPerWeek}</Text>
               <TouchableOpacity style={styles.stepBtn} onPress={() => setDaysPerWeek((t) => Math.min(7, t + 1))}>
-                <Text style={styles.stepBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.subheading}>Program length (weeks)</Text>
-            <View style={styles.stepRow}>
-              <TouchableOpacity style={styles.stepBtn} onPress={() => setProgramWeeks((t) => Math.max(1, t - 1))}>
-                <Text style={styles.stepBtnText}>-</Text>
-              </TouchableOpacity>
-              <Text style={styles.stepValue}>{programWeeks}</Text>
-              <TouchableOpacity style={styles.stepBtn} onPress={() => setProgramWeeks((t) => Math.min(52, t + 1))}>
                 <Text style={styles.stepBtnText}>+</Text>
               </TouchableOpacity>
             </View>

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -69,6 +69,9 @@ const MOBILE_BREAKPOINT = 768;
 
 export default function PublishModulePage() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ moduleId?: string }>();
+  const editModuleId = typeof params.moduleId === 'string' ? params.moduleId.trim() : '';
+  const isEditMode = !!editModuleId;
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < MOBILE_BREAKPOINT;
   const webVideoElementStyle: React.CSSProperties = {
@@ -122,6 +125,9 @@ export default function PublishModulePage() {
   const [repRange, setRepRange] = useState<string>('');
   const [trainingDurationSeconds, setTrainingDurationSeconds] = useState<number | ''>('');
   const [certificationChecked, setCertificationChecked] = useState(false);
+  const [existingTechniqueVideoUrl, setExistingTechniqueVideoUrl] = useState('');
+  const [existingIntroductionVideoUrl, setExistingIntroductionVideoUrl] = useState('');
+  const [existingThumbnailUrl, setExistingThumbnailUrl] = useState('');
   const [errors, setErrors] = useState({
     moduleTitle: '',
     description: '',
@@ -160,7 +166,47 @@ export default function PublishModulePage() {
     };
 
     checkTrainerStatus();
-  }, []);
+  }, [router, showToast]);
+
+  useEffect(() => {
+    const loadEditableModule = async () => {
+      if (!isEditMode || !editModuleId) return;
+      try {
+        setLoading(true);
+        const module = await AuthController.getTrainerEditableModuleById(editModuleId);
+        if (!module) {
+          showToast('Module not found');
+          router.replace('/published-modules');
+          return;
+        }
+        setModuleTitle(module.moduleTitle || '');
+        setDescription(module.description || '');
+        setCategory(module.category || '');
+        setDifficultyLevel(module.difficultyLevel || '');
+        setIntroductionType(module.introductionType || 'text');
+        setIntroduction(module.introduction || '');
+        setVideoLink(module.techniqueVideoLink || '');
+        setThumbnail(module.thumbnailUrl || null);
+        setExistingThumbnailUrl(module.thumbnailUrl || '');
+        setExistingTechniqueVideoUrl(module.techniqueVideoUrl || '');
+        setExistingIntroductionVideoUrl(module.introductionVideoUrl || '');
+        setVideoDuration(module.videoDuration || null);
+        setIntensityLevel(module.intensityLevel || 2);
+        setSpaceRequirements(module.spaceRequirements || []);
+        setSelectedPhysicalDemandTags(module.physicalDemandTags || []);
+        setRepRange(module.repRange || '');
+        setTrainingDurationSeconds(module.trainingDurationSeconds ?? '');
+        setCertificationChecked(Boolean(module.certificationChecked));
+      } catch (error: any) {
+        console.error('Error loading trainer module for editing:', error);
+        showToast(error?.message || 'Failed to load module');
+        router.replace('/published-modules');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadEditableModule();
+  }, [editModuleId, isEditMode, router, showToast]);
 
   /**
    * Calculate intensity level from absolute page X position
@@ -830,7 +876,8 @@ export default function PublishModulePage() {
     if (introductionType === 'text') {
       return !introduction.trim() ? 'Please fill this in or upload an introduction video' : '';
     }
-    return !introductionVideo ? 'Please upload an introduction video or add text' : '';
+    const hasExistingVideo = isEditMode && !!existingIntroductionVideoUrl;
+    return !introductionVideo && !hasExistingVideo ? 'Please upload an introduction video or add text' : '';
   };
 
   const handlePublish = async () => {
@@ -843,7 +890,7 @@ export default function PublishModulePage() {
       const categoryError = validateCategory(category);
       const introductionError = validateIntroduction();
       const videoError = ''; // Technique video is optional
-      const thumbnailError = !thumbnail ? 'Please upload a thumbnail' : '';
+      const thumbnailError = !thumbnail && !existingThumbnailUrl ? 'Please upload a thumbnail' : '';
       const certificationError = !certificationChecked ? 'Please check this box to certify' : '';
 
       setErrors({
@@ -915,7 +962,7 @@ export default function PublishModulePage() {
             })
         );
       }
-      if (thumbnail) {
+      if (thumbnail && !/^https?:\/\//i.test(thumbnail)) {
         uploadTasks.push(
           AuthController.uploadFileToCloudinary(thumbnail, 'image', 'thumbnail')
             .then((url) => {
@@ -968,6 +1015,36 @@ export default function PublishModulePage() {
         status: 'pending review',
         certificationChecked: certificationChecked,
       };
+
+      if (isEditMode && editModuleId) {
+        await AuthController.updateTrainerOwnedModuleMetadata(editModuleId, {
+          moduleTitle: moduleTitle.trim(),
+          description: description.trim(),
+          category: category,
+          difficultyLevel: (difficultyLevel as 'basic' | 'intermediate' | 'advanced') || undefined,
+          introductionType,
+          introduction: introductionType === 'text' ? introduction.trim() : null,
+          introductionVideoUrl:
+            introductionType === 'video'
+              ? (introductionVideoUrl || existingIntroductionVideoUrl || null)
+              : null,
+          techniqueVideoUrl: techniqueVideoUrl || existingTechniqueVideoUrl || null,
+          techniqueVideoLink: videoLink.trim() || null,
+          videoDuration: videoDuration || null,
+          thumbnailUrl: thumbnailUrl || existingThumbnailUrl || null,
+          intensityLevel,
+          spaceRequirements,
+          physicalDemandTags: selectedPhysicalDemandTags,
+          repRange: repRange || null,
+          trainingDurationSeconds: typeof trainingDurationSeconds === 'number' ? trainingDurationSeconds : null,
+          certificationChecked,
+        });
+        showToast('Module updated successfully');
+        setTimeout(() => {
+          router.replace('/published-modules');
+        }, 500);
+        return;
+      }
 
       // Save module to database
       showToast('Saving module to database...');
@@ -1118,10 +1195,12 @@ export default function PublishModulePage() {
             {/* Friendly header for everyone, especially non-techy users */}
             <View style={[styles.publishHeader, isMobile && styles.publishHeaderMobile]}>
               <Text style={[styles.publishTitle, isMobile && styles.publishTitleMobile]}>
-                {isMobile ? 'Create a new module' : 'Publish a module'}
+                {isEditMode ? 'Edit your module' : isMobile ? 'Create a new module' : 'Publish a module'}
               </Text>
               <Text style={styles.publishSubtitle}>
-                Fill in each section below. You can save and come back later. Required fields are marked.
+                {isEditMode
+                  ? 'Refine every detail of your module, then save to publish updates immediately.'
+                  : 'Fill in each section below. You can save and come back later. Required fields are marked.'}
               </Text>
               <View style={styles.progressStrip}>
                 <View style={styles.progressStripBar} />
@@ -1864,8 +1943,14 @@ export default function PublishModulePage() {
               <View style={styles.sectionBadge}>
                 <Text style={styles.sectionBadgeText}>4</Text>
               </View>
-              <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile, { marginBottom: 8 }]}>Almost done</Text>
-              <Text style={[styles.sectionHint, { marginBottom: 20 }]}>Confirm and send for review. An admin will approve it before learners see it.</Text>
+              <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile, { marginBottom: 8 }]}>
+                {isEditMode ? 'Save your updates' : 'Almost done'}
+              </Text>
+              <Text style={[styles.sectionHint, { marginBottom: 20 }]}>
+                {isEditMode
+                  ? 'You are editing a published module. Save changes to update it instantly.'
+                  : 'Confirm and send for review. An admin will approve it before learners see it.'}
+              </Text>
               <TouchableOpacity
                 style={[styles.certificationCheckbox, isMobile && styles.certificationCheckboxMobile]}
                 onPress={() => {
@@ -1901,7 +1986,7 @@ export default function PublishModulePage() {
                   {loading ? (
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
-                    <Text style={styles.submitButtonText}>Submit for review</Text>
+                    <Text style={styles.submitButtonText}>{isEditMode ? 'Save changes' : 'Submit for review'}</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -1922,7 +2007,7 @@ export default function PublishModulePage() {
                 ) : (
                   <>
                     <Ionicons name="send" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.submitButtonText}>Submit for review</Text>
+                    <Text style={styles.submitButtonText}>{isEditMode ? 'Save changes' : 'Submit for review'}</Text>
                   </>
                 )}
               </TouchableOpacity>
