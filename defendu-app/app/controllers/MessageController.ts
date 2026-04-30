@@ -1,4 +1,4 @@
-import { ref, get, set, update, push, onValue, off } from 'firebase/database';
+import { ref, get, set, update, push, onValue, off, remove } from 'firebase/database';
 import { db } from '../config/firebaseConfig';
 
 export interface MessageAttachment {
@@ -6,6 +6,8 @@ export interface MessageAttachment {
   type: 'image' | 'document';
   name?: string;
 }
+
+export type ChatBlockedMap = Record<string, boolean>;
 
 export interface ChatMessage {
   messageId: string;
@@ -30,6 +32,28 @@ function getChatId(uid1: string, uid2: string): string {
 export class MessageController {
   static getChatId(uid1: string, uid2: string): string {
     return getChatId(uid1, uid2);
+  }
+
+  static async blockUser(chatId: string, blockerUid: string, otherUid: string): Promise<void> {
+    await Promise.all([
+      set(ref(db, `users/${blockerUid}/blockedUsers/${otherUid}`), true),
+      set(ref(db, `chats/${chatId}/blocked/${blockerUid}`), true),
+    ]);
+  }
+
+  static async unblockUser(chatId: string, blockerUid: string, otherUid: string): Promise<void> {
+    await Promise.all([
+      remove(ref(db, `users/${blockerUid}/blockedUsers/${otherUid}`)),
+      remove(ref(db, `chats/${chatId}/blocked/${blockerUid}`)),
+    ]);
+  }
+
+  static subscribeBlocked(chatId: string, callback: (blocked: ChatBlockedMap) => void): () => void {
+    const blockedRef = ref(db, `chats/${chatId}/blocked`);
+    const unsub = onValue(blockedRef, (snapshot) => {
+      callback((snapshot.exists() ? snapshot.val() : {}) || {});
+    });
+    return () => off(blockedRef);
   }
 
   static async getOrCreateChat(
@@ -196,6 +220,12 @@ export class MessageController {
     text: string,
     attachment?: MessageAttachment
   ): Promise<void> {
+    const blockedSnap = await get(ref(db, `chats/${chatId}/blocked`));
+    const blocked = blockedSnap.exists() ? (blockedSnap.val() as ChatBlockedMap) : {};
+    if (Object.values(blocked).some(Boolean)) {
+      throw new Error('Chat is blocked');
+    }
+
     const messagesRef = ref(db, `chats/${chatId}/messages`);
     const newRef = push(messagesRef);
     const messageId = newRef.key;

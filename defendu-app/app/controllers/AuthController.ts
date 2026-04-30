@@ -18,6 +18,7 @@ import { ForgotPasswordData, LoginData, RegisterData, User } from '../_models/Us
 import { SEED_TEST_MODULES } from '../_seed/testModules';
 import {
   clampDailyModuleTarget,
+  clampWeeklyModuleTarget,
   clampTrainingDaysPerWeek,
   clampTrainingProgramWeeks,
   computeWeeklyModuleTargetFromSchedule,
@@ -1104,23 +1105,38 @@ export class AuthController {
   }
 
   /**
-   * Settings: height/weight plus training schedule. Weekly module target is computed as
-   * clamp(daily × training days) to match the dashboard weekly goal.
+   * Settings: height/weight plus module goals.
+   * Weekly goal can be set directly (preferred) or derived from daily × training days (back-compat).
    */
   static async updateSettingsBodyAndTrainingGoals(updates: {
     height?: number;
     weight?: number;
     dailyModuleTarget: number;
-    trainingDaysPerWeek: number;
-    trainingProgramWeeks: number;
+    weeklyModuleTarget?: number;
+    trainingDaysPerWeek?: number;
+    trainingProgramWeeks?: number;
   }): Promise<void> {
     const currentUser = await this.getCurrentUser();
     if (!currentUser) throw new Error('User not authenticated');
 
     const daily = clampDailyModuleTarget(updates.dailyModuleTarget);
-    const days = clampTrainingDaysPerWeek(updates.trainingDaysPerWeek);
-    const weeks = clampTrainingProgramWeeks(updates.trainingProgramWeeks);
-    const weekly = computeWeeklyModuleTargetFromSchedule(daily, days);
+    const weeks = clampTrainingProgramWeeks(updates.trainingProgramWeeks ?? 8);
+    const weekly =
+      typeof updates.weeklyModuleTarget === 'number' && Number.isFinite(updates.weeklyModuleTarget)
+        ? clampWeeklyModuleTarget(updates.weeklyModuleTarget)
+        : computeWeeklyModuleTargetFromSchedule(
+            daily,
+            clampTrainingDaysPerWeek(
+              typeof updates.trainingDaysPerWeek === 'number' && Number.isFinite(updates.trainingDaysPerWeek)
+                ? updates.trainingDaysPerWeek
+                : 3
+            )
+          );
+    const days = clampTrainingDaysPerWeek(
+      typeof updates.trainingDaysPerWeek === 'number' && Number.isFinite(updates.trainingDaysPerWeek)
+        ? updates.trainingDaysPerWeek
+        : Math.ceil(weekly / Math.max(1, daily))
+    );
 
     const profileSnap = await get(ref(db, `skillProfiles/${currentUser.uid}`));
     if (!profileSnap.exists()) {

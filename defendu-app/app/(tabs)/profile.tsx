@@ -207,29 +207,6 @@ export default function ProfilePage() {
     }
   };
 
-  const handleResetProgress = () => {
-    Alert.alert(
-      'Reset all progress',
-      'This will clear all completed modules and weekly goal data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await AuthController.resetUserProgress();
-              Alert.alert('Done', 'Your progress has been reset.');
-            } catch (e) {
-              console.error('resetUserProgress:', e);
-              Alert.alert('Error', 'Could not reset progress. Please try again.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleImagePickerPress = () => {
     if (Platform.OS === 'web') {
       fileInputRef.current?.click();
@@ -827,11 +804,6 @@ export default function ProfilePage() {
             </TouchableOpacity>
           </View>
 
-          {/* Reset Progress */}
-          <TouchableOpacity style={styles.resetButton} onPress={handleResetProgress}>
-            <Ionicons name="trash-outline" size={18} color="#e57373" style={{ marginRight: 8 }} />
-            <Text style={styles.resetButtonText}>Reset all progress</Text>
-          </TouchableOpacity>
         </ScrollView>
         </View>
       </View>
@@ -1494,24 +1466,6 @@ const styles = StyleSheet.create({
     color: '#9db3be',
     fontSize: 12,
     lineHeight: 17,
-  },
-  resetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    marginBottom: 30,
-    paddingVertical: 13,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(229, 115, 115, 0.3)',
-    marginHorizontal: 8,
-    backgroundColor: 'rgba(229,115,115,0.05)',
-  },
-  resetButtonText: {
-    color: '#e57373',
-    fontSize: 14,
-    fontWeight: '600',
   },
   // Edit Profile Modal styles
   modalOverlay: {
