@@ -187,6 +187,104 @@ export default function RootLayout() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const isPublicPath = (path: string) => {
+      const clean = path.split('?')[0] || '/';
+      return (
+        clean === '/' ||
+        clean === '/login' ||
+        clean === '/register' ||
+        clean === '/forgotpassword' ||
+        clean === '/forgotpassword-otp' ||
+        clean === '/resetpassword' ||
+        clean === '/verificationcode'
+      );
+    };
+
+    const isAdminPath = (path: string) => {
+      const clean = path.split('?')[0] || '/';
+      return (
+        clean === '/adminDashboard' ||
+        clean === '/adminManaging' ||
+        clean === '/manage-users' ||
+        clean === '/manage-trainers' ||
+        clean === '/manage-modules' ||
+        clean === '/module-detail'
+      );
+    };
+
+    const getAuthedRoute = (user: Awaited<ReturnType<typeof AuthController.getCurrentUser>>) => {
+      if (!user) return '/(auth)/login';
+      if (user.role === 'admin') return '/(admin)/adminDashboard';
+      if (!user.hasCompletedSkillProfile) return '/(tabs)/physicalAttributesQuestion';
+      return '/(tabs)/dashboard';
+    };
+
+    const showWebAlert = (message: string) => {
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert(message);
+      }
+    };
+
+    const ensureAuthForWebHistory = async () => {
+      const path = window.location?.pathname || '/';
+      const user = await AuthController.getCurrentUser();
+
+      if (isPublicPath(path)) {
+        if (user) {
+          if (path !== '/') {
+            showWebAlert("You're already signed in.");
+          }
+          router.dismissAll();
+          router.replace(getAuthedRoute(user));
+        }
+        return;
+      }
+
+      if (!user) {
+        showWebAlert('Your session expired. Please sign in again.');
+        router.dismissAll();
+        router.replace('/(auth)/login');
+        return;
+      }
+
+      if (isAdminPath(path) && user.role !== 'admin') {
+        showWebAlert('Admin access only.');
+        router.dismissAll();
+        router.replace(getAuthedRoute(user));
+      }
+    };
+
+    const handlePopState = () => {
+      void ensureAuthForWebHistory();
+    };
+    const handlePageShow = () => {
+      void ensureAuthForWebHistory();
+    };
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void ensureAuthForWebHistory();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('pageshow', handlePageShow);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    void ensureAuthForWebHistory();
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('pageshow', handlePageShow);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
+  }, [router]);
+
   // Keep users/{uid}/lastActive fresh while the app is in the foreground so
   // admin analytics (active users/trainers online) reflect real-time mobile activity.
   useEffect(() => {
@@ -268,11 +366,11 @@ export default function RootLayout() {
       <LogoutProvider>
         <UnreadMessagesProvider>
           <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(admin)" />
-          <Stack.Screen name="+not-found" />
-        </Stack>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(admin)" />
+            <Stack.Screen name="+not-found" />
+          </Stack>
         </UnreadMessagesProvider>
         <BlockedUserModal
           visible={showBlockedModal}

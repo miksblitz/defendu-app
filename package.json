@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "devDependencies": {},
   "scripts": {
     "install:app": "npm install --prefix defendu-app",
     "start": "npm --prefix defendu-app run start",
@@ -24,5 +23,8 @@
   "bugs": {
     "url": "https://github.com/miksblitz/defendu-app/issues"
   },
-  "homepage": "https://github.com/miksblitz/defendu-app#readme"
+  "homepage": "https://github.com/miksblitz/defendu-app#readme",
+  "dependencies": {
+    "claude": "^0.1.1"
+  }
 }
