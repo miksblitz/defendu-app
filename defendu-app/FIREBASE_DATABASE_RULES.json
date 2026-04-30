@@ -62,7 +62,13 @@
     "chats": {
       "$chatId": {
         ".read": "auth.uid !== null && (!data.exists() || data.child('participants').child(auth.uid).exists())",
-        ".write": "auth.uid !== null && (data.child('participants').child(auth.uid).exists() || (!data.exists() && newData.child('participants').child(auth.uid).exists()))"
+        ".write": "auth.uid !== null && (data.child('participants').child(auth.uid).exists() || (!data.exists() && newData.child('participants').child(auth.uid).exists()))",
+        "blocked": {
+          "$blockerUid": {
+            ".read": "auth.uid !== null && root.child('chats').child($chatId).child('participants').child(auth.uid).exists()",
+            ".write": "auth.uid !== null && auth.uid === $blockerUid && root.child('chats').child($chatId).child('participants').child(auth.uid).exists()"
+          }
+        }
       }
     },
     "trainerModules": {

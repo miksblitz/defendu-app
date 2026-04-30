@@ -16,8 +16,8 @@ import {
 import { useLogout } from '../../hooks/useLogout';
 import {
   clampDailyModuleTarget,
+  clampWeeklyModuleTarget,
   clampTrainingDaysPerWeek,
-  computeWeeklyModuleTargetFromSchedule,
 } from '../_utils/moduleTargets';
 import { AuthController } from '../controllers/AuthController';
 
@@ -31,14 +31,14 @@ export default function SettingsPage() {
   const [heightInput, setHeightInput] = useState('');
   const [weightInput, setWeightInput] = useState('');
   const [dailyTarget, setDailyTarget] = useState(3);
-  const [daysPerWeek, setDaysPerWeek] = useState(3);
+  const [modulesPerWeek, setModulesPerWeek] = useState(7);
   const [saving, setSaving] = useState(false);
 
   const [baseline, setBaseline] = useState({
     height: '',
     weight: '',
     daily: 3,
-    days: 3,
+    weekly: 7,
   });
 
   const load = useCallback(async () => {
@@ -57,16 +57,20 @@ export default function SettingsPage() {
       const hs = h != null && Number.isFinite(Number(h)) ? String(h) : '';
       const ws = w != null && Number.isFinite(Number(w)) ? String(w) : '';
       const daily = clampDailyModuleTarget(prefs?.dailyModuleTarget ?? user?.dailyModuleTarget ?? 3);
-      const weeklyStored = prefs?.weeklyModuleTarget ?? user?.weeklyModuleTarget ?? 7;
-      let days =
+      const weeklyStoredRaw = prefs?.weeklyModuleTarget ?? user?.weeklyModuleTarget ?? 7;
+      const weeklyStored = clampWeeklyModuleTarget(weeklyStoredRaw);
+
+      // Back-compat: if weeklyModuleTarget is missing in older profiles, infer it from daily × training days.
+      const inferredFromSchedule =
         typeof prefs?.trainingDaysPerWeek === 'number'
-          ? clampTrainingDaysPerWeek(prefs.trainingDaysPerWeek)
-          : Math.min(7, Math.max(1, Math.round(weeklyStored / Math.max(1, daily))));
+          ? clampWeeklyModuleTarget(daily * clampTrainingDaysPerWeek(prefs.trainingDaysPerWeek))
+          : weeklyStored;
+      const weekly = typeof weeklyStoredRaw === 'number' && Number.isFinite(weeklyStoredRaw) ? weeklyStored : inferredFromSchedule;
       setHeightInput(hs);
       setWeightInput(ws);
       setDailyTarget(daily);
-      setDaysPerWeek(days);
-      setBaseline({ height: hs, weight: ws, daily, days });
+      setModulesPerWeek(weekly);
+      setBaseline({ height: hs, weight: ws, daily, weekly });
     } catch (e) {
       console.error('Error loading user:', e);
     }
@@ -78,12 +82,13 @@ export default function SettingsPage() {
     }, [load])
   );
 
-  const previewWeekly = computeWeeklyModuleTargetFromSchedule(dailyTarget, daysPerWeek);
+  const previewWeekly = clampWeeklyModuleTarget(modulesPerWeek);
+  const inferredDaysPerWeek = clampTrainingDaysPerWeek(Math.ceil(previewWeekly / Math.max(1, dailyTarget)));
   const hasChanges =
     heightInput !== baseline.height ||
     weightInput !== baseline.weight ||
     dailyTarget !== baseline.daily ||
-    daysPerWeek !== baseline.days;
+    modulesPerWeek !== baseline.weekly;
 
   const handleSaveBodyAndTraining = async () => {
     const h = heightInput.trim() ? Number(heightInput.trim()) : undefined;
@@ -102,13 +107,15 @@ export default function SettingsPage() {
         ...(h !== undefined && { height: h }),
         ...(w !== undefined && { weight: w }),
         dailyModuleTarget: dailyTarget,
-        trainingDaysPerWeek: daysPerWeek,
+        weeklyModuleTarget: previewWeekly,
+        // Keep a schedule field in sync for places that still look at it.
+        trainingDaysPerWeek: inferredDaysPerWeek,
       });
       setBaseline({
         height: heightInput,
         weight: weightInput,
         daily: dailyTarget,
-        days: daysPerWeek,
+        weekly: previewWeekly,
       });
       if (Platform.OS === 'web') {
         window.alert('Saved. Your weekly goal on the dashboard will use the new totals.');
@@ -120,41 +127,6 @@ export default function SettingsPage() {
       Alert.alert('Error', msg);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleResetProgress = () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to reset all your training progress? This cannot be undone.')) {
-        performResetProgress();
-      }
-    } else {
-      Alert.alert(
-        'Reset Progress',
-        'Are you sure you want to reset all your training progress? This cannot be undone.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Reset', style: 'destructive', onPress: performResetProgress },
-        ]
-      );
-    }
-  };
-
-  const performResetProgress = async () => {
-    try {
-      await AuthController.resetUserProgress();
-      if (Platform.OS === 'web') {
-        window.alert('Progress has been reset successfully.');
-      } else {
-        Alert.alert('Success', 'Your training progress has been reset.');
-      }
-    } catch (e) {
-      console.error('Error resetting progress:', e);
-      if (Platform.OS === 'web') {
-        window.alert('Failed to reset progress. Please try again.');
-      } else {
-        Alert.alert('Error', 'Failed to reset progress. Please try again.');
-      }
     }
   };
 
@@ -251,13 +223,13 @@ export default function SettingsPage() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.subheading}>Training days per week</Text>
+            <Text style={styles.subheading}>Modules per week</Text>
             <View style={styles.stepRow}>
-              <TouchableOpacity style={styles.stepBtn} onPress={() => setDaysPerWeek((t) => Math.max(1, t - 1))}>
+              <TouchableOpacity style={styles.stepBtn} onPress={() => setModulesPerWeek((t) => Math.max(3, t - 1))}>
                 <Text style={styles.stepBtnText}>-</Text>
               </TouchableOpacity>
-              <Text style={styles.stepValue}>{daysPerWeek}</Text>
-              <TouchableOpacity style={styles.stepBtn} onPress={() => setDaysPerWeek((t) => Math.min(7, t + 1))}>
+              <Text style={styles.stepValue}>{previewWeekly}</Text>
+              <TouchableOpacity style={styles.stepBtn} onPress={() => setModulesPerWeek((t) => Math.min(20, t + 1))}>
                 <Text style={styles.stepBtnText}>+</Text>
               </TouchableOpacity>
             </View>
@@ -265,7 +237,7 @@ export default function SettingsPage() {
             <View style={styles.weeklyPreview}>
               <Ionicons name="calendar-outline" size={18} color="#07bbc0" />
               <Text style={styles.weeklyPreviewText}>
-                Weekly module goal: {previewWeekly} (modules/day × training days, max 20)
+                Weekly module goal: {previewWeekly} (about {inferredDaysPerWeek} training days at {dailyTarget}/day)
               </Text>
             </View>
 
@@ -286,12 +258,6 @@ export default function SettingsPage() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: '#ff6b6b' }]}>Danger Zone</Text>
           <View style={styles.card}>
-            <TouchableOpacity style={styles.dangerRow} onPress={handleResetProgress}>
-              <Ionicons name="refresh-outline" size={20} color="#ff6b6b" />
-              <Text style={styles.dangerText}>Reset Training Progress</Text>
-              <Ionicons name="chevron-forward-outline" size={18} color="#ff6b6b" />
-            </TouchableOpacity>
-            <View style={styles.divider} />
             <TouchableOpacity style={styles.dangerRow} onPress={handleDeleteAccount}>
               <Ionicons name="trash-outline" size={20} color="#ff6b6b" />
               <Text style={styles.dangerText}>Delete Account</Text>

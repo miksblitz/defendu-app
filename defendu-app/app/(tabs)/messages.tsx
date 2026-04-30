@@ -17,15 +17,13 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import { AuthController } from '../controllers/AuthController';
 import { User } from '../_models/User';
 import {
   MessageController,
   ConversationSummary,
   ChatMessage,
-  MessageAttachment,
+  ChatBlockedMap,
 } from '../controllers/MessageController';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -35,20 +33,13 @@ import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_CHATS = 150;
 const SPAM_COOLDOWN_MS = 2000;
-const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 
 export default function MessagesPage() {
   const router = useRouter();
   const params = useLocalSearchParams<{ with?: string; name?: string; photo?: string }>();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
-  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
-
-  useFocusEffect(
-    React.useCallback(() => {
-      clearUnread();
-    }, [clearUnread])
-  );
+  const { unreadCount, unreadDisplay, getUnreadForChat, openChat, closeChat } = useUnreadMessages();
 
   const openWithUid = params.with;
   const openWithName = params.name ? decodeURIComponent(params.name) : '';
@@ -65,11 +56,20 @@ export default function MessagesPage() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [blocked, setBlocked] = useState<ChatBlockedMap>({});
   const profileAnim = useRef(new Animated.Value(0)).current;
   const scrollRef = useRef<ScrollView>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const unsubscribeBlockedRef = useRef<(() => void) | null>(null);
   const lastSentAtRef = useRef<number>(0);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      return () => {
+        closeChat();
+      };
+    }, [closeChat])
+  );
 
   useEffect(() => {
     const init = async () => {
@@ -127,9 +127,18 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (!selectedChat?.chatId || !currentUser) return;
+    openChat(selectedChat.chatId);
     unsubscribeRef.current = MessageController.subscribeMessages(selectedChat.chatId, setMessages);
     return () => {
       if (unsubscribeRef.current) unsubscribeRef.current();
+    };
+  }, [selectedChat?.chatId, currentUser?.uid]);
+
+  useEffect(() => {
+    if (!selectedChat?.chatId || !currentUser) return;
+    unsubscribeBlockedRef.current = MessageController.subscribeBlocked(selectedChat.chatId, setBlocked);
+    return () => {
+      if (unsubscribeBlockedRef.current) unsubscribeBlockedRef.current();
     };
   }, [selectedChat?.chatId, currentUser?.uid]);
 
@@ -141,11 +150,41 @@ export default function MessagesPage() {
     : conversations
   ).slice(0, MAX_CHATS);
 
-  const handleSend = async (messageOverride?: string, attachment?: MessageAttachment) => {
+  const blockedByMe = !!(currentUser?.uid && blocked[currentUser.uid]);
+  const blockedByOther = !!(selectedChat?.otherUserId && blocked[selectedChat.otherUserId]);
+  const isBlocked = blockedByMe || blockedByOther;
+
+  const handleBlock = async () => {
+    if (!selectedChat || !currentUser) return;
+    try {
+      await MessageController.blockUser(selectedChat.chatId, currentUser.uid, selectedChat.otherUserId);
+      showToast('User blocked. Messaging is disabled for this chat.');
+    } catch (e) {
+      console.error('Block user error:', e);
+      showToast(e instanceof Error ? e.message : 'Failed to block user');
+    }
+  };
+
+  const handleUnblock = async () => {
+    if (!selectedChat || !currentUser) return;
+    try {
+      await MessageController.unblockUser(selectedChat.chatId, currentUser.uid, selectedChat.otherUserId);
+      showToast('User unblocked. You can message again.');
+    } catch (e) {
+      console.error('Unblock user error:', e);
+      showToast(e instanceof Error ? e.message : 'Failed to unblock user');
+    }
+  };
+
+  const handleSend = async (messageOverride?: string) => {
     const text = (messageOverride !== undefined ? messageOverride : inputText).trim();
-    if ((!text && !attachment) || !selectedChat || !currentUser) return;
+    if (!text || !selectedChat || !currentUser) return;
     if (text.length > MAX_MESSAGE_LENGTH) {
       showToast(`Message must be at most ${MAX_MESSAGE_LENGTH} characters (UTF-8).`);
+      return;
+    }
+    if (isBlocked) {
+      showToast('Chat is blocked');
       return;
     }
     const now = Date.now();
@@ -154,69 +193,12 @@ export default function MessagesPage() {
       return;
     }
     try {
-      await MessageController.sendMessage(selectedChat.chatId, currentUser.uid, text || (attachment ? (attachment.type === 'image' ? '[Image]' : '[Document]') : ''), attachment);
+      await MessageController.sendMessage(selectedChat.chatId, currentUser.uid, text);
       lastSentAtRef.current = now;
       setInputText('');
     } catch (e) {
       console.error('Send message error:', e);
       showToast(e instanceof Error ? e.message : 'Failed to send message');
-    }
-  };
-
-  const handlePickImage = async () => {
-    if (!selectedChat || !currentUser || uploadingAttachment) return;
-    try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        showToast('Permission to access photos is required.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.9,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
-      const uri = asset.uri;
-      const size = asset.fileSize ?? (await (await fetch(uri)).blob()).size;
-      if (size > MAX_FILE_SIZE_BYTES) {
-        showToast(`Image exceeds the maximum size of 100 MB. Your file is ${(size / (1024 * 1024)).toFixed(1)} MB.`);
-        return;
-      }
-      setUploadingAttachment(true);
-      const url = await AuthController.uploadMessageImage(uri, `image_${Date.now()}.jpg`);
-      await handleSend('', { url, type: 'image', name: 'image.jpg' });
-    } catch (e) {
-      console.error('Image upload error:', e);
-      showToast(e instanceof Error ? e.message : 'Failed to upload image');
-    } finally {
-      setUploadingAttachment(false);
-    }
-  };
-
-  const handlePickDocument = async () => {
-    if (!selectedChat || !currentUser || uploadingAttachment) return;
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled) return;
-      const file = result.assets[0];
-      const size = file.size ?? 0;
-      if (size > MAX_FILE_SIZE_BYTES) {
-        showToast(`Document exceeds the maximum size of 100 MB. Your file is ${(size / (1024 * 1024)).toFixed(1)} MB.`);
-        return;
-      }
-      setUploadingAttachment(true);
-      const url = await AuthController.uploadDocumentToCloudinary(file.uri, file.name ?? 'document');
-      await handleSend('', { url, type: 'document', name: file.name });
-    } catch (e) {
-      console.error('Document upload error:', e);
-      showToast(e instanceof Error ? e.message : 'Failed to upload document');
-    } finally {
-      setUploadingAttachment(false);
     }
   };
 
@@ -285,7 +267,7 @@ export default function MessagesPage() {
         {/* Left Nav */}
         <View style={styles.sidebar}>
           <View style={styles.sidebarTopButtonWrap}>
-            <TouchableOpacity style={styles.sidebarTopButton} onPress={() => { clearUnread(); setShowMenu(true); }}>
+            <TouchableOpacity style={styles.sidebarTopButton} onPress={() => { setShowMenu(true); }}>
               <Image source={require('../../assets/images/threedoticon.png')} style={styles.threeDotIcon} />
             </TouchableOpacity>
             {unreadCount > 0 && (
@@ -368,9 +350,18 @@ export default function MessagesPage() {
                       {conv.lastMessage?.text ?? 'No messages yet'}
                     </Text>
                   </View>
-                  <Text style={styles.conversationTime}>
-                    {conv.lastMessage ? formatTime(conv.lastMessage.createdAt) : ''}
-                  </Text>
+                  <View style={styles.conversationMeta}>
+                    <Text style={styles.conversationTime}>
+                      {conv.lastMessage ? formatTime(conv.lastMessage.createdAt) : ''}
+                    </Text>
+                    {getUnreadForChat(conv.chatId) > 0 && (
+                      <View style={styles.conversationUnreadBadge}>
+                        <Text style={styles.conversationUnreadBadgeText}>
+                          {getUnreadForChat(conv.chatId) > 99 ? '99+' : String(getUnreadForChat(conv.chatId))}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </TouchableOpacity>
               ))
             )}
@@ -399,6 +390,17 @@ export default function MessagesPage() {
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              {isBlocked ? (
+                <View style={styles.blockedBanner}>
+                  <Ionicons name="ban" size={18} color="#FFFFFF" style={{ marginRight: 10 }} />
+                  <Text style={styles.blockedBannerText}>
+                    {blockedByMe
+                      ? 'You blocked this user. Messaging is disabled for this chat.'
+                      : 'This chat has been blocked. Messaging is disabled.'}
+                  </Text>
+                </View>
+              ) : null}
 
               <ScrollView
                 ref={scrollRef}
@@ -442,22 +444,8 @@ export default function MessagesPage() {
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
                 style={styles.inputRow}
               >
-                <TouchableOpacity
-                  style={[styles.attachIcon, uploadingAttachment && styles.attachIconDisabled]}
-                  onPress={handlePickImage}
-                  disabled={uploadingAttachment}
-                >
-                  <Ionicons name="image-outline" size={24} color="#6b8693" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.attachIcon, uploadingAttachment && styles.attachIconDisabled]}
-                  onPress={handlePickDocument}
-                  disabled={uploadingAttachment}
-                >
-                  <Ionicons name="attach-outline" size={24} color="#6b8693" />
-                </TouchableOpacity>
                 <TextInput
-                  style={styles.messageInput}
+                  style={[styles.messageInput, isBlocked && styles.messageInputDisabled]}
                   placeholder="Type your message"
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={inputText}
@@ -465,11 +453,12 @@ export default function MessagesPage() {
                   multiline
                   maxLength={MAX_MESSAGE_LENGTH}
                   onSubmitEditing={() => handleSend()}
+                  editable={!isBlocked}
                 />
                 <TouchableOpacity
-                  style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+                  style={[styles.sendButton, (!inputText.trim() || isBlocked) && styles.sendButtonDisabled]}
                   onPress={() => handleSend()}
-                  disabled={!inputText.trim()}
+                  disabled={!inputText.trim() || isBlocked}
                 >
                   <Ionicons name="send" size={20} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -556,6 +545,15 @@ export default function MessagesPage() {
                     </Text>
                   </View>
                 ) : null}
+                <View style={styles.profileActions}>
+                  <TouchableOpacity
+                    style={styles.blockButton}
+                    onPress={blockedByMe ? handleUnblock : handleBlock}
+                  >
+                    <Ionicons name="ban" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.blockButtonText}>{blockedByMe ? 'Unblock' : 'Block'}</Text>
+                  </TouchableOpacity>
+                </View>
               </ScrollView>
               </TouchableOpacity>
             )}
@@ -566,7 +564,7 @@ export default function MessagesPage() {
       {showMenu && (
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
           <View style={styles.menuContainer}>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { clearUnread(); setShowMenu(false); router.push('/messages'); }}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); router.push('/messages'); }}>
               <Image source={require('../../assets/images/messageicon.png')} style={styles.menuIcon} />
               <Text style={styles.menuText}>Messages</Text>
               {unreadCount > 0 && (
@@ -702,6 +700,17 @@ const styles = StyleSheet.create({
   conversationName: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginBottom: 2 },
   conversationPreview: { color: '#6b8693', fontSize: 13 },
   conversationTime: { color: '#6b8693', fontSize: 12 },
+  conversationMeta: { alignItems: 'flex-end', gap: 6, marginLeft: 10 },
+  conversationUnreadBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  conversationUnreadBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
   chatPane: {
     flex: 1,
     backgroundColor: '#041527',
@@ -723,6 +732,20 @@ const styles = StyleSheet.create({
   chatHeaderIcon: { padding: 4 },
   messagesArea: { flex: 1 },
   messagesContent: { padding: 16, paddingBottom: 24 },
+  blockedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(229, 57, 53, 0.2)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(229, 57, 53, 0.35)',
+  },
+  blockedBannerText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    flex: 1,
+  },
   dateLabel: {
     color: '#6b8693',
     fontSize: 12,
@@ -761,12 +784,6 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(7,187,192,0.08)',
     gap: 8,
   },
-  attachIcon: {
-    padding: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  attachIconDisabled: { opacity: 0.5 },
   messageInput: {
     flex: 1,
     backgroundColor: '#021422',
@@ -782,6 +799,7 @@ const styles = StyleSheet.create({
     outlineWidth: 0,
     outlineColor: 'transparent',
   },
+  messageInputDisabled: { opacity: 0.6 },
   sendButton: {
     width: 44,
     height: 44,
@@ -866,6 +884,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   profileModalBadgeText: { color: '#07bbc0', fontSize: 14, fontWeight: '600' },
+  profileActions: {
+    marginTop: 18,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(10, 54, 69, 0.5)',
+  },
+  blockButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#e53935',
+  },
+  blockButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   menuOverlay: {
     position: 'absolute',
     top: 0,
