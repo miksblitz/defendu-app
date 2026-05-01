@@ -29,6 +29,7 @@ import { useLogout } from '../../hooks/useLogout';
 import { useToast } from '../../hooks/useToast';
 import { Module } from '../_models/Module';
 import { AuthController } from '../controllers/AuthController';
+import { getRequiredReps } from '../_utils/repRange';
 
 const DIFFICULTY_OPTIONS = [
   { label: 'All', value: 'all' },
@@ -878,6 +879,14 @@ export default function ManageModulesPage() {
       ),
     },
     {
+      key: 'reps',
+      title: 'Reps',
+      minWidth: 72,
+      render: (module) => (
+        <Text style={styles.cellText}>{getRequiredReps(module.repRange)}</Text>
+      ),
+    },
+    {
       key: 'category',
       title: 'Category',
       minWidth: 140,
@@ -1477,6 +1486,14 @@ export default function ManageModulesPage() {
                 <Ionicons name="chevron-forward" size={18} color="#38a6de" />
               </TouchableOpacity>
             </Animated.View>
+
+            <View style={styles.tableSearchRow}>
+              <SearchInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search modules..."
+              />
+            </View>
 
             <AdminTable
               columns={columns}
@@ -2371,6 +2388,11 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 32,
+  },
+  tableSearchRow: {
+    marginTop: 16,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   header: {
     flexDirection: 'row',

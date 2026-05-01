@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AuthController } from '../controllers/AuthController';
 import { Module } from '../_models/Module';
 import { User } from '../_models/User';
+import { getRequiredReps } from '../_utils/repRange';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useLogout } from '../../hooks/useLogout';
@@ -79,6 +80,9 @@ function isSegmentModule(m: Module | null | undefined): boolean {
 }
 
 // 30 sec, 1–15 min in seconds
+/** Matches trainer publish flow; stored as `repRange` on `modules/{id}` in Firebase RTDB. */
+const repRangeOptions = ['4-6 reps', '8-10 reps', '12 reps', '15 reps'];
+
 const trainingDurationOptions: { label: string; value: number }[] = [
   { label: '30s', value: 30 },
   { label: '1m', value: 60 },
@@ -162,6 +166,7 @@ export default function ModuleDetailPage() {
   const [editSpaceRequirements, setEditSpaceRequirements] = useState<string[]>([]);
   const [editPhysicalDemandTags, setEditPhysicalDemandTags] = useState<string[]>([]);
   const [editTrainingDurationSeconds, setEditTrainingDurationSeconds] = useState<number | ''>('');
+  const [editRepRange, setEditRepRange] = useState('');
   const [approvedTrainers, setApprovedTrainers] = useState<User[]>([]);
   const [editTrainerId, setEditTrainerId] = useState('');
   const [editTrainerName, setEditTrainerName] = useState('');
@@ -229,6 +234,7 @@ export default function ModuleDetailPage() {
       setEditTrainingDurationSeconds(
         typeof module.trainingDurationSeconds === 'number' ? module.trainingDurationSeconds : ''
       );
+      setEditRepRange(module.repRange || '');
       setEditTrainerId(module.trainerId || '');
       setEditTrainerName(module.trainerName || '');
       setEditStancePosition(module.stancePosition === 'front view' ? 'front view' : 'side view');
@@ -492,6 +498,7 @@ export default function ModuleDetailPage() {
         intensityLevel: segmentModuleSave ? 1 : editIntensity,
         spaceRequirements: segmentModuleSave ? ['Stationary'] : editSpaceRequirements,
         physicalDemandTags: segmentModuleSave ? [] : editPhysicalDemandTags,
+        repRange: editRepRange.trim() || null,
         trainingDurationSeconds:
           typeof editTrainingDurationSeconds === 'number' ? editTrainingDurationSeconds : null,
         techniqueVideoUrl: isWarmOrCoolSave ? null : vid || null,
@@ -512,6 +519,7 @@ export default function ModuleDetailPage() {
         intensityLevel: segmentModuleSave ? 1 : editIntensity,
         spaceRequirements: segmentModuleSave ? ['Stationary'] : editSpaceRequirements,
         physicalDemandTags: segmentModuleSave ? [] : editPhysicalDemandTags,
+        repRange: editRepRange.trim() || undefined,
         trainingDurationSeconds:
           typeof editTrainingDurationSeconds === 'number' ? editTrainingDurationSeconds : undefined,
         techniqueVideoUrl: isWarmOrCoolSave ? undefined : vid || undefined,
@@ -555,6 +563,7 @@ export default function ModuleDetailPage() {
         intensityLevel: seg ? 1 : editIntensity,
         spaceRequirements: seg ? ['Stationary'] : editSpaceRequirements,
         physicalDemandTags: seg ? [] : editPhysicalDemandTags,
+        repRange: editRepRange.trim() || undefined,
         trainingDurationSeconds:
           typeof editTrainingDurationSeconds === 'number' ? editTrainingDurationSeconds : undefined,
         thumbnailUrl: editThumbnailUrl.trim() || undefined,
@@ -1074,6 +1083,46 @@ export default function ModuleDetailPage() {
                 </>
               ) : null}
 
+              {isWarmOrCoolCreateMode ? (
+                <>
+                  <Text style={styles.editSubsectionLabel}>Practice targets</Text>
+                  <Text style={styles.editLabel}>Rep range</Text>
+                  <View style={styles.tagsRow}>
+                    {repRangeOptions.map((opt) => (
+                      <TouchableOpacity
+                        key={opt}
+                        style={[styles.tag, editRepRange === opt && styles.tagActive]}
+                        onPress={() => setEditRepRange(editRepRange === opt ? '' : opt)}
+                      >
+                        <Text style={[styles.tagText, editRepRange === opt && styles.tagTextActive]}>{opt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.editLabel}>Training duration (practice time)</Text>
+                  <View style={styles.tagsRow}>
+                    {trainingDurationOptions.map((opt) => (
+                      <TouchableOpacity
+                        key={opt.value}
+                        style={[
+                          styles.tag,
+                          editTrainingDurationSeconds === opt.value && styles.tagActive,
+                        ]}
+                        onPress={() => setEditTrainingDurationSeconds(opt.value)}
+                      >
+                        <Text
+                          style={[
+                            styles.tagText,
+                            editTrainingDurationSeconds === opt.value && styles.tagTextActive,
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+
               {isIntroductionCreateMode ? (
                 <>
                   <Text style={styles.editLabel}>Introduction video *</Text>
@@ -1121,6 +1170,19 @@ export default function ModuleDetailPage() {
                   />
                 ))}
                 <Text style={styles.intensityEditText}>{editIntensity}/5</Text>
+              </View>
+
+              <Text style={styles.editLabel}>Rep range</Text>
+              <View style={styles.tagsRow}>
+                {repRangeOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.tag, editRepRange === opt && styles.tagActive]}
+                    onPress={() => setEditRepRange(editRepRange === opt ? '' : opt)}
+                  >
+                    <Text style={[styles.tagText, editRepRange === opt && styles.tagTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
 
               <Text style={styles.editLabel}>Training duration (practice time)</Text>
@@ -1728,6 +1790,46 @@ export default function ModuleDetailPage() {
                 </>
               ) : null}
 
+              {isSegmentDetailModule && !isIntroductionDetailModule ? (
+                <>
+                  <Text style={styles.editSubsectionLabel}>Practice targets</Text>
+                  <Text style={styles.editLabel}>Rep range</Text>
+                  <View style={styles.tagsRow}>
+                    {repRangeOptions.map((opt) => (
+                      <TouchableOpacity
+                        key={opt}
+                        style={[styles.tag, editRepRange === opt && styles.tagActive]}
+                        onPress={() => setEditRepRange(editRepRange === opt ? '' : opt)}
+                      >
+                        <Text style={[styles.tagText, editRepRange === opt && styles.tagTextActive]}>{opt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.editLabel}>Training duration (practice time)</Text>
+                  <View style={styles.tagsRow}>
+                    {trainingDurationOptions.map((opt) => (
+                      <TouchableOpacity
+                        key={opt.value}
+                        style={[
+                          styles.tag,
+                          editTrainingDurationSeconds === opt.value && styles.tagActive,
+                        ]}
+                        onPress={() => setEditTrainingDurationSeconds(opt.value)}
+                      >
+                        <Text
+                          style={[
+                            styles.tagText,
+                            editTrainingDurationSeconds === opt.value && styles.tagTextActive,
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+
               {!isSegmentDetailModule ? (
               <>
               <Text style={styles.editSubsectionLabel}>{'Technique & AI training'}</Text>
@@ -1788,6 +1890,19 @@ export default function ModuleDetailPage() {
                   />
                 ))}
                 <Text style={styles.intensityEditText}>{editIntensity}/5</Text>
+              </View>
+
+              <Text style={styles.editLabel}>Rep range</Text>
+              <View style={styles.tagsRow}>
+                {repRangeOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.tag, editRepRange === opt && styles.tagActive]}
+                    onPress={() => setEditRepRange(editRepRange === opt ? '' : opt)}
+                  >
+                    <Text style={[styles.tagText, editRepRange === opt && styles.tagTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
 
               <Text style={styles.editLabel}>Training duration (practice time)</Text>
@@ -2126,6 +2241,15 @@ export default function ModuleDetailPage() {
                 <Text style={styles.infoLabel}>Training duration:</Text>
                 <Text style={styles.infoValue}>
                   {module.trainingDurationSeconds ? formatDuration(module.trainingDurationSeconds) : 'N/A'}
+                </Text>
+              </View>
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Rep range:</Text>
+                <Text style={styles.infoValue}>
+                  {module.repRange
+                    ? `${module.repRange} (${getRequiredReps(module.repRange)} reps)`
+                    : `Default (${getRequiredReps(undefined)} reps)`}
                 </Text>
               </View>
 
