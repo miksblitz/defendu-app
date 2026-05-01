@@ -327,10 +327,9 @@ export default function TrainerRegistrationScreen() {
     setSelectedMartialArts(selectedMartialArts.filter(a => a !== art));
   };
 
-  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
+  const { unreadCount, unreadDisplay } = useUnreadMessages();
 
   const handleMessages = () => {
-    clearUnread();
     setShowMenu(false);
     router.push('/messages');
   };
@@ -720,7 +719,7 @@ export default function TrainerRegistrationScreen() {
             <View style={styles.sidebarTopButtonWrap}>
               <TouchableOpacity 
                 style={styles.sidebarTopButton}
-                onPress={() => { clearUnread(); setShowMenu(true); }}
+                onPress={() => { setShowMenu(true); }}
               >
                 <Image
                   source={require('../../assets/images/threedoticon.png')}
@@ -784,7 +783,7 @@ export default function TrainerRegistrationScreen() {
               <View style={styles.mobileMenuButtonWrap}>
                 <TouchableOpacity 
                   style={styles.mobileMenuButton}
-                  onPress={() => { clearUnread(); setShowMenu(true); }}
+                  onPress={() => { setShowMenu(true); }}
                   hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
                   activeOpacity={0.7}
                 >

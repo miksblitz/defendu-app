@@ -122,7 +122,6 @@ export default function ProfilePage() {
   );
 
   const handleMessages = () => {
-    clearUnread();
     setShowMenu(false);
     router.push('/messages');
   };
@@ -558,7 +557,7 @@ export default function ProfilePage() {
           <View style={styles.sidebarTopButtonWrap}>
             <TouchableOpacity 
               style={styles.sidebarTopButton}
-              onPress={() => { clearUnread(); setShowMenu(true); }}
+              onPress={() => { setShowMenu(true); }}
             >
               <Image
                 source={require('../../assets/images/threedoticon.png')}

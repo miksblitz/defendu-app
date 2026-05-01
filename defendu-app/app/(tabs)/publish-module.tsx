@@ -1084,10 +1084,9 @@ export default function PublishModulePage() {
   };
 
 
-  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
+  const { unreadCount, unreadDisplay } = useUnreadMessages();
 
   const handleMessages = () => {
-    clearUnread();
     setShowMenu(false);
     router.push('/messages');
   };
@@ -1101,7 +1100,7 @@ export default function PublishModulePage() {
             <View style={styles.sidebarTopButtonWrap}>
               <TouchableOpacity 
                 style={styles.sidebarTopButton}
-                onPress={() => { clearUnread(); setShowMenu(true); }}
+                onPress={() => { setShowMenu(true); }}
               >
                 <Image
                   source={require('../../assets/images/threedoticon.png')}
@@ -1167,7 +1166,7 @@ export default function PublishModulePage() {
               <View style={styles.mobileMenuButtonWrap}>
                 <TouchableOpacity 
                   style={styles.mobileMenuButton}
-                  onPress={() => { clearUnread(); setShowMenu(true); }}
+                  onPress={() => { setShowMenu(true); }}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 >
                   <Image

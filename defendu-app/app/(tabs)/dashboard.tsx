@@ -321,7 +321,7 @@ export default function DashboardScreen() {
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const router = useRouter();
   const handleLogout = useLogout();
-  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
+  const { unreadCount, unreadDisplay } = useUnreadMessages();
 
   const weeklyGoalPulse = useRef(new Animated.Value(1)).current;
   const welcomeAnim = useRef(new Animated.Value(0)).current;
@@ -464,7 +464,6 @@ export default function DashboardScreen() {
   const dayProgress = dayCounts.map((c) => Math.min(1, c / dailyModuleGoal));
 
   const handleMessages = () => {
-    clearUnread();
     setShowMenu(false);
     router.push('/messages');
   };
@@ -598,7 +597,7 @@ export default function DashboardScreen() {
           <View style={styles.sidebarTopButtonWrap}>
             <TouchableOpacity 
               style={styles.sidebarTopButton}
-              onPress={() => { clearUnread(); setShowMenu(true); }}
+              onPress={() => { setShowMenu(true); }}
             >
               <Image
                 source={require('../../assets/images/threedoticon.png')}

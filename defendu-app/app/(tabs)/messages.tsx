@@ -39,7 +39,7 @@ export default function MessagesPage() {
   const params = useLocalSearchParams<{ with?: string; name?: string; photo?: string }>();
   const { toastVisible, toastMessage, showToast, hideToast } = useToast();
   const handleLogout = useLogout();
-  const { unreadCount, unreadDisplay, getUnreadForChat, openChat, closeChat } = useUnreadMessages();
+  const { unreadCount, unreadDisplay, getUnreadForChat, setActiveChatId, clearChatUnread } = useUnreadMessages();
 
   const openWithUid = params.with;
   const openWithName = params.name ? decodeURIComponent(params.name) : '';
@@ -66,9 +66,9 @@ export default function MessagesPage() {
   useFocusEffect(
     React.useCallback(() => {
       return () => {
-        closeChat();
+        setActiveChatId(null);
       };
-    }, [closeChat])
+    }, [setActiveChatId])
   );
 
   useEffect(() => {
@@ -127,12 +127,13 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (!selectedChat?.chatId || !currentUser) return;
-    openChat(selectedChat.chatId);
+    setActiveChatId(selectedChat.chatId);
+    clearChatUnread(selectedChat.chatId);
     unsubscribeRef.current = MessageController.subscribeMessages(selectedChat.chatId, setMessages);
     return () => {
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
-  }, [selectedChat?.chatId, currentUser?.uid]);
+  }, [selectedChat?.chatId, currentUser?.uid, setActiveChatId, clearChatUnread]);
 
   useEffect(() => {
     if (!selectedChat?.chatId || !currentUser) return;

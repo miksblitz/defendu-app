@@ -112,7 +112,7 @@ function getTechniqueVideoUrl(module: Module | null): string {
 export default function ViewModulePage() {
   const router = useRouter();
   const handleLogout = useLogout();
-  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
+  const { unreadCount, unreadDisplay } = useUnreadMessages();
   const params = useLocalSearchParams<{
     moduleId: string;
     categoryKey?: string;
@@ -349,7 +349,6 @@ export default function ViewModulePage() {
   const handlePracticeAgain = () => beginTryItPractice(undefined, false);
   const goDashboardWithReviewPrompt = () => exitToDashboardRef.current({ review: true });
   const handleMessages = () => {
-    clearUnread();
     setShowMenu(false);
     router.push('/messages');
   };

@@ -39,7 +39,6 @@ export default function EditProfilePage() {
   const unreadMessages = useUnreadMessages();
   const unreadCount = unreadMessages?.unreadCount ?? 0;
   const unreadDisplay = unreadMessages?.unreadDisplay ?? '0';
-  const clearUnread = unreadMessages?.clearUnread ?? (async () => {});
 
   // Request permissions on mount
   useEffect(() => {
@@ -133,7 +132,6 @@ export default function EditProfilePage() {
   };
 
   const handleMessages = () => {
-    clearUnread();
     setShowMenu(false);
     router.push('/messages');
   };
@@ -375,7 +373,7 @@ export default function EditProfilePage() {
           <View style={styles.sidebarTopButtonWrap}>
             <TouchableOpacity 
               style={styles.sidebarTopButton}
-              onPress={() => { clearUnread(); setShowMenu(true); }}
+              onPress={() => { setShowMenu(true); }}
             >
               <Image
                 source={require('../../assets/images/threedoticon.png')}

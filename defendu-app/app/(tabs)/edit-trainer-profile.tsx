@@ -325,10 +325,9 @@ export default function EditTrainerProfilePage() {
     }
   };
 
-  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
+  const { unreadCount, unreadDisplay } = useUnreadMessages();
 
   const handleMessages = () => {
-    clearUnread();
     setShowMenu(false);
     router.push('/messages');
   };
@@ -353,7 +352,7 @@ export default function EditTrainerProfilePage() {
           <View style={styles.sidebarTopButtonWrap}>
             <TouchableOpacity 
               style={styles.sidebarTopButton}
-              onPress={() => { clearUnread(); setShowMenu(true); }}
+              onPress={() => { setShowMenu(true); }}
             >
               <Image
                 source={require('../../assets/images/threedoticon.png')}

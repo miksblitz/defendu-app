@@ -34,7 +34,7 @@ export default function ExploreScreen() {
   const columns = getModuleColumns(screenWidth);
   const router = useRouter();
   const handleLogout = useLogout();
-  const { unreadCount, unreadDisplay, clearUnread } = useUnreadMessages();
+  const { unreadCount, unreadDisplay } = useUnreadMessages();
 
   const [modules, setModules] = useState<Module[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -136,7 +136,6 @@ export default function ExploreScreen() {
   );
 
   const handleMessages = () => {
-    clearUnread();
     setShowMenu(false);
     router.push('/messages');
   };
@@ -144,7 +143,7 @@ export default function ExploreScreen() {
   const renderSidebar = () => (
     <View style={s.sidebar}>
       <View style={s.sidebarTopWrap}>
-        <TouchableOpacity style={s.sidebarTopBtn} onPress={() => { clearUnread(); setShowMenu(true); }}>
+        <TouchableOpacity style={s.sidebarTopBtn} onPress={() => { setShowMenu(true); }}>
           <Image source={require('../../assets/images/threedoticon.png')} style={s.threeDotIcon} />
         </TouchableOpacity>
         {unreadCount > 0 && (
